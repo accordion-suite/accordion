@@ -1,0 +1,59 @@
+# Shared CI for every Accordion Rust repo.
+#
+# Other repos call this workflow instead of keeping their own copy, so a fix
+# here reaches every repo at once. templates/repo/.github/workflows/ci.yml is
+# the caller that new repos start with.
+
+name: Rust
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint:
+    name: Format and lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features --locked
+
+  test:
+    name: Test (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          # Native ARM64 runner, so tests also cover the Raspberry Pi target
+          # without cross-compiling.
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features --locked
+
+  deny:
+    name: Licenses, advisories, and sources
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      # Reads deny.toml from the calling repo. Fails on dependencies whose
+      # license is incompatible with AGPL-3.0, on known vulnerabilities, and on
+      # crates from unexpected registries or Git hosts.
+      - uses: EmbarkStudios/cargo-deny-action@v2
