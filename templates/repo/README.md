@@ -10,4 +10,4 @@ This repo is part of [Accordion](https://github.com/accordion-suite/accordion), 
 
 ## License
 
-[AGPL-3.0](LICENSE)
+[AGPL-3.0 or later](LICENSE)

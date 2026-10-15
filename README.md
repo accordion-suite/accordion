@@ -125,4 +125,4 @@ Please don't report security vulnerabilities in public issues. See [SECURITY.md]
 
 ## License
 
-[AGPL-3.0](LICENSE)
+[AGPL-3.0 or later](LICENSE)
