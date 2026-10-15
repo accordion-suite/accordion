@@ -6,5 +6,6 @@ Each file in this folder records one significant decision about how Accordion is
 |---|---|---|
 | [1](0001-where-core-services-run.md) | Where core services run | Accepted |
 | [2](0002-metadata-database.md) | Which database stores metadata | Accepted |
+| [3](0003-sessions-and-tokens.md) | How sign-in sessions and tokens work | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
