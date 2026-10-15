@@ -98,11 +98,11 @@ Each phase starts only when the previous one meets its quality gate. If time run
 
 ## Repositories
 
-This repository holds the suite: the installer, setup wizard, packaging, release manifest, and documentation. Each module lives in its own repository and has its own version number. Every suite release pins a set of module versions that were tested together, and that's the only combination your server will install.
+This repository holds the suite: the server, installer, setup wizard, packaging, and documentation. Each module lives in its own repository and has its own version number. The server is one program built from a set of module versions that were tested together, and that's the only combination your server will install.
 
 | Repository | Contents |
 |---|---|
-| `accordion` | Installer, setup wizard, packaging, release manifest, and docs (this repo) |
+| `accordion` | Server, installer, setup wizard, packaging, and docs (this repo) |
 | `accordion-core` | Shared identity, search, sync, jobs, and storage |
 | `accordion-gateway` | TLS, WireGuard, and reverse proxy |
 | `accordion-drive` | Drive |
