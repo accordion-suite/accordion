@@ -5,5 +5,6 @@ Each file in this folder records one significant decision about how Accordion is
 | Number | Decision | Status |
 |---|---|---|
 | [1](0001-where-core-services-run.md) | Where core services run | Accepted |
+| [2](0002-metadata-database.md) | Which database stores metadata | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
