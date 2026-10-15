@@ -5,7 +5,7 @@
 #
 # Usage: scripts/clone-workspace.sh
 #
-# On Windows, run it from Git Bash.
+# Run it from bash. On Windows, use WSL.
 
 set -uo pipefail
 
