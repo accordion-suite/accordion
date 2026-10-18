@@ -1,0 +1,15 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    # The shared workflow lives in this repo, so call it by path. Other repos
+    # call it by URL.
+    uses: ./.github/workflows/rust.yml

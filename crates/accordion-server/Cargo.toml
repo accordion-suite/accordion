@@ -1,0 +1,26 @@
+[package]
+name = "accordion-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "accordion"
+path = "src/main.rs"
+
+[dependencies]
+accordion-core = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
+accordion-types = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
+axum = "0.8.9"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[dev-dependencies]
+http-body-util = "0.1.5"
+tempfile = "3.27.0"
+tower = { version = "0.5.3", features = ["util"] }
