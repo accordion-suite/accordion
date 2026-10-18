@@ -1,6 +1,14 @@
 version: 2
 updates:
-  # Keeps the actions used by the shared workflows up to date.
+  # Group dependency updates into one weekly pull request instead of one each.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
