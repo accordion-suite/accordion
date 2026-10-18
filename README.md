@@ -40,7 +40,7 @@ Every module ships with the suite. The admin turns modules on or off, and users 
 
 ## How it works
 
-Everything runs on one machine you own. A single gateway handles TLS, remote access over WireGuard, and routing. Behind it, each module runs as its own service. All modules share one identity provider, one search index, one sync engine, and one storage layer, so adding a module never adds a new sign-in, database, or backup.
+Everything runs on one machine you own. A single gateway handles TLS, remote access over WireGuard, and routing. Behind it, one server program runs every module, and the code that handles untrusted files and incoming mail runs in separate, locked-down processes. All modules share one identity provider, one search index, one sync engine, and one storage layer, so adding a module never adds a new sign-in, database, or backup.
 
 You reach your server from:
 
@@ -73,8 +73,8 @@ These are design targets. Benchmarking will confirm them.
 Accordion trusts the server owner and no one else: not the network, not your internet provider, not someone who steals the disk, and not Accordion's own developers.
 
 - TLS 1.3 everywhere, and WireGuard for remote access
-- Full-disk encryption set up by the installer, plus per-user data keys
-- Optional end-to-end encrypted vaults, where the server stores only ciphertext
+- Full-disk encryption, set up by the appliance image
+- Optional end-to-end encrypted vaults for data that even your server can't read
 - Backups encrypted before they leave the box
 - Passkeys, TOTP, and per-app passwords, with one sign-in for every module
 - A CI check that fails the build if any component makes an unlisted outbound connection
@@ -114,6 +114,18 @@ This repository holds the suite: the server, installer, setup wizard, packaging,
 | `accordion-android`, `accordion-ios` | Mobile apps |
 
 Please open issues here, whichever module they're about.
+
+## Building from source
+
+There's nothing to install yet, but you can build the server and try signing in. You need [Rust](https://rustup.rs) and bash (on Windows, use WSL).
+
+```sh
+scripts/clone-workspace.sh                         # Clone the other Accordion repos next to this one
+cargo run -- create-owner <username> "<Your name>"  # Create the owner account (asks for a password)
+cargo run                                          # Start the server on http://127.0.0.1:8080
+```
+
+`clone-workspace.sh` also makes local builds use your checkouts of the other repos. Before you commit `Cargo.lock`, push those repos and run `scripts/pin-versions.sh`, so it pins the versions on GitHub.
 
 ## Contributing
 
