@@ -56,4 +56,7 @@ for repo in "${repos[@]}"; do
     fi
 done
 
+# Make local server builds use these checkouts.
+"$workspace/accordion/scripts/link-workspace.sh" || failed=1
+
 exit $failed
