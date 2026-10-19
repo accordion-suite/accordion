@@ -168,4 +168,8 @@ Households that choose not to use an internet name get the local CA in the same 
 ## Open questions
 
 - **Remote access needs an inbound port.** The spec promises no open router ports, but a WireGuard server at home needs one inbound UDP port, unless the router opens it automatically (UPnP or NAT-PMP) or traffic goes through a relay. The remote access decision also has to make the name resolve over the VPN, where the home network's address range can clash with the network the device is on.
-- **DNS providers.** Confirm that deSEC still offers free subdomains and scoped tokens, and check which providers beta households use before adding more.
+- **Households without a domain.** deSEC's scoped tokens work: a token limited to one `_acme-challenge` record got a Let's Encrypt staging certificate on October 19, 2026. But deSEC has suspended new `dedyn.io` subdomains, with no date to restart, so examples above like `ourhome.dedyn.io` aren't available to new households. deSEC still hosts domains registered elsewhere. Options to compare:
+  - **Buy a domain.** Many cost about $10 a year. The household then hosts its DNS at deSEC or Cloudflare. Mail needs a domain anyway, so this may be the simplest default.
+  - **Duck DNS.** Free subdomains with an API that sets one TXT record per account, which is enough for one name. The token controls every subdomain on the account, and the service is run by two people.
+  - **dynv6.** Free subdomains with a REST API. One report from 2023 says it refused `_acme-challenge` names, so test it before relying on it.
+- **More DNS providers.** Check which providers beta households use before adding more.
