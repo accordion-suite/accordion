@@ -1,12 +1,14 @@
 use std::error::Error;
 use std::future::IntoFuture;
 use std::io::{self, BufRead, IsTerminal, Write};
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_gateway::ServerName;
+use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::ProviderKind;
 use accordion_gateway::redirect::redirect_to_https;
@@ -33,6 +35,9 @@ Settings, from environment variables:
                           (default: 127.0.0.1:8080)
   ACCORDION_HTTPS_LISTEN  Address for HTTPS once a name is set (default: port 443)
   ACCORDION_HTTP_LISTEN   Address for the redirect to HTTPS (default: port 80)
+  ACCORDION_ADDRESS       The address to point the server's name at: auto, off,
+                          or an address such as 192.168.1.20 (default: auto,
+                          or off in a container)
   RUST_LOG                Log detail, such as info or debug (default: info)";
 
 #[tokio::main]
@@ -110,6 +115,10 @@ async fn serve_https(
     let site = Site::named(settings.name.clone(), https_port);
     let certs = CertStore::new();
     let renewer = Renewer::from_settings(gateway_dir, &settings, certs.clone())?;
+    let publisher = match address_source()? {
+        Some(source) => Some(AddressPublisher::from_settings(&settings, source)?),
+        None => None,
+    };
     tracing::info!(
         "serving https://{} on {}, and redirecting plain HTTP on {}",
         settings.name,
@@ -129,7 +138,12 @@ async fn serve_https(
         }
     };
 
-    let (_, redirected, ()) = tokio::join!(
+    let publish = async {
+        if let Some(publisher) = publisher {
+            publisher.run(until_stopped()).await;
+        }
+    };
+    let (_, redirected, (), ()) = tokio::join!(
         tls::serve(
             https,
             tls::server_config(certs),
@@ -140,6 +154,7 @@ async fn serve_https(
             .with_graceful_shutdown(until_stopped())
             .into_future(),
         renewer.run(until_stopped()),
+        publish,
     );
     redirected?;
     tracing::info!("stopped");
@@ -251,6 +266,40 @@ fn gateway_dir(data_dir: &Path) -> PathBuf {
 async fn start_identity(data_dir: &Path) -> Result<Identity, Box<dyn Error>> {
     let db = Database::open(&data_dir.join("accordion.db"))?;
     Ok(Identity::new(db).await?)
+}
+
+/// Where the address for the name's DNS record comes from, or `None` to
+/// leave the record alone.
+fn address_source() -> Result<Option<AddressSource>, String> {
+    let Ok(value) = std::env::var("ACCORDION_ADDRESS") else {
+        if in_container() {
+            tracing::warn!(
+                "Accordion is running in a container, where it can't see the machine's network \
+                 address, so it won't update the name's DNS record. Set ACCORDION_ADDRESS to the \
+                 machine's address on the home network, or point the name at it yourself."
+            );
+            return Ok(None);
+        }
+        return Ok(Some(AddressSource::Detect));
+    };
+    match value.trim() {
+        "auto" => Ok(Some(AddressSource::Detect)),
+        "off" => Ok(None),
+        other => other
+            .parse::<IpAddr>()
+            .map(|address| Some(AddressSource::Fixed(address)))
+            .map_err(|_| {
+                format!(
+                    "ACCORDION_ADDRESS is \"{other}\", which isn't an address. Set it to auto, \
+                     off, or the server's address on the home network, such as 192.168.1.20."
+                )
+            }),
+    }
+}
+
+/// Docker and Podman each leave a file at the root of the container.
+fn in_container() -> bool {
+    Path::new("/.dockerenv").exists() || Path::new("/run/.containerenv").exists()
 }
 
 /// Listens on the address in `variable`, or on `port` at every address.
