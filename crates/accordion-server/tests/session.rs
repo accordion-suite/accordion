@@ -2,7 +2,7 @@
 
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
-use accordion_server::{AppState, router};
+use accordion_server::{AppState, Site, router};
 use accordion_types::Role;
 use axum::Router;
 use axum::body::Body;
@@ -14,6 +14,10 @@ use tower::ServiceExt;
 const HOST: &str = "accordion.local";
 
 async fn start() -> (tempfile::TempDir, Router) {
+    start_with(&Site::Unnamed).await
+}
+
+async fn start_with(site: &Site) -> (tempfile::TempDir, Router) {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open(&dir.path().join("accordion.db")).unwrap();
     let identity = Identity::new(db).await.unwrap();
@@ -26,7 +30,7 @@ async fn start() -> (tempfile::TempDir, Router) {
         })
         .await
         .unwrap();
-    (dir, router(AppState { identity }))
+    (dir, router(AppState { identity }, site))
 }
 
 fn request(method: &str) -> axum::http::request::Builder {
@@ -178,4 +182,27 @@ async fn blocks_sign_in_from_another_site() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     assert!(response.headers().get(header::SET_COOKIE).is_none());
+}
+
+#[tokio::test]
+async fn a_named_server_answers_only_to_its_name() {
+    let site = Site::named("accordion.example.com".parse().unwrap(), 443);
+    let (_dir, app) = start_with(&site).await;
+    for (host, expected) in [
+        ("accordion.example.com", StatusCode::UNAUTHORIZED),
+        ("accordion.local", StatusCode::MISDIRECTED_REQUEST),
+        ("192.168.1.20", StatusCode::MISDIRECTED_REQUEST),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/session")
+                    .header(header::HOST, host)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected, "{host}");
+    }
 }

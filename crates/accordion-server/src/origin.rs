@@ -8,14 +8,18 @@
 //! 1. Requests that only read (GET, HEAD, and OPTIONS) are allowed.
 //! 2. If the browser sent `Sec-Fetch-Site`, only `same-origin` and `none`
 //!    (typed into the address bar or opened from a bookmark) are allowed.
-//! 3. Otherwise, if it sent `Origin`, it must match the `Host` header.
+//! 3. Otherwise, if it sent `Origin`, it must be the server's own origin,
+//!    such as `https://accordion.example.com`. Before a name is set, it must
+//!    match the `Host` header instead.
 //! 4. Requests with neither header aren't from a browser, so they can't carry
 //!    a stolen cookie by accident. They're allowed.
 //!
 //! WebSocket upgrades are GET requests, so they need their own `Origin` check
 //! when Docs adds them.
 
-use axum::extract::Request;
+use std::sync::Arc;
+
+use axum::extract::{Request, State};
 use axum::http::header::{HOST, ORIGIN};
 use axum::http::{Method, StatusCode};
 use axum::middleware::Next;
@@ -23,8 +27,13 @@ use axum::response::{IntoResponse, Response};
 
 use crate::error::ApiError;
 
-pub async fn reject_cross_origin(request: Request, next: Next) -> Response {
-    if is_cross_origin(&request) {
+/// `expected` is the server's origin, or `None` before a name is set.
+pub async fn reject_cross_origin(
+    State(expected): State<Option<Arc<str>>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if is_cross_origin(&request, expected.as_deref()) {
         return ApiError::new(
             StatusCode::FORBIDDEN,
             "Accordion blocked this request because it came from another website. \
@@ -35,7 +44,7 @@ pub async fn reject_cross_origin(request: Request, next: Next) -> Response {
     next.run(request).await
 }
 
-fn is_cross_origin(request: &Request) -> bool {
+fn is_cross_origin(request: &Request, expected: Option<&str>) -> bool {
     if matches!(
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS
@@ -49,6 +58,11 @@ fn is_cross_origin(request: &Request) -> bool {
     let Some(origin) = headers.get(ORIGIN) else {
         return false;
     };
+    if let Some(expected) = expected {
+        return !origin
+            .to_str()
+            .is_ok_and(|origin| origin.eq_ignore_ascii_case(expected));
+    }
     // HTTP/2 requests carry the host in the URI instead of a Host header.
     let host = headers
         .get(HOST)
@@ -87,7 +101,7 @@ mod tests {
     #[test]
     fn reads_are_always_allowed() {
         let req = request(Method::GET, &[("sec-fetch-site", "cross-site")]);
-        assert!(!is_cross_origin(&req));
+        assert!(!is_cross_origin(&req, None));
     }
 
     #[test]
@@ -99,7 +113,7 @@ mod tests {
             ("cross-site", true),
         ] {
             let req = request(Method::POST, &[("sec-fetch-site", site)]);
-            assert_eq!(is_cross_origin(&req), blocked, "{site}");
+            assert_eq!(is_cross_origin(&req, None), blocked, "{site}");
         }
     }
 
@@ -114,13 +128,32 @@ mod tests {
             ("null", true),
         ] {
             let req = request(Method::POST, &[host, ("origin", origin)]);
-            assert_eq!(is_cross_origin(&req), blocked, "{origin}");
+            assert_eq!(is_cross_origin(&req, None), blocked, "{origin}");
+        }
+    }
+
+    #[test]
+    fn compares_origin_with_the_servers_own_origin_once_named() {
+        let expected = Some("https://accordion.example.com");
+        for (origin, blocked) in [
+            ("https://accordion.example.com", false),
+            ("https://Accordion.Example.com", false),
+            ("http://accordion.example.com", true),
+            ("https://accordion.example.com:8443", true),
+            ("https://evil.example", true),
+        ] {
+            // The Host header doesn't matter once the server has a name.
+            let req = request(
+                Method::POST,
+                &[("host", "evil.example"), ("origin", origin)],
+            );
+            assert_eq!(is_cross_origin(&req, expected), blocked, "{origin}");
         }
     }
 
     #[test]
     fn allows_clients_that_arent_browsers() {
         let req = request(Method::DELETE, &[("host", "accordion.local")]);
-        assert!(!is_cross_origin(&req));
+        assert!(!is_cross_origin(&req, None));
     }
 }
