@@ -28,9 +28,11 @@ These steps need `sudo`. Run them from the root of this repo.
    ```sh
    sudo install -m 0755 target/release/accordion /usr/bin/accordion
    sudo install -m 0644 packaging/systemd/accordion.service /etc/systemd/system/accordion.service
-   sudo install -m 0644 packaging/systemd/accordion.sysusers /etc/sysusers.d/accordion.conf
+   sudo install -D -m 0644 packaging/systemd/accordion.sysusers /etc/sysusers.d/accordion.conf
    sudo systemd-sysusers
    ```
+
+   Some distributions, such as Ubuntu, don't create `/etc/sysusers.d` until something needs it. The `-D` creates it.
 
 3. Start Accordion now, and every time the machine starts:
 
