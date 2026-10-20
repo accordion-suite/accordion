@@ -23,6 +23,7 @@ use accordion_gateway::ServerName;
 use accordion_gateway::address::{AddressSource, detect_address};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::{DnsProvider, Provider, ProviderKind};
+use accordion_gateway::local_name::is_local_name;
 use accordion_gateway::tls::CertStore;
 use accordion_types::Role;
 use axum::extract::connect_info::{Connected, MockConnectInfo};
@@ -477,9 +478,10 @@ fn same_64(a: Ipv6Addr, b: Ipv6Addr) -> bool {
     a.segments()[..4] == b.segments()[..4]
 }
 
-/// Whether the `Host` header names the wizard: `accordion.local`,
-/// `localhost`, or an address. Websites can't use an address to rebind
-/// their own name to the server, so addresses are safe to allow.
+/// Whether the `Host` header names the wizard: `accordion.local` (or the
+/// name Accordion announces instead after a conflict), `localhost`, or an
+/// address. Websites can't use an address to rebind their own name to the
+/// server, so addresses are safe to allow.
 fn is_wizard_host(authority: &str) -> bool {
     let host = if let Some(rest) = authority.strip_prefix('[') {
         match rest.split_once(']') {
@@ -493,7 +495,7 @@ fn is_wizard_host(authority: &str) -> bool {
         }
     };
     let host = host.strip_suffix('.').unwrap_or(host).to_ascii_lowercase();
-    host == "accordion.local" || host == "localhost" || host.parse::<IpAddr>().is_ok()
+    is_local_name(&host) || host == "localhost" || host.parse::<IpAddr>().is_ok()
 }
 
 /// Middleware for the wizard: only the home network, and only the wizard's
@@ -575,7 +577,7 @@ const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'none'; script-src 'sel
      style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; \
      frame-ancestors 'none'; base-uri 'none'";
 
-fn asset(body: &'static str, content_type: &'static str) -> Response {
+pub(crate) fn asset(body: &'static str, content_type: &'static str) -> Response {
     (
         [
             (CONTENT_TYPE, HeaderValue::from_static(content_type)),
@@ -905,6 +907,7 @@ mod tests {
             "accordion.local",
             "ACCORDION.LOCAL.",
             "accordion.local:8080",
+            "accordion-2.local",
             "localhost",
             "192.168.1.20",
             "192.168.1.20:80",

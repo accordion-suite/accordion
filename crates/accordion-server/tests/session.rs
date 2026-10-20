@@ -36,6 +36,7 @@ async fn start_with(site: &Site) -> (tempfile::TempDir, Router) {
             AppState {
                 identity,
                 setup: None,
+                health: Default::default(),
             },
             site,
         ),

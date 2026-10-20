@@ -12,8 +12,10 @@ use accordion_gateway::ServerName;
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::ProviderKind;
+use accordion_gateway::local_name::{LOCAL_NAME, LocalName, LocalNameStatus};
 use accordion_gateway::redirect::redirect_to_https;
 use accordion_gateway::tls::{self, CertStore};
+use accordion_server::health::{Health, NameHealth};
 use accordion_server::setup::{self, Peer, SETUP_CODE_FILE, Setup, SetupOptions};
 use accordion_server::{AppState, Site, router};
 use accordion_types::Role;
@@ -51,6 +53,9 @@ Settings, from environment variables:
   ACCORDION_ADDRESS       The address to point the server's name at: auto, off,
                           or an address such as 192.168.1.20 (default: auto,
                           or off in a container)
+  ACCORDION_LOCAL_NAME    on announces accordion.local on the home network,
+                          where people find the setup wizard and, later, the
+                          redirect to the server's name (default: on)
   RUST_LOG                Log detail, such as info or debug (default: info)";
 
 #[tokio::main]
@@ -98,6 +103,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         return serve_http(AppState {
             identity,
             setup: None,
+            health: Health::default(),
         })
         .await;
     }
@@ -118,9 +124,11 @@ async fn serve() -> Result<(), Box<dyn Error>> {
             address,
         })?)
     };
-    let state = AppState {
+    let local_name_on = local_name_on()?;
+    let mut state = AppState {
         identity,
         setup: setup.as_ref().map(|(setup, _)| Arc::clone(setup)),
+        health: Health::default(),
     };
 
     let (stop, stopped) = watch::channel(false);
@@ -133,6 +141,16 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         async move {
             let _ = stopped.wait_for(|&stopped| stopped).await;
         }
+    };
+
+    let local_name = if local_name_on {
+        announce_local_name(
+            &mut state.health,
+            http.local_addr()?.port(),
+            until_stopped(),
+        )
+    } else {
+        None
     };
 
     // Port 80 serves the wizard until the server has a name, then the
@@ -168,6 +186,9 @@ async fn serve() -> Result<(), Box<dyn Error>> {
                 Some(settings) = named => (settings, wizard),
                 () = until_stopped() => {
                     wizard.await??;
+                    if let Some(local_name) = local_name {
+                        local_name.await?;
+                    }
                     tracing::info!("stopped");
                     return Ok(());
                 }
@@ -178,8 +199,37 @@ async fn serve() -> Result<(), Box<dyn Error>> {
 
     serve_https(state, &gateway_dir, settings, address, https, until_stopped).await?;
     port_80.await??;
+    if let Some(local_name) = local_name {
+        local_name.await?;
+    }
     tracing::info!("stopped");
     Ok(())
+}
+
+/// Starts announcing `accordion.local`, and returns the task that keeps it
+/// going until `stopped` completes.
+fn announce_local_name(
+    health: &mut Health,
+    http_port: u16,
+    stopped: impl Future<Output = ()> + Send + 'static,
+) -> Option<tokio::task::JoinHandle<()>> {
+    match LocalName::announce(http_port) {
+        Ok(local_name) => {
+            health.local_name = Some(local_name.status());
+            Some(tokio::spawn(local_name.run(stopped)))
+        }
+        Err(err) => {
+            tracing::warn!(
+                "Accordion couldn't announce {LOCAL_NAME} on the network ({err}). Devices can \
+                 still reach the server by its address."
+            );
+            let (_, status) = watch::channel(LocalNameStatus::Failed {
+                error: err.to_string(),
+            });
+            health.local_name = Some(status);
+            None
+        }
+    }
 }
 
 /// Logs where to find the wizard. Without a screen, the log is where the
@@ -224,7 +274,7 @@ async fn serve_http(state: AppState) -> Result<(), Box<dyn Error>> {
 /// Serves HTTPS for the server's name, and keeps the certificate and the
 /// name's address record current.
 async fn serve_https<F, S>(
-    state: AppState,
+    mut state: AppState,
     gateway_dir: &Path,
     settings: Settings,
     address: Option<AddressSource>,
@@ -243,6 +293,12 @@ where
         Some(source) => Some(AddressPublisher::from_settings(&settings, source)?),
         None => None,
     };
+    state.health.name = Some(NameHealth {
+        name: settings.name.clone(),
+        authority: settings.authority,
+        certificate: renewer.status(),
+        address: publisher.as_ref().map(AddressPublisher::status),
+    });
     tracing::info!(
         "serving https://{} on {}",
         settings.name,
@@ -418,6 +474,20 @@ fn certificate_authority() -> Result<Authority, String> {
         Ok(other) => Err(format!(
             "ACCORDION_CERTIFICATE_AUTHORITY is \"{other}\". Set it to lets-encrypt, or to \
              lets-encrypt-staging for test certificates that browsers don't trust."
+        )),
+    }
+}
+
+/// Whether to announce `accordion.local`.
+fn local_name_on() -> Result<bool, String> {
+    match std::env::var("ACCORDION_LOCAL_NAME")
+        .as_deref()
+        .map(str::trim)
+    {
+        Err(_) | Ok("on") => Ok(true),
+        Ok("off") => Ok(false),
+        Ok(other) => Err(format!(
+            "ACCORDION_LOCAL_NAME is \"{other}\". Set it to on or off."
         )),
     }
 }

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server health</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/health.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Server health</h1>
+
+  <form id="sign-in" hidden>
+    <p>Sign in with an admin account to see how the server is doing.</p>
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+
+  <section id="report" hidden>
+    <p id="overall" class="overall"></p>
+    <ul id="checks" class="checks"></ul>
+    <p class="hint">This page checks again every minute.</p>
+    <button id="refresh" type="button">Check again</button>
+  </section>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

@@ -165,6 +165,7 @@ async fn the_owner_step_creates_one_owner_and_signs_them_in() {
         AppState {
             identity: identity.clone(),
             setup: Some(setup),
+            health: Default::default(),
         },
         &site,
     );

@@ -8,6 +8,11 @@
   --accent: #3d4fd6;
   --accent-text: #ffffff;
   --error: #b3261e;
+  --ok: #1d6b38;
+  --ok-bg: #dcf2e3;
+  --warning: #7a4f00;
+  --warning-bg: #fbeccb;
+  --problem-bg: #fadcd9;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -20,6 +25,11 @@
     --accent: #8e9bff;
     --accent-text: #10102a;
     --error: #ffb4ab;
+    --ok: #9fdcb0;
+    --ok-bg: #173523;
+    --warning: #f5cf86;
+    --warning-bg: #3d2e0b;
+    --problem-bg: #4a1a16;
   }
 }
 
@@ -77,3 +87,22 @@ a { color: var(--accent); }
 code { font-size: 0.95em; }
 .error { color: var(--error); font-weight: 600; margin-top: 16px; }
 [hidden] { display: none !important; }
+
+/* The health page. */
+.overall { font-weight: 600; }
+.checks { list-style: none; margin: 0 0 16px; padding: 0; }
+.check { border-top: 1px solid var(--border); padding: 16px 0 0; }
+.check p { margin-bottom: 16px; }
+.state {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 999px;
+  vertical-align: middle;
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+[data-state="warning"] .state { background: var(--warning-bg); color: var(--warning); }
+[data-state="problem"] .state { background: var(--problem-bg); color: var(--error); }

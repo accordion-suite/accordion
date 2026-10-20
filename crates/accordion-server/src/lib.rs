@@ -4,6 +4,7 @@
 mod auth;
 mod device;
 mod error;
+pub mod health;
 mod origin;
 mod session;
 pub mod setup;
@@ -23,6 +24,8 @@ pub struct AppState {
     pub identity: Identity,
     /// The setup wizard, until the server has an owner.
     pub setup: Option<Arc<setup::Setup>>,
+    /// What the health page reports.
+    pub health: health::Health,
 }
 
 /// How clients reach the server.
@@ -61,6 +64,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .delete(session::sign_out),
         )
         .merge(setup::owner_routes())
+        .merge(health::routes())
         .layer(from_fn_with_state(
             expected_origin,
             origin::reject_cross_origin,
