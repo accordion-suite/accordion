@@ -5,6 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
+source = "git+https://github.com/accordion-suite/accordion-core#aee758e14e9cb5bcd43b6c017b20e8b6be6f4278"
 dependencies = [
  "accordion-types",
  "argon2",
@@ -20,6 +21,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
+source = "git+https://github.com/accordion-suite/accordion-gateway#9851f7bf74cfba0a5f4096afbb25fc54382aebaf"
 dependencies = [
  "axum",
  "hickory-resolver",
@@ -60,6 +62,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
+source = "git+https://github.com/accordion-suite/accordion-core#aee758e14e9cb5bcd43b6c017b20e8b6be6f4278"
 dependencies = [
  "serde",
  "uuid",
