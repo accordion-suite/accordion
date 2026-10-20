@@ -247,19 +247,36 @@ fn log_wizard(setup: &Setup, port: u16) {
     } else {
         format!(":{port}")
     };
-    let address = accordion_gateway::address::detect_address()
-        .map(|address| format!(" or http://{address}{port}"))
-        .unwrap_or_default();
+    // A server can be on more than one network, such as a Raspberry Pi
+    // that's also a Wi-Fi access point, so offer its address on each.
+    let addresses: Vec<String> = std::iter::once(format!("http://accordion.local{port}"))
+        .chain(
+            accordion_gateway::address::network_addresses()
+                .into_iter()
+                .map(|address| format!("http://{address}{port}")),
+        )
+        .collect();
     let window = if setup.window_open() {
         " For the next 30 minutes, the wizard doesn't need the code."
     } else {
         ""
     };
     tracing::info!(
-        "Accordion isn't set up yet. On a device on the same network, open \
-         http://accordion.local{port}{address}, and enter the setup code {}.{window}",
+        "Accordion isn't set up yet. On a device on the same network, open {}, and enter \
+         the setup code {}.{window}",
+        or_list(&addresses),
         setup.display_code()
     );
+}
+
+/// "a", "a or b", or "a, b, or c".
+fn or_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first, second] => format!("{first} or {second}"),
+        [rest @ .., last] => format!("{}, or {last}", rest.join(", ")),
+    }
 }
 
 /// Serves plain HTTP, for development when there's an owner but no name.
@@ -598,5 +615,18 @@ async fn shutdown_signal() {
     tokio::select! {
         () = ctrl_c => {},
         () = terminate => {},
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lists_addresses_with_a_serial_comma() {
+        let items = |list: &[&str]| list.iter().map(|item| item.to_string()).collect::<Vec<_>>();
+        assert_eq!(or_list(&items(&["a"])), "a");
+        assert_eq!(or_list(&items(&["a", "b"])), "a or b");
+        assert_eq!(or_list(&items(&["a", "b", "c"])), "a, b, or c");
     }
 }

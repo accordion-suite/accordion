@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#35f990e68132b110f0cc096026853ea8a5d8706c"
+source = "git+https://github.com/accordion-suite/accordion-gateway#fd14c72df8a3cd5971b9b67d7dad4c7a61aa63aa"
 dependencies = [
  "axum",
  "hickory-resolver",
@@ -30,6 +30,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-util",
+ "if-addrs",
  "instant-acme",
  "mdns-sd",
  "rustls",
