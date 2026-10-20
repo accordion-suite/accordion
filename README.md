@@ -131,6 +131,8 @@ To try the setup wizard instead, start with an empty data folder and skip `creat
 
 Once the server has a name, `https://<name>/health` shows how its certificate, its address record, and `accordion.local` are doing. Sign in with the owner account to see it.
 
+To run the server as a system service, see [packaging](packaging/README.md).
+
 `clone-workspace.sh` also makes local builds use your checkouts of the other repos. Before you commit `Cargo.lock`, push those repos and run `scripts/pin-versions.sh`, so it pins the versions on GitHub. Don't build between pinning and committing, because a build removes the pins again. A pre-commit hook refuses a `Cargo.lock` without them.
 
 ## Contributing

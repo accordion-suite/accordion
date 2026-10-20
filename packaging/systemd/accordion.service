@@ -1,0 +1,61 @@
+# Runs Accordion as a system service, for installs without containers. The
+# .deb and .rpm packages will install this file. Until they exist,
+# packaging/README.md explains how to install it by hand.
+
+[Unit]
+Description=Accordion
+Documentation=https://github.com/accordion-suite/accordion
+# The setup wizard logs the server's network address, and certificates and
+# DNS updates need the internet, so start once the network is up.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/accordion
+User=accordion
+Group=accordion
+Environment=ACCORDION_DATA_DIR=/var/lib/accordion
+# systemd creates the data folder, owned by the accordion user, and only that
+# user can open it. It holds the database, the DNS token, and private keys.
+StateDirectory=accordion
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5s
+
+# Ports 80 and 443 need this capability. It's the only privilege Accordion
+# has, and it can't gain others.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+
+# Accordion needs its data folder and the network, and nothing else on the
+# machine. If it were ever compromised, these keep it from reaching more.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+# AF_NETLINK lists the network interfaces, for announcing accordion.local on
+# each one.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
