@@ -43,7 +43,7 @@ struct SessionView {
 }
 
 impl SessionResponse {
-    fn new(user: User, session: Session) -> Self {
+    pub(crate) fn new(user: User, session: Session) -> Self {
         Self {
             user: UserView {
                 id: user.id,

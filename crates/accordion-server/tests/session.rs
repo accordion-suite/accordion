@@ -30,7 +30,16 @@ async fn start_with(site: &Site) -> (tempfile::TempDir, Router) {
         })
         .await
         .unwrap();
-    (dir, router(AppState { identity }, site))
+    (
+        dir,
+        router(
+            AppState {
+                identity,
+                setup: None,
+            },
+            site,
+        ),
+    )
 }
 
 fn request(method: &str) -> axum::http::request::Builder {

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up Accordion</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/wizard.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Set up Accordion</h1>
+
+  <form id="claim" hidden>
+    <h2>Enter the setup code</h2>
+    <p id="code-help">The setup code proves you have access to the server. It's 10 letters, shown on the server's screen and in its log. You can also see it by running <code>accordion setup-code</code> on the server.</p>
+    <p id="window-help" hidden>This server has no screen, so it doesn't need a setup code for the first 30 minutes after it starts.</p>
+    <div id="code-field">
+      <label for="code">Setup code</label>
+      <input id="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="abcde-fghij">
+    </div>
+    <button type="submit">Continue</button>
+  </form>
+
+  <form id="name" hidden>
+    <h2>Choose the server's name</h2>
+    <p>Your devices find Accordion by this name, and it gets a certificate so browsers trust it. The name has to be under a domain whose DNS is hosted at deSEC or Cloudflare.</p>
+    <label for="server-name">Server name</label>
+    <p class="hint">Certificates are listed in public logs, so choose a name that doesn't identify your household.</p>
+    <input id="server-name" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="accordion.example.com" required>
+    <label for="provider">DNS provider</label>
+    <select id="provider">
+      <option value="desec">deSEC</option>
+      <option value="cloudflare">Cloudflare</option>
+    </select>
+    <label for="token">API token</label>
+    <p class="hint">Accordion uses it to prove it controls the name and to point the name at the server. Limit the token to the name's A record and its <code>_acme-challenge</code> TXT record if your provider allows it.</p>
+    <input id="token" type="password" autocomplete="off" required>
+    <p class="hint">Accordion gets its certificate from Let's Encrypt. Continuing means agreeing to the <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">Let's Encrypt Subscriber Agreement</a>.</p>
+    <button type="submit">Get certificate</button>
+  </form>
+
+  <section id="working" hidden>
+    <h2>Getting the certificate</h2>
+    <p>Accordion is getting a certificate for <strong id="working-name"></strong>. This usually takes 1–5 minutes, and can take up to 15. Keep this page open.</p>
+  </section>
+
+  <section id="done" hidden>
+    <h2>The server has its name</h2>
+    <p>Next, you'll create the owner account on the secure page.</p>
+    <p><a id="done-link" href="#">Continue to the secure page</a></p>
+    <p class="hint">If the page doesn't open, check that this device uses your home network's DNS, then try the link again.</p>
+  </section>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

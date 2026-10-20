@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create the owner account</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/owner.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Create the owner account</h1>
+
+  <form id="owner" hidden>
+    <p>The owner manages Accordion: its users, modules, backups, and updates. You can add family members after this.</p>
+    <div id="code-field" hidden>
+      <label for="code">Setup code</label>
+      <p class="hint">It's 10 letters, shown on the server's screen and in its log, or by running <code>accordion setup-code</code> on the server.</p>
+      <input id="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="abcde-fghij">
+    </div>
+    <label for="display-name">Your name</label>
+    <input id="display-name" autocomplete="name" required>
+    <label for="username">Username</label>
+    <p class="hint">Lowercase letters and numbers, with periods, hyphens, or underscores between them. You'll use it to sign in.</p>
+    <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="password">Password</label>
+    <p class="hint">At least 8 characters. A few unrelated words make a strong password that's easy to remember.</p>
+    <input id="password" type="password" autocomplete="new-password" required>
+    <label for="confirm">Confirm password</label>
+    <input id="confirm" type="password" autocomplete="new-password" required>
+    <button type="submit">Create account</button>
+  </form>
+
+  <section id="finished" hidden>
+    <h2>You're all set</h2>
+    <p>Your owner account is ready, and you're signed in on this device.</p>
+  </section>
+
+  <section id="set-up" hidden>
+    <p>This server is already set up. Sign in with your account instead.</p>
+  </section>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

@@ -19,6 +19,11 @@ impl ApiError {
         }
     }
 
+    #[cfg(test)]
+    pub fn status(&self) -> StatusCode {
+        self.status
+    }
+
     pub fn not_signed_in() -> Self {
         Self::new(
             StatusCode::UNAUTHORIZED,

@@ -4,6 +4,7 @@ use std::io::{self, BufRead, IsTerminal, Write};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
@@ -13,6 +14,7 @@ use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::ProviderKind;
 use accordion_gateway::redirect::redirect_to_https;
 use accordion_gateway::tls::{self, CertStore};
+use accordion_server::setup::{self, Peer, SETUP_CODE_FILE, Setup, SetupOptions};
 use accordion_server::{AppState, Site, router};
 use accordion_types::Role;
 use tokio::net::TcpListener;
@@ -21,7 +23,10 @@ use tracing_subscriber::EnvFilter;
 
 const USAGE: &str = "\
 Usage:
-  accordion                                    Start the server
+  accordion                                    Start the server. Until it has an
+                                               owner, it serves the setup wizard
+                                               at http://accordion.local.
+  accordion setup-code                         Show the setup wizard's code
   accordion create-owner <username> <name>     Create the owner account
   accordion set-name <name> <dns-provider>     Set the server's name and get its
                                                certificate. The DNS provider is
@@ -31,10 +36,18 @@ Usage:
 
 Settings, from environment variables:
   ACCORDION_DATA_DIR      Where Accordion keeps its data (default: ./data)
-  ACCORDION_LISTEN        Address for plain HTTP, used until a name is set
-                          (default: 127.0.0.1:8080)
+  ACCORDION_LISTEN        Address for plain HTTP, used for development when
+                          there's an owner but no name (default: 127.0.0.1:8080)
   ACCORDION_HTTPS_LISTEN  Address for HTTPS once a name is set (default: port 443)
-  ACCORDION_HTTP_LISTEN   Address for the redirect to HTTPS (default: port 80)
+  ACCORDION_HTTP_LISTEN   Address for the setup wizard, and then for the
+                          redirect to HTTPS (default: port 80)
+  ACCORDION_SETUP_WINDOW  on lets the setup wizard skip the setup code for 30
+                          minutes after the server starts, for a server with
+                          no screen (default: off)
+  ACCORDION_CERTIFICATE_AUTHORITY
+                          lets-encrypt, or lets-encrypt-staging for test
+                          certificates that browsers don't trust
+                          (default: lets-encrypt)
   ACCORDION_ADDRESS       The address to point the server's name at: auto, off,
                           or an address such as 192.168.1.20 (default: auto,
                           or off in a container)
@@ -51,6 +64,7 @@ async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] => serve().await,
+        ["setup-code"] => show_setup_code(),
         ["create-owner", username, display_name] => create_owner(username, display_name).await,
         ["set-name", name, provider] => set_name(name, provider, Authority::LetsEncrypt).await,
         ["set-name", name, provider, "--staging"] => {
@@ -76,17 +90,122 @@ async fn main() -> ExitCode {
 
 async fn serve() -> Result<(), Box<dyn Error>> {
     let data_dir = data_dir()?;
-    let state = AppState {
-        identity: start_identity(&data_dir).await?,
-    };
+    let identity = start_identity(&data_dir).await?;
     let gateway_dir = gateway_dir(&data_dir);
-    match Settings::load(&gateway_dir)? {
-        Some(settings) => serve_https(state, &gateway_dir, settings).await,
-        None => serve_http(state).await,
+    let has_owner = identity.has_owner().await?;
+    let settings = Settings::load(&gateway_dir)?;
+    if settings.is_none() && has_owner {
+        return serve_http(AppState {
+            identity,
+            setup: None,
+        })
+        .await;
     }
+
+    let https = listen("ACCORDION_HTTPS_LISTEN", 443).await?;
+    let http = listen("ACCORDION_HTTP_LISTEN", 80).await?;
+    let https_port = https.local_addr()?.port();
+    let address = address_source()?;
+    let setup = if has_owner {
+        None
+    } else {
+        Some(Setup::start(SetupOptions {
+            data_dir: data_dir.clone(),
+            gateway_dir: gateway_dir.clone(),
+            authority: certificate_authority()?,
+            https_port,
+            open_window: setup_window()?,
+            address,
+        })?)
+    };
+    let state = AppState {
+        identity,
+        setup: setup.as_ref().map(|(setup, _)| Arc::clone(setup)),
+    };
+
+    let (stop, stopped) = watch::channel(false);
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        let _ = stop.send(true);
+    });
+    let until_stopped = || {
+        let mut stopped = stopped.clone();
+        async move {
+            let _ = stopped.wait_for(|&stopped| stopped).await;
+        }
+    };
+
+    // Port 80 serves the wizard until the server has a name, then the
+    // redirect to HTTPS. After setup in this run, the wizard keeps serving it
+    // and sends everyone to HTTPS itself.
+    let (settings, port_80) = match (settings, setup) {
+        (Some(settings), setup) => {
+            if let Some((setup, _)) = setup {
+                let origin = setup::https_origin(&settings.name, https_port);
+                setup.set_origin(origin.clone());
+                tracing::info!(
+                    "Accordion has a name but no owner yet. Open {origin}/setup to create the \
+                     owner account. The setup code is {}.",
+                    setup.display_code()
+                );
+            }
+            let redirect = axum::serve(http, redirect_to_https(settings.name.clone(), https_port))
+                .with_graceful_shutdown(until_stopped())
+                .into_future();
+            (settings, tokio::spawn(redirect))
+        }
+        (None, Some((setup, mut named))) => {
+            log_wizard(&setup, http.local_addr()?.port());
+            let wizard = axum::serve(
+                http,
+                setup::wizard_router(setup).into_make_service_with_connect_info::<Peer>(),
+            )
+            .with_graceful_shutdown(until_stopped())
+            .into_future();
+            let wizard = tokio::spawn(wizard);
+            let named = async { named.wait_for(Option::is_some).await.ok()?.clone() };
+            tokio::select! {
+                Some(settings) = named => (settings, wizard),
+                () = until_stopped() => {
+                    wizard.await??;
+                    tracing::info!("stopped");
+                    return Ok(());
+                }
+            }
+        }
+        (None, None) => unreachable!("a server without a name or owner runs the wizard"),
+    };
+
+    serve_https(state, &gateway_dir, settings, address, https, until_stopped).await?;
+    port_80.await??;
+    tracing::info!("stopped");
+    Ok(())
 }
 
-/// Serves plain HTTP, for development and until the server has a name.
+/// Logs where to find the wizard. Without a screen, the log is where the
+/// admin finds the setup code.
+fn log_wizard(setup: &Setup, port: u16) {
+    let port = if port == 80 {
+        String::new()
+    } else {
+        format!(":{port}")
+    };
+    let address = accordion_gateway::address::detect_address()
+        .map(|address| format!(" or http://{address}{port}"))
+        .unwrap_or_default();
+    let window = if setup.window_open() {
+        " For the next 30 minutes, the wizard doesn't need the code."
+    } else {
+        ""
+    };
+    tracing::info!(
+        "Accordion isn't set up yet. On a device on the same network, open \
+         http://accordion.local{port}{address}, and enter the setup code {}.{window}",
+        setup.display_code()
+    );
+}
+
+/// Serves plain HTTP, for development when there's an owner but no name.
 async fn serve_http(state: AppState) -> Result<(), Box<dyn Error>> {
     let listen = std::env::var("ACCORDION_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let listener = bind(&listen, "ACCORDION_LISTEN").await?;
@@ -102,63 +221,68 @@ async fn serve_http(state: AppState) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Serves HTTPS for the server's name, redirects plain HTTP there, and keeps
-/// the certificate current.
-async fn serve_https(
+/// Serves HTTPS for the server's name, and keeps the certificate and the
+/// name's address record current.
+async fn serve_https<F, S>(
     state: AppState,
     gateway_dir: &Path,
     settings: Settings,
-) -> Result<(), Box<dyn Error>> {
-    let https = listen("ACCORDION_HTTPS_LISTEN", 443).await?;
-    let http = listen("ACCORDION_HTTP_LISTEN", 80).await?;
+    address: Option<AddressSource>,
+    https: TcpListener,
+    until_stopped: F,
+) -> Result<(), Box<dyn Error>>
+where
+    F: Fn() -> S,
+    S: Future<Output = ()>,
+{
     let https_port = https.local_addr()?.port();
     let site = Site::named(settings.name.clone(), https_port);
     let certs = CertStore::new();
     let renewer = Renewer::from_settings(gateway_dir, &settings, certs.clone())?;
-    let publisher = match address_source()? {
+    let publisher = match address {
         Some(source) => Some(AddressPublisher::from_settings(&settings, source)?),
         None => None,
     };
     tracing::info!(
-        "serving https://{} on {}, and redirecting plain HTTP on {}",
+        "serving https://{} on {}",
         settings.name,
-        https.local_addr()?,
-        http.local_addr()?
+        https.local_addr()?
     );
-
-    let (stop, stopped) = watch::channel(false);
-    tokio::spawn(async move {
-        shutdown_signal().await;
-        let _ = stop.send(true);
-    });
-    let until_stopped = || {
-        let mut stopped = stopped.clone();
-        async move {
-            let _ = stopped.wait_for(|&stopped| stopped).await;
-        }
-    };
 
     let publish = async {
         if let Some(publisher) = publisher {
             publisher.run(until_stopped()).await;
         }
     };
-    let (_, redirected, (), ()) = tokio::join!(
+    tokio::join!(
         tls::serve(
             https,
             tls::server_config(certs),
             router(state, &site),
             until_stopped(),
         ),
-        axum::serve(http, redirect_to_https(settings.name, https_port))
-            .with_graceful_shutdown(until_stopped())
-            .into_future(),
         renewer.run(until_stopped()),
         publish,
     );
-    redirected?;
-    tracing::info!("stopped");
     Ok(())
+}
+
+/// Shows the setup code, for a server whose log is hard to reach.
+fn show_setup_code() -> Result<(), Box<dyn Error>> {
+    let path = data_dir()?.join(SETUP_CODE_FILE);
+    let code = setup::read_code(&path)
+        .map_err(|err| format!("Accordion couldn't read {}: {err}", path.display()))?;
+    match code {
+        Some(code) => {
+            println!("{}", setup::group_code(&code));
+            Ok(())
+        }
+        None => Err(
+            "There's no setup code. Either Accordion is already set up, or it hasn't \
+                     started yet. Start Accordion, then try again."
+                .into(),
+        ),
+    }
 }
 
 /// Creates the owner account from the command line.
@@ -179,6 +303,8 @@ async fn create_owner(username: &str, display_name: &str) -> Result<(), Box<dyn 
         })
         .await?;
     eprintln!("Created the owner account {}.", user.username);
+    // The wizard's code isn't needed once there's an owner.
+    let _ = std::fs::remove_file(data_dir()?.join(SETUP_CODE_FILE));
     Ok(())
 }
 
@@ -266,6 +392,34 @@ fn gateway_dir(data_dir: &Path) -> PathBuf {
 async fn start_identity(data_dir: &Path) -> Result<Identity, Box<dyn Error>> {
     let db = Database::open(&data_dir.join("accordion.db"))?;
     Ok(Identity::new(db).await?)
+}
+
+/// Whether the wizard skips the setup code for its first 30 minutes.
+fn setup_window() -> Result<bool, String> {
+    match std::env::var("ACCORDION_SETUP_WINDOW")
+        .as_deref()
+        .map(str::trim)
+    {
+        Err(_) | Ok("off") => Ok(false),
+        Ok("on") => Ok(true),
+        Ok(other) => Err(format!(
+            "ACCORDION_SETUP_WINDOW is \"{other}\". Set it to on or off."
+        )),
+    }
+}
+
+fn certificate_authority() -> Result<Authority, String> {
+    match std::env::var("ACCORDION_CERTIFICATE_AUTHORITY")
+        .as_deref()
+        .map(str::trim)
+    {
+        Err(_) | Ok("lets-encrypt") => Ok(Authority::LetsEncrypt),
+        Ok("lets-encrypt-staging") => Ok(Authority::LetsEncryptStaging),
+        Ok(other) => Err(format!(
+            "ACCORDION_CERTIFICATE_AUTHORITY is \"{other}\". Set it to lets-encrypt, or to \
+             lets-encrypt-staging for test certificates that browsers don't trust."
+        )),
+    }
 }
 
 /// Where the address for the name's DNS record comes from, or `None` to

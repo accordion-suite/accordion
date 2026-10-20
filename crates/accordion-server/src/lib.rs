@@ -6,6 +6,7 @@ mod device;
 mod error;
 mod origin;
 mod session;
+pub mod setup;
 
 use std::sync::Arc;
 
@@ -20,6 +21,8 @@ use axum::routing::get;
 #[derive(Clone)]
 pub struct AppState {
     pub identity: Identity,
+    /// The setup wizard, until the server has an owner.
+    pub setup: Option<Arc<setup::Setup>>,
 }
 
 /// How clients reach the server.
@@ -57,6 +60,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .post(session::sign_in)
                 .delete(session::sign_out),
         )
+        .merge(setup::owner_routes())
         .layer(from_fn_with_state(
             expected_origin,
             origin::reject_cross_origin,

@@ -49,6 +49,7 @@ dependencies = [
  "accordion-gateway",
  "accordion-types",
  "axum",
+ "getrandom 0.4.3",
  "http-body-util",
  "serde",
  "serde_json",
