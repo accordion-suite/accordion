@@ -161,7 +161,7 @@ Households that choose not to use an internet name get the local CA in the same 
 - **Create `accordion-gateway`** with `scripts/new-repo.sh`, as a library. It starts with TLS, ACME, and the host name check. WireGuard follows with the remote access decision.
 - **Server changes.** The server reads its name from configuration, listens on ports 443 and 80, and checks `Origin` against that name. The systemd unit grants `CAP_NET_BIND_SERVICE` so it can use those ports without running as root.
 - **Passkeys can be built** once the name exists, with the name as the relying party ID.
-- **Admin guide pages** for each supported DNS provider, for the CNAME setup, and for router DNS rebinding exceptions.
+- **Admin guide pages** for each supported DNS provider, for the CNAME setup, and for router DNS rebinding exceptions. Troubleshooting should also explain that a device that looked up the name before its record existed can keep getting "not found" for as long as the zone's negative caching time, which is 30 minutes at Cloudflare. That happened in the Raspberry Pi test.
 - **The setup time target needs testing** with the DNS step included.
 - **The local CA is planned,** after option 2, for households that keep the server off the internet.
 
@@ -173,3 +173,11 @@ Households that choose not to use an internet name get the local CA in the same 
   - **Duck DNS.** Free subdomains with an API that sets one TXT record per account, which is enough for one name. The token controls every subdomain on the account, and the service is run by two people.
   - **dynv6.** Free subdomains with a REST API. One report from 2023 says it refused `_acme-challenge` names, so test it before relying on it.
 - **More DNS providers.** Check which providers beta households use before adding more.
+- **A server on two networks.** The name points at one address, the one on the server's route to the internet. A live test on October 20, 2026, used a Raspberry Pi running umbrelOS that was on the home router's network (192.168.1.57) and was also a Wi-Fi access point with its own network (10.42.0.1).
+  - **What happened:** devices on the access point's network normally reach 192.168.1.57 through the Pi, because it's their gateway. A PC running Proton VPN couldn't, most likely because the VPN's **Allow LAN connections** setting only exempts the network the PC is on. Pointing the name at 10.42.0.1 with `ACCORDION_ADDRESS` fixed that PC, and broke the name for devices on the router's network, which can't reach 10.42.0.1.
+  - **Where else it applies:** a server that joins two networks with their own routers, such as a main network and a separate one for smart home devices. Also Accordion's own VPN, whose clients reach the server at a VPN address.
+  - **Options to compare:**
+    - **Keep one address,** chosen automatically or with `ACCORDION_ADDRESS`, and document the limits. No new code.
+    - **Publish an address for each network,** as several address records. Clients choose one and try another if it fails. How quickly that happens varies by browser and platform, and can be as long as a connection timeout, so it needs testing on each. It also publishes more of the home network's layout.
+    - **Answer DNS on the server** with the address for the network each question comes from (split-horizon DNS). It only works for devices that use the server for DNS. That suits VPN clients, whose WireGuard settings can name it, but home networks would need a router change.
+  - **Recommendation:** keep one address for now, and settle this in the remote access decision, because VPN clients need the same answer. Meanwhile, the wizard's log should list its address on every network, not only the main one.
