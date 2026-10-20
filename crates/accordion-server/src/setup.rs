@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -26,8 +26,7 @@ use accordion_gateway::dns::{DnsProvider, Provider, ProviderKind};
 use accordion_gateway::local_name::is_local_name;
 use accordion_gateway::tls::CertStore;
 use accordion_types::Role;
-use axum::extract::connect_info::{Connected, MockConnectInfo};
-use axum::extract::{ConnectInfo, Request, State};
+use axum::extract::{Request, State};
 use axum::http::header::{
     AUTHORIZATION, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST, REFERRER_POLICY,
     SET_COOKIE, USER_AGENT, X_CONTENT_TYPE_OPTIONS,
@@ -36,15 +35,13 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
-use axum::serve::IncomingStream;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use tokio::net::TcpListener;
 use tokio::sync::watch;
 
 use crate::error::ApiError;
 use crate::session::SessionResponse;
-use crate::{AppState, auth, device, origin};
+use crate::{AppState, auth, device, network, origin};
 
 /// Holds the setup code, so `accordion setup-code` can show it.
 pub const SETUP_CODE_FILE: &str = "setup-code";
@@ -438,46 +435,6 @@ pub fn https_origin(name: &ServerName, port: u16) -> String {
     }
 }
 
-/// The two ends of a connection. The wizard uses both to decide whether a
-/// client is on the home network.
-#[derive(Clone, Copy, Debug)]
-pub struct Peer {
-    pub local: SocketAddr,
-    pub remote: SocketAddr,
-}
-
-impl Connected<IncomingStream<'_, TcpListener>> for Peer {
-    fn connect_info(stream: IncomingStream<'_, TcpListener>) -> Self {
-        let remote = *stream.remote_addr();
-        Self {
-            local: stream.io().local_addr().unwrap_or(remote),
-            remote,
-        }
-    }
-}
-
-/// Whether `remote` is on the same network as the server. Private and
-/// link-local addresses always are. Home networks give devices public IPv6
-/// addresses too, so those count when they share the server's /64.
-fn on_home_network(local: IpAddr, remote: IpAddr) -> bool {
-    let remote = remote.to_canonical();
-    match remote {
-        IpAddr::V4(address) => {
-            address.is_loopback() || address.is_private() || address.is_link_local()
-        }
-        IpAddr::V6(address) => {
-            address.is_loopback()
-                || address.is_unique_local()
-                || address.is_unicast_link_local()
-                || matches!(local.to_canonical(), IpAddr::V6(local) if same_64(local, address))
-        }
-    }
-}
-
-fn same_64(a: Ipv6Addr, b: Ipv6Addr) -> bool {
-    a.segments()[..4] == b.segments()[..4]
-}
-
 /// Whether the `Host` header names the wizard: `accordion.local` (or the
 /// name Accordion announces instead after a conflict), `localhost`, or an
 /// address. Websites can't use an address to rebind their own name to the
@@ -501,17 +458,7 @@ fn is_wizard_host(authority: &str) -> bool {
 /// Middleware for the wizard: only the home network, and only the wizard's
 /// own host names.
 async fn only_home_network(request: Request, next: Next) -> Response {
-    // Tests stand in for the connection with `MockConnectInfo`.
-    let extensions = request.extensions();
-    let peer = extensions
-        .get::<ConnectInfo<Peer>>()
-        .map(|ConnectInfo(peer)| *peer)
-        .or_else(|| {
-            extensions
-                .get::<MockConnectInfo<Peer>>()
-                .map(|MockConnectInfo(peer)| *peer)
-        });
-    let from_home = peer.is_some_and(|peer| on_home_network(peer.local.ip(), peer.remote.ip()));
+    let from_home = network::peer(request.extensions()).is_some_and(|peer| peer.on_home_network());
     if !from_home {
         return (
             StatusCode::FORBIDDEN,
@@ -876,29 +823,6 @@ mod tests {
                 .check_owner_step(None, Some(&setup.code.clone()))
                 .is_ok()
         );
-    }
-
-    #[test]
-    fn only_answers_the_home_network() {
-        let local: IpAddr = "192.168.1.20".parse().unwrap();
-        for remote in [
-            "192.168.1.30",
-            "10.0.0.5",
-            "127.0.0.1",
-            "169.254.1.1",
-            "::ffff:192.168.1.30",
-        ] {
-            assert!(on_home_network(local, remote.parse().unwrap()), "{remote}");
-        }
-        for remote in ["203.0.113.5", "8.8.8.8", "2001:db8::5"] {
-            assert!(!on_home_network(local, remote.parse().unwrap()), "{remote}");
-        }
-
-        let local: IpAddr = "2001:db8:1:2::20".parse().unwrap();
-        assert!(on_home_network(local, "2001:db8:1:2::99".parse().unwrap()));
-        assert!(on_home_network(local, "fe80::1".parse().unwrap()));
-        assert!(on_home_network(local, "fd12::1".parse().unwrap()));
-        assert!(!on_home_network(local, "2001:db8:1:3::99".parse().unwrap()));
     }
 
     #[test]

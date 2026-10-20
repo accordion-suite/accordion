@@ -5,6 +5,7 @@ mod auth;
 mod device;
 mod error;
 pub mod health;
+pub mod network;
 mod origin;
 mod session;
 pub mod setup;
@@ -26,6 +27,8 @@ pub struct AppState {
     pub setup: Option<Arc<setup::Setup>>,
     /// What the health page reports.
     pub health: health::Health,
+    /// Who can open the setup and admin pages.
+    pub admin_access: network::AdminAccess,
 }
 
 /// How clients reach the server.
@@ -63,8 +66,14 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .post(session::sign_in)
                 .delete(session::sign_out),
         )
-        .merge(setup::owner_routes())
-        .merge(health::routes())
+        .merge(
+            setup::owner_routes()
+                .merge(health::routes())
+                .route_layer(from_fn_with_state(
+                    state.admin_access,
+                    network::only_home_network,
+                )),
+        )
         .layer(from_fn_with_state(
             expected_origin,
             origin::reject_cross_origin,

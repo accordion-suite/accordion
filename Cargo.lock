@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#aee758e14e9cb5bcd43b6c017b20e8b6be6f4278"
+source = "git+https://github.com/accordion-suite/accordion-core#2374de3fe90c5bf962d5fcb82960c903836d652b"
 dependencies = [
  "accordion-types",
  "argon2",
@@ -15,13 +15,14 @@ dependencies = [
  "sha2",
  "thiserror",
  "tokio",
+ "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#d321e99390dadd6ac05bc41c64e2af4d47e7b619"
+source = "git+https://github.com/accordion-suite/accordion-gateway#35f990e68132b110f0cc096026853ea8a5d8706c"
 dependencies = [
  "axum",
  "hickory-resolver",
@@ -64,7 +65,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#aee758e14e9cb5bcd43b6c017b20e8b6be6f4278"
+source = "git+https://github.com/accordion-suite/accordion-core#2374de3fe90c5bf962d5fcb82960c903836d652b"
 dependencies = [
  "serde",
  "uuid",

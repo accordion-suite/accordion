@@ -8,15 +8,16 @@ use std::sync::Arc;
 
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
-use accordion_gateway::ServerName;
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::ProviderKind;
 use accordion_gateway::local_name::{LOCAL_NAME, LocalName, LocalNameStatus};
 use accordion_gateway::redirect::redirect_to_https;
 use accordion_gateway::tls::{self, CertStore};
+use accordion_gateway::{Peer, ServerName};
 use accordion_server::health::{Health, NameHealth};
-use accordion_server::setup::{self, Peer, SETUP_CODE_FILE, Setup, SetupOptions};
+use accordion_server::network::AdminAccess;
+use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
 use accordion_server::{AppState, Site, router};
 use accordion_types::Role;
 use tokio::net::TcpListener;
@@ -53,6 +54,10 @@ Settings, from environment variables:
   ACCORDION_ADDRESS       The address to point the server's name at: auto, off,
                           or an address such as 192.168.1.20 (default: auto,
                           or off in a container)
+  ACCORDION_ADMIN_ACCESS  home-network lets only devices on the home network
+                          or VPN open the setup and admin pages. Use anywhere
+                          for a server with no home network, such as a rented
+                          one (default: home-network)
   ACCORDION_LOCAL_NAME    on announces accordion.local on the home network,
                           where people find the setup wizard and, later, the
                           redirect to the server's name (default: on)
@@ -104,6 +109,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
             identity,
             setup: None,
             health: Health::default(),
+            admin_access: admin_access()?,
         })
         .await;
     }
@@ -129,6 +135,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         identity,
         setup: setup.as_ref().map(|(setup, _)| Arc::clone(setup)),
         health: Health::default(),
+        admin_access: admin_access()?,
     };
 
     let (stop, stopped) = watch::channel(false);
@@ -264,7 +271,8 @@ async fn serve_http(state: AppState) -> Result<(), Box<dyn Error>> {
         listener.local_addr()?
     );
 
-    axum::serve(listener, router(state, &Site::Unnamed))
+    let app = router(state, &Site::Unnamed).into_make_service_with_connect_info::<Peer>();
+    axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     tracing::info!("stopped");
@@ -474,6 +482,20 @@ fn certificate_authority() -> Result<Authority, String> {
         Ok(other) => Err(format!(
             "ACCORDION_CERTIFICATE_AUTHORITY is \"{other}\". Set it to lets-encrypt, or to \
              lets-encrypt-staging for test certificates that browsers don't trust."
+        )),
+    }
+}
+
+fn admin_access() -> Result<AdminAccess, String> {
+    match std::env::var("ACCORDION_ADMIN_ACCESS")
+        .as_deref()
+        .map(str::trim)
+    {
+        Err(_) | Ok("home-network") => Ok(AdminAccess::HomeNetwork),
+        Ok("anywhere") => Ok(AdminAccess::Anywhere),
+        Ok(other) => Err(format!(
+            "ACCORDION_ADMIN_ACCESS is \"{other}\". Set it to home-network, or to anywhere \
+             for a server with no home network."
         )),
     }
 }

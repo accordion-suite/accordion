@@ -2,12 +2,15 @@
 
 use accordion_core::db::Database;
 use accordion_core::identity::{AuthMethod, Client, Identity, NewUser};
+use accordion_gateway::Peer;
 use accordion_gateway::certificates::{Authority, CertificateStatus};
 use accordion_server::health::{Health, NameHealth};
+use accordion_server::network::AdminAccess;
 use accordion_server::{AppState, Site, router};
 use accordion_types::Role;
 use axum::Router;
 use axum::body::Body;
+use axum::extract::connect_info::MockConnectInfo;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use serde_json::Value;
@@ -17,8 +20,16 @@ use tower::ServiceExt;
 const HOST: &str = "accordion.example.com";
 
 /// Starts a server with an owner and a standard user, and returns a bearer
-/// token for each.
+/// token for each. Requests come from the home network.
 async fn start() -> (tempfile::TempDir, Router, String, String) {
+    start_with(AdminAccess::HomeNetwork, "192.168.1.30").await
+}
+
+/// Starts a server whose requests come from `client`.
+async fn start_with(
+    admin_access: AdminAccess,
+    client: &str,
+) -> (tempfile::TempDir, Router, String, String) {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open(&dir.path().join("accordion.db")).unwrap();
     let identity = Identity::new(db).await.unwrap();
@@ -54,9 +65,14 @@ async fn start() -> (tempfile::TempDir, Router, String, String) {
             identity,
             setup: None,
             health,
+            admin_access,
         },
         &Site::named(HOST.parse().unwrap(), 443),
-    );
+    )
+    .layer(MockConnectInfo(Peer {
+        local: "192.168.1.20:443".parse().unwrap(),
+        remote: format!("{client}:50000").parse().unwrap(),
+    }));
     let user = tokens.pop().unwrap();
     let owner = tokens.pop().unwrap();
     (dir, app, owner, user)
@@ -118,4 +134,21 @@ async fn the_page_loads_nothing_from_other_sites() {
         .to_str()
         .unwrap();
     assert!(policy.starts_with("default-src 'none'; script-src 'self'"));
+}
+
+#[tokio::test]
+async fn opens_only_on_the_home_network_unless_the_admin_allows_anywhere() {
+    let (_dir, app, owner, _) = start_with(AdminAccess::HomeNetwork, "203.0.113.5").await;
+    let (status, body) = get(&app, "/api/health", Some(&owner)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(body["error"].as_str().unwrap().contains("home network"));
+    let (status, _) = get(&app, "/health", None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    // Sign-in itself isn't an admin page.
+    let (status, _) = get(&app, "/api/session", Some(&owner)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_dir, app, owner, _) = start_with(AdminAccess::Anywhere, "203.0.113.5").await;
+    let (status, _) = get(&app, "/api/health", Some(&owner)).await;
+    assert_eq!(status, StatusCode::OK);
 }

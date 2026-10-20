@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use accordion_core::db::Database;
 use accordion_core::identity::Identity;
+use accordion_gateway::Peer;
 use accordion_gateway::certificates::Authority;
-use accordion_server::setup::{self, Peer, SETUP_CODE_FILE, Setup, SetupOptions};
+use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
 use accordion_server::{AppState, Site, router};
 use axum::Router;
 use axum::body::Body;
@@ -166,9 +167,14 @@ async fn the_owner_step_creates_one_owner_and_signs_them_in() {
             identity: identity.clone(),
             setup: Some(setup),
             health: Default::default(),
+            admin_access: Default::default(),
         },
         &site,
-    );
+    )
+    .layer(MockConnectInfo(Peer {
+        local: "192.168.1.20:443".parse().unwrap(),
+        remote: "192.168.1.30:50000".parse().unwrap(),
+    }));
     let host = "accordion.example.com";
     let owner = |code: String| {
         json!({

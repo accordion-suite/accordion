@@ -13,6 +13,7 @@ use crate::AppState;
 use crate::auth::{self, Authenticated};
 use crate::device;
 use crate::error::ApiError;
+use crate::network::Connection;
 
 #[derive(Deserialize)]
 pub struct SignInRequest {
@@ -65,12 +66,17 @@ impl SessionResponse {
 /// session cookie.
 pub async fn sign_in(
     State(state): State<AppState>,
+    connection: Connection,
     headers: HeaderMap,
     Json(request): Json<SignInRequest>,
 ) -> Result<Response, ApiError> {
     let user = state
         .identity
-        .check_password(&request.username, &request.password)
+        .check_password(
+            &request.username,
+            &request.password,
+            connection.sign_in_from(),
+        )
         .await?;
     let user_agent = headers.get(USER_AGENT).and_then(|ua| ua.to_str().ok());
     let (token, session) = state

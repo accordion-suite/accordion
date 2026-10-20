@@ -1,11 +1,14 @@
 //! Signs in, checks the session, and signs out over HTTP.
 
 use accordion_core::db::Database;
+use accordion_core::identity::limits::ADDRESS_LIMIT;
 use accordion_core::identity::{Identity, NewUser};
+use accordion_gateway::Peer;
 use accordion_server::{AppState, Site, router};
 use accordion_types::Role;
 use axum::Router;
 use axum::body::Body;
+use axum::extract::connect_info::MockConnectInfo;
 use axum::http::{Request, Response, StatusCode, header};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -18,6 +21,19 @@ async fn start() -> (tempfile::TempDir, Router) {
 }
 
 async fn start_with(site: &Site) -> (tempfile::TempDir, Router) {
+    let (dir, app) = start_server(site).await;
+    (dir, app.layer(MockConnectInfo(peer("192.168.1.30"))))
+}
+
+/// A connection to the server at 192.168.1.20 from `client`.
+fn peer(client: &str) -> Peer {
+    Peer {
+        local: "192.168.1.20:443".parse().unwrap(),
+        remote: format!("{client}:50000").parse().unwrap(),
+    }
+}
+
+async fn start_server(site: &Site) -> (tempfile::TempDir, Router) {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open(&dir.path().join("accordion.db")).unwrap();
     let identity = Identity::new(db).await.unwrap();
@@ -37,6 +53,7 @@ async fn start_with(site: &Site) -> (tempfile::TempDir, Router) {
                 identity,
                 setup: None,
                 health: Default::default(),
+                admin_access: Default::default(),
             },
             site,
         ),
@@ -215,4 +232,30 @@ async fn a_named_server_answers_only_to_its_name() {
             .unwrap();
         assert_eq!(response.status(), expected, "{host}");
     }
+}
+
+#[tokio::test]
+async fn pauses_sign_ins_after_too_many_wrong_passwords() {
+    let (_dir, server) = start_server(&Site::Unnamed).await;
+    let stranger = server.clone().layer(MockConnectInfo(peer("203.0.113.5")));
+    for _ in 0..ADDRESS_LIMIT {
+        let response = sign_in(&stranger, "wrong horse").await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    let response = sign_in(&stranger, "correct horse").await;
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(response.headers()[header::RETRY_AFTER], "900");
+    assert!(response.headers().get(header::SET_COOKIE).is_none());
+    assert_eq!(
+        json(response).await["error"],
+        "There have been too many wrong passwords. Wait 15 minutes, then try again."
+    );
+
+    // Someone at home can still sign in.
+    let home = server.layer(MockConnectInfo(peer("192.168.1.30")));
+    assert_eq!(
+        sign_in(&home, "correct horse").await.status(),
+        StatusCode::OK
+    );
 }

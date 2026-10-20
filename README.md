@@ -129,7 +129,7 @@ To try HTTPS, you need a name under a domain whose DNS is hosted at deSEC or Clo
 
 To try the setup wizard instead, start with an empty data folder and skip `create-owner`. Set `ACCORDION_CERTIFICATE_AUTHORITY=lets-encrypt-staging`, then run `cargo run`. The log shows the wizard's address and setup code. Other devices on your network can also open it at `http://accordion.local`, which the server announces with multicast DNS. The wizard asks for the name and token, gets the certificate, and then opens `https://<name>/setup`, where you create the owner account.
 
-Once the server has a name, `https://<name>/health` shows how its certificate, its address record, and `accordion.local` are doing. Sign in with the owner account to see it.
+Once the server has a name, `https://<name>/health` shows how its certificate, its address record, and `accordion.local` are doing. Open it from a device on your home network, and sign in with the owner account. Admin pages like this one don't open from outside the home network, unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
 
 To run the server as a system service, see [packaging](packaging/README.md).
 
