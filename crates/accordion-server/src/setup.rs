@@ -507,7 +507,6 @@ pub fn owner_routes() -> Router<AppState> {
             "/owner.js",
             get(|| async { asset(OWNER_JS, "text/javascript") }),
         )
-        .route("/setup.css", get(|| async { asset(SETUP_CSS, "text/css") }))
         .route("/api/setup", get(owner_status))
         .route("/api/setup/owner", post(create_owner))
 }
@@ -516,7 +515,7 @@ const WIZARD_HTML: &str = include_str!("setup/wizard.html");
 const WIZARD_JS: &str = include_str!("setup/wizard.js");
 const OWNER_HTML: &str = include_str!("setup/owner.html");
 const OWNER_JS: &str = include_str!("setup/owner.js");
-const SETUP_CSS: &str = include_str!("setup/setup.css");
+pub(crate) const SETUP_CSS: &str = include_str!("setup/setup.css");
 
 /// Scripts and styles come only from the server itself, and no other site
 /// can show these pages in a frame.

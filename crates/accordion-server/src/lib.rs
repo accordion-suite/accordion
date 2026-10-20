@@ -5,6 +5,7 @@ mod auth;
 mod device;
 mod error;
 pub mod health;
+mod home;
 pub mod network;
 mod origin;
 mod session;
@@ -66,6 +67,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .post(session::sign_in)
                 .delete(session::sign_out),
         )
+        .merge(home::routes())
         .merge(
             setup::owner_routes()
                 .merge(health::routes())
