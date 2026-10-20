@@ -21,7 +21,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#924e35745ea7b45dff5e1a7ab16980972ae30eee"
+source = "git+https://github.com/accordion-suite/accordion-gateway#e6214df689d96457edad260b7380bb224f382747"
 dependencies = [
  "axum",
  "hickory-resolver",
