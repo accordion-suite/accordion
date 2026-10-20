@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Refuses a commit whose Cargo.lock has lost the commits it pins.
+#
+# Local builds use the checkouts in this workspace (see link-workspace.sh),
+# and while they do, Cargo rewrites Cargo.lock without the git sources of
+# Accordion's other repos. CI builds with --locked, so that Cargo.lock fails
+# CI. link-workspace.sh turns this hook on.
+
+set -euo pipefail
+
+git diff --cached --quiet -- Cargo.lock && exit 0
+
+repo="$(git rev-parse --show-toplevel)"
+# Packages in this repo are the only ones without a source.
+local_crates="$(sed -n 's/^name = "\(.*\)"$/\1/p' "$repo"/crates/*/Cargo.toml | tr '\n' ' ')"
+
+unpinned="$(git show :Cargo.lock | awk -v local=" $local_crates " '
+    function flush() {
+        if (name != "" && !has_source && index(local, " " name " ") == 0) print name
+        name = ""; has_source = 0
+    }
+    /^\[\[package\]\]/ { flush() }
+    /^name = / { name = $3; gsub(/"/, "", name) }
+    /^source = / { has_source = 1 }
+    END { flush() }
+')"
+
+if [[ -n "$unpinned" ]]; then
+    echo "Cargo.lock doesn't pin these crates to commits on GitHub: $(echo $unpinned)." >&2
+    echo "A local build replaced the pins with your checkouts. Run scripts/pin-versions.sh," >&2
+    echo "then stage Cargo.lock and commit again without building in between." >&2
+    exit 1
+fi

@@ -127,7 +127,7 @@ cargo run                                          # Start the server on http://
 
 To try HTTPS, you need a name under a domain whose DNS is hosted at deSEC or Cloudflare, and an API token that can change the name's A record and its `_acme-challenge` TXT record. Run `cargo run -- set-name <name> <desec|cloudflare> --staging`. It asks for the token and gets a test certificate from Let's Encrypt, which browsers don't trust. From then on, the server serves `https://<name>` on port 443 and redirects port 80 there. To use higher ports, set `ACCORDION_HTTPS_LISTEN` and `ACCORDION_HTTP_LISTEN`. `cargo run -- --help` lists every setting. The server points the name at its own address on your network, and updates the record if the address changes. In a container, or to use a different address, set `ACCORDION_ADDRESS`.
 
-`clone-workspace.sh` also makes local builds use your checkouts of the other repos. Before you commit `Cargo.lock`, push those repos and run `scripts/pin-versions.sh`, so it pins the versions on GitHub.
+`clone-workspace.sh` also makes local builds use your checkouts of the other repos. Before you commit `Cargo.lock`, push those repos and run `scripts/pin-versions.sh`, so it pins the versions on GitHub. Don't build between pinning and committing, because a build removes the pins again. A pre-commit hook refuses a `Cargo.lock` without them.
 
 ## Contributing
 

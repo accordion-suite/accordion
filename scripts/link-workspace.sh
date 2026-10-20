@@ -13,6 +13,8 @@
 #
 # While the patches are in place, local builds rewrite Cargo.lock without the
 # commits it pins. Run scripts/pin-versions.sh before committing Cargo.lock.
+# This script also turns on a pre-commit hook in this repo that refuses a
+# Cargo.lock without them.
 
 set -euo pipefail
 
@@ -47,3 +49,6 @@ done <<< "$deps"
 
 mkdir -p "$(dirname "$config")"
 printf '%s' "$output" > "$config"
+
+git -C "$suite_repo" config core.hooksPath scripts/hooks
+echo "turned on the pre-commit hook that checks Cargo.lock"
