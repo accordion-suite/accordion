@@ -17,6 +17,7 @@ accordion-gateway = { git = "https://github.com/accordion-suite/accordion-gatewa
 accordion-module = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 accordion-types = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 axum = "0.8.9"
+base64ct = { version = "1.8.3", features = ["alloc"] }
 getrandom = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
@@ -25,7 +26,6 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
-base64ct = { version = "1.8.3", features = ["alloc"] }
 http-body-util = "0.1.5"
 tempfile = "3.27.0"
 tower = { version = "0.5.3", features = ["util"] }
