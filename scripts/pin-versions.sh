@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Pins Cargo.lock to the latest pushed commit of each Accordion repo the
-# server depends on. Run it before committing Cargo.lock.
+# Pins Cargo.lock to the latest pushed commit of each Accordion repo that a
+# repo depends on. Run it before committing Cargo.lock.
 #
-# Usage: scripts/pin-versions.sh
+# Usage: scripts/pin-versions.sh [repo]
+#
+# The repo is this one, the server, unless you name another, such as
+# ../accordion-drive for a module that depends on core.
 #
 # Cargo.lock is the tested set of module versions (decision 1). Local builds
 # use the checkouts in this workspace instead (see link-workspace.sh), and
@@ -15,12 +18,13 @@ set -euo pipefail
 
 suite_repo="$(cd "$(dirname "$0")/.." && pwd)"
 workspace="$(dirname "$suite_repo")"
-manifest="$suite_repo/Cargo.toml"
+repo_dir="$(cd "${1:-$suite_repo}" && pwd)"
+manifest="$repo_dir/Cargo.toml"
 org_url="https://github.com/accordion-suite"
 
-mapfile -t crates < <(grep -hoE "^[a-z0-9-]+ = \{ git = \"$org_url/" "$suite_repo"/crates/*/Cargo.toml \
+mapfile -t crates < <(grep -hoE "^[a-z0-9-]+ = \{ git = \"$org_url/" "$repo_dir"/crates/*/Cargo.toml \
     | sed -E 's/ = .*//' | sort -u)
-mapfile -t repos < <(grep -hoE "git = \"$org_url/[a-z0-9-]+\"" "$suite_repo"/crates/*/Cargo.toml \
+mapfile -t repos < <(grep -hoE "git = \"$org_url/[a-z0-9-]+\"" "$repo_dir"/crates/*/Cargo.toml \
     | sed -E "s|.*$org_url/([a-z0-9-]+)\"|\1|" | sort -u)
 
 # The pinned commits are what's on GitHub, so local work isn't in them.
@@ -50,7 +54,7 @@ for crate in "${crates[@]}"; do
 done
 cargo update --manifest-path "$manifest" "${update_args[@]}"
 
-grep -A2 -E "^name = \"($(IFS='|'; echo "${crates[*]}"))\"" "$suite_repo/Cargo.lock" \
+grep -A2 -E "^name = \"($(IFS='|'; echo "${crates[*]}"))\"" "$repo_dir/Cargo.lock" \
     | grep -oE "$org_url/[a-z0-9-]+#[0-9a-f]{7}" \
     | sort -u \
     | sed -E "s|$org_url/(.*)#|pinned   \1 at |"
