@@ -10,10 +10,10 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::auth::{self, Authenticated};
 use crate::device;
-use crate::error::ApiError;
 use crate::network::Connection;
+use accordion_module::ApiError;
+use accordion_module::auth::{self, Authenticated};
 
 #[derive(Deserialize)]
 pub struct SignInRequest {
@@ -101,6 +101,34 @@ pub async fn current(
     Authenticated(SignedIn { user, session, .. }): Authenticated,
 ) -> Json<SessionResponse> {
     Json(SessionResponse::new(user, session))
+}
+
+#[derive(Deserialize)]
+pub struct ConfirmRequest {
+    password: String,
+}
+
+/// `POST /api/session/confirm`: checks the user's password again before a
+/// sensitive action, such as creating an app password, and records it as a
+/// recent sign-in for this session.
+pub async fn confirm(
+    State(state): State<AppState>,
+    Authenticated(SignedIn { user, session, .. }): Authenticated,
+    connection: Connection,
+    Json(request): Json<ConfirmRequest>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .identity
+        .check_password(&user.username, &request.password, connection.sign_in_from())
+        .await?;
+    if !state
+        .identity
+        .confirm_session(user.id, session.id, AuthMethod::Password)
+        .await?
+    {
+        return Err(ApiError::not_signed_in());
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `DELETE /api/session`: signs out this browser or app.

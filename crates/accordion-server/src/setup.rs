@@ -25,6 +25,7 @@ use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::{DnsProvider, Provider, ProviderKind};
 use accordion_gateway::local_name::is_local_name;
 use accordion_gateway::tls::CertStore;
+use accordion_module::{ApiError, auth};
 use accordion_types::Role;
 use axum::extract::{Request, State};
 use axum::http::header::{
@@ -39,9 +40,8 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
-use crate::error::ApiError;
 use crate::session::SessionResponse;
-use crate::{AppState, auth, device, network, origin};
+use crate::{AppState, device, network, origin};
 
 /// Holds the setup code, so `accordion setup-code` can show it.
 pub const SETUP_CODE_FILE: &str = "setup-code";

@@ -11,8 +11,8 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 
 use crate::AppState;
-use crate::error::ApiError;
 use crate::setup::{SETUP_CSS, asset};
+use accordion_module::ApiError;
 
 pub fn routes() -> Router<AppState> {
     Router::new()

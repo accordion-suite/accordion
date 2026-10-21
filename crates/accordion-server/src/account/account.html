@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your account</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/account.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Your account</h1>
+
+  <form id="sign-in" hidden>
+    <p>Sign in to manage your account.</p>
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+
+  <div id="account" hidden>
+    <p class="hint">Signed in as <strong id="signed-in-as"></strong>.</p>
+
+    <section>
+      <h2>Open Drive on your computer or phone</h2>
+      <p>File Explorer on Windows, Finder on a Mac, and many phone apps can open your Drive files. Each one connects with an app password: a separate password for that device, which you can delete without changing your own password.</p>
+
+      <form id="create">
+        <label for="device-name">Device name</label>
+        <p class="hint">So you can tell your app passwords apart, such as "Alex's laptop".</p>
+        <input id="device-name" maxlength="100" required>
+        <button type="submit">Create app password</button>
+      </form>
+
+      <form id="confirm" hidden>
+        <p>For your security, enter your password again before you create an app password.</p>
+        <label for="confirm-password">Your password</label>
+        <input id="confirm-password" type="password" autocomplete="current-password" required>
+        <button type="submit">Confirm</button>
+      </form>
+
+      <div id="created" hidden>
+        <p>Here's the app password for <strong id="created-name"></strong>. Enter it on that device now. You won't see it again.</p>
+        <p class="secret"><code id="created-password"></code></p>
+        <dl class="details">
+          <dt>Address</dt>
+          <dd><code id="dav-address"></code></dd>
+          <dt>Username</dt>
+          <dd><code id="dav-username"></code></dd>
+        </dl>
+        <ul class="steps">
+          <li><strong>Windows:</strong> In File Explorer, right-click <strong>This PC</strong>, select <strong>Map network drive</strong>, and enter the address.</li>
+          <li><strong>Mac:</strong> In Finder, select <strong>Go</strong> &gt; <strong>Connect to Server</strong>, and enter the address.</li>
+        </ul>
+        <button id="done" type="button">Done</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Your app passwords</h2>
+      <p id="none" class="hint">You don't have any app passwords yet.</p>
+      <ul id="passwords" class="passwords"></ul>
+    </section>
+  </div>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

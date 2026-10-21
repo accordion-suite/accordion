@@ -12,7 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 accordion-core = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
+accordion-drive = { git = "https://github.com/accordion-suite/accordion-drive", version = "0.1.0" }
 accordion-gateway = { git = "https://github.com/accordion-suite/accordion-gateway", version = "0.1.0" }
+accordion-module = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 accordion-types = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 axum = "0.8.9"
 getrandom = "0.4.3"
@@ -23,6 +25,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
+base64ct = { version = "1.8.3", features = ["alloc"] }
 http-body-util = "0.1.5"
 tempfile = "3.27.0"
 tower = { version = "0.5.3", features = ["util"] }

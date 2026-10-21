@@ -131,6 +131,8 @@ To try the setup wizard instead, start with an empty data folder and skip `creat
 
 Once the server has a name, `https://<name>/health` shows how its certificate, its address record, and `accordion.local` are doing. Open it from a device on your home network, and sign in with the owner account. Admin pages like this one don't open from outside the home network, unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
 
+Drive is the first module. To open your Drive files in File Explorer, Finder, or another WebDAV client, sign in at `/account` and create an app password. Then connect the client to `/dav/drive/` with your username and that app password. Your account password doesn't work there. File Explorer on Windows only connects over HTTPS, so try it with a server that has a name. Over plain HTTP, you can list your files with `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
+
 To run the server as a system service, see [packaging](packaging/README.md).
 
 `clone-workspace.sh` also makes local builds use your checkouts of the other repos. Before you commit `Cargo.lock`, push those repos and run `scripts/pin-versions.sh`, so it pins the versions on GitHub. Don't build between pinning and committing, because a build removes the pins again. A pre-commit hook refuses a `Cargo.lock` without them.

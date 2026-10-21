@@ -1,11 +1,11 @@
 //! The Accordion server: one process that serves every module, built on the
 //! core services in `accordion-core` (decision 1 in `docs/decisions`).
 
-mod auth;
+mod account;
 mod device;
-mod error;
 pub mod health;
 mod home;
+pub mod modules;
 pub mod network;
 mod origin;
 mod session;
@@ -17,8 +17,9 @@ use accordion_core::identity::Identity;
 use accordion_gateway::host::reject_unknown_hosts;
 use accordion_gateway::{AllowedHosts, ServerName};
 use axum::Router;
+use axum::extract::FromRef;
 use axum::middleware::from_fn_with_state;
-use axum::routing::get;
+use axum::routing::{get, post};
 
 /// Shared state for every request handler. Cloning it is cheap.
 #[derive(Clone)]
@@ -30,6 +31,15 @@ pub struct AppState {
     pub health: health::Health,
     /// Who can open the setup and admin pages.
     pub admin_access: network::AdminAccess,
+    /// The routes of the modules that are running, such as Drive.
+    pub modules: modules::Mounted,
+}
+
+/// Lets the sign-in checks from `accordion-module` find identity.
+impl FromRef<AppState> for Identity {
+    fn from_ref(state: &AppState) -> Self {
+        state.identity.clone()
+    }
 }
 
 /// How clients reach the server.
@@ -60,14 +70,20 @@ pub fn router(state: AppState, site: &Site) -> Router {
         Site::Unnamed => None,
         Site::Named { origin, .. } => Some(Arc::<str>::from(origin.as_str())),
     };
-    let router = Router::new()
+    // Module routes sit inside the same host and cross-site checks as the
+    // server's own (decision 7).
+    let router = state
+        .modules
+        .mount(Router::new())
         .route(
             "/api/session",
             get(session::current)
                 .post(session::sign_in)
                 .delete(session::sign_out),
         )
+        .route("/api/session/confirm", post(session::confirm))
         .merge(home::routes())
+        .merge(account::routes())
         .merge(
             setup::owner_routes()
                 .merge(health::routes())

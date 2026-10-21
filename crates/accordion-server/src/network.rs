@@ -17,7 +17,7 @@ use axum::http::{Extensions, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
-use crate::error::ApiError;
+use accordion_module::ApiError;
 
 /// Who can open the setup and admin pages.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

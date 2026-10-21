@@ -68,6 +68,7 @@ async fn start_with(
             setup: None,
             health,
             admin_access,
+            modules: Default::default(),
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

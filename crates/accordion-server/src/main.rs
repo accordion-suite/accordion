@@ -16,13 +16,15 @@ use accordion_gateway::local_name::{LOCAL_NAME, LocalName, LocalNameStatus};
 use accordion_gateway::redirect::redirect_to_https;
 use accordion_gateway::tls::{self, CertStore};
 use accordion_gateway::{Peer, ServerName};
+use accordion_module::{Services, Stopping};
 use accordion_server::health::{Health, NameHealth};
 use accordion_server::network::AdminAccess;
 use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
-use accordion_server::{AppState, Site, router};
+use accordion_server::{AppState, Site, modules, router};
 use accordion_types::Role;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
+use tokio::task::JoinSet;
 use tracing_subscriber::EnvFilter;
 
 const USAGE: &str = "\
@@ -103,7 +105,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     let data_dir = data_dir()?;
     let db = open_database(&data_dir)?;
     let identity = Identity::new(db.clone()).await?;
-    let storage = Storage::open(db, identity.clone(), &data_dir.join("storage")).await?;
+    let storage = Storage::open(db.clone(), identity.clone(), &data_dir.join("storage")).await?;
     let gateway_dir = gateway_dir(&data_dir);
     let has_owner = identity.has_owner().await?;
     let settings = Settings::load(&gateway_dir)?;
@@ -126,7 +128,19 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         storage: Some(storage.status()),
         ..Health::default()
     };
-    let upkeep = tokio::spawn(storage.maintain(until_stopped()));
+    let mut background = JoinSet::new();
+    background.spawn(storage.clone().maintain(until_stopped()));
+    let modules = modules::start(
+        modules::all(),
+        &Services {
+            db,
+            identity: identity.clone(),
+            storage,
+        },
+        &Stopping::new(stopped.clone()),
+        &mut background,
+    )
+    .await?;
 
     if settings.is_none() && has_owner {
         serve_http(
@@ -135,11 +149,12 @@ async fn serve() -> Result<(), Box<dyn Error>> {
                 setup: None,
                 health,
                 admin_access: admin_access()?,
+                modules,
             },
             until_stopped(),
         )
         .await?;
-        upkeep.await?;
+        finish(background).await?;
         tracing::info!("stopped");
         return Ok(());
     }
@@ -166,6 +181,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         setup: setup.as_ref().map(|(setup, _)| Arc::clone(setup)),
         health,
         admin_access: admin_access()?,
+        modules,
     };
 
     let local_name = if local_name_on {
@@ -214,7 +230,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
                     if let Some(local_name) = local_name {
                         local_name.await?;
                     }
-                    upkeep.await?;
+                    finish(background).await?;
                     tracing::info!("stopped");
                     return Ok(());
                 }
@@ -228,8 +244,17 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     if let Some(local_name) = local_name {
         local_name.await?;
     }
-    upkeep.await?;
+    finish(background).await?;
     tracing::info!("stopped");
+    Ok(())
+}
+
+/// Waits for background work, such as storage upkeep, to finish after the
+/// server stops.
+async fn finish(mut background: JoinSet<()>) -> Result<(), Box<dyn Error>> {
+    while let Some(result) = background.join_next().await {
+        result?;
+    }
     Ok(())
 }
 

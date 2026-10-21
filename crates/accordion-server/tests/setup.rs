@@ -168,6 +168,7 @@ async fn the_owner_step_creates_one_owner_and_signs_them_in() {
             setup: Some(setup),
             health: Default::default(),
             admin_access: Default::default(),
+            modules: Default::default(),
         },
         &site,
     )

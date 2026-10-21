@@ -22,9 +22,9 @@ use serde::Serialize;
 use tokio::sync::watch;
 
 use crate::AppState;
-use crate::auth::Authenticated;
-use crate::error::ApiError;
 use crate::setup::asset;
+use accordion_module::ApiError;
+use accordion_module::Authenticated;
 
 /// A certificate that expires sooner than this is a problem, not a warning.
 /// Renewal starts when a third of the certificate's lifetime is left, so this

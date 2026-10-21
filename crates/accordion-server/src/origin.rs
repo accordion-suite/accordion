@@ -25,7 +25,7 @@ use axum::http::{Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
-use crate::error::ApiError;
+use accordion_module::ApiError;
 
 /// `expected` is the server's origin, or `None` before a name is set.
 pub async fn reject_cross_origin(
