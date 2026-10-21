@@ -2,6 +2,7 @@
 
 use accordion_core::db::Database;
 use accordion_core::identity::{AuthMethod, Client, Identity, NewUser};
+use accordion_core::storage::StorageStatus;
 use accordion_gateway::Peer;
 use accordion_gateway::certificates::{Authority, CertificateStatus};
 use accordion_server::health::{Health, NameHealth};
@@ -59,6 +60,7 @@ async fn start_with(
             address: None,
         }),
         local_name: None,
+        storage: Some(watch::channel(StorageStatus::default()).1),
     };
     let app = router(
         AppState {
@@ -113,7 +115,7 @@ async fn only_admins_see_the_report() {
     assert_eq!(body["state"], "problem");
     let checks = body["checks"].as_array().unwrap();
     let ids: Vec<_> = checks.iter().map(|check| check["id"].clone()).collect();
-    assert_eq!(ids, ["certificate", "address"]);
+    assert_eq!(ids, ["certificate", "address", "storage"]);
     assert_eq!(checks[0]["state"], "problem");
 }
 

@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
+use accordion_core::storage::Storage;
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::ProviderKind;
@@ -100,18 +101,47 @@ async fn main() -> ExitCode {
 
 async fn serve() -> Result<(), Box<dyn Error>> {
     let data_dir = data_dir()?;
-    let identity = start_identity(&data_dir).await?;
+    let db = open_database(&data_dir)?;
+    let identity = Identity::new(db.clone()).await?;
+    let storage = Storage::open(db, identity.clone(), &data_dir.join("storage")).await?;
     let gateway_dir = gateway_dir(&data_dir);
     let has_owner = identity.has_owner().await?;
     let settings = Settings::load(&gateway_dir)?;
+
+    let (stop, stopped) = watch::channel(false);
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        let _ = stop.send(true);
+    });
+    let until_stopped = || {
+        let mut stopped = stopped.clone();
+        async move {
+            let _ = stopped.wait_for(|&stopped| stopped).await;
+        }
+    };
+
+    // Upkeep starts by rebuilding the plain view of everyone's files, in
+    // case the server stopped partway through a change.
+    let health = Health {
+        storage: Some(storage.status()),
+        ..Health::default()
+    };
+    let upkeep = tokio::spawn(storage.maintain(until_stopped()));
+
     if settings.is_none() && has_owner {
-        return serve_http(AppState {
-            identity,
-            setup: None,
-            health: Health::default(),
-            admin_access: admin_access()?,
-        })
-        .await;
+        serve_http(
+            AppState {
+                identity,
+                setup: None,
+                health,
+                admin_access: admin_access()?,
+            },
+            until_stopped(),
+        )
+        .await?;
+        upkeep.await?;
+        tracing::info!("stopped");
+        return Ok(());
     }
 
     let https = listen("ACCORDION_HTTPS_LISTEN", 443).await?;
@@ -134,20 +164,8 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     let mut state = AppState {
         identity,
         setup: setup.as_ref().map(|(setup, _)| Arc::clone(setup)),
-        health: Health::default(),
+        health,
         admin_access: admin_access()?,
-    };
-
-    let (stop, stopped) = watch::channel(false);
-    tokio::spawn(async move {
-        shutdown_signal().await;
-        let _ = stop.send(true);
-    });
-    let until_stopped = || {
-        let mut stopped = stopped.clone();
-        async move {
-            let _ = stopped.wait_for(|&stopped| stopped).await;
-        }
     };
 
     let local_name = if local_name_on {
@@ -196,6 +214,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
                     if let Some(local_name) = local_name {
                         local_name.await?;
                     }
+                    upkeep.await?;
                     tracing::info!("stopped");
                     return Ok(());
                 }
@@ -209,6 +228,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     if let Some(local_name) = local_name {
         local_name.await?;
     }
+    upkeep.await?;
     tracing::info!("stopped");
     Ok(())
 }
@@ -280,7 +300,10 @@ fn or_list(items: &[String]) -> String {
 }
 
 /// Serves plain HTTP, for development when there's an owner but no name.
-async fn serve_http(state: AppState) -> Result<(), Box<dyn Error>> {
+async fn serve_http(
+    state: AppState,
+    stopped: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), Box<dyn Error>> {
     let listen = std::env::var("ACCORDION_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let listener = bind(&listen, "ACCORDION_LISTEN").await?;
     tracing::info!(
@@ -290,9 +313,8 @@ async fn serve_http(state: AppState) -> Result<(), Box<dyn Error>> {
 
     let app = router(state, &Site::Unnamed).into_make_service_with_connect_info::<Peer>();
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(stopped)
         .await?;
-    tracing::info!("stopped");
     Ok(())
 }
 
@@ -470,9 +492,12 @@ fn gateway_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("gateway")
 }
 
+fn open_database(data_dir: &Path) -> Result<Database, Box<dyn Error>> {
+    Ok(Database::open(&data_dir.join("accordion.db"))?)
+}
+
 async fn start_identity(data_dir: &Path) -> Result<Identity, Box<dyn Error>> {
-    let db = Database::open(&data_dir.join("accordion.db"))?;
-    Ok(Identity::new(db).await?)
+    Ok(Identity::new(open_database(data_dir)?).await?)
 }
 
 /// Whether the wizard skips the setup code for its first 30 minutes.

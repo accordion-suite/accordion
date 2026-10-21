@@ -1,5 +1,5 @@
 //! The health page: how the server's certificate, its name's address record,
-//! and `accordion.local` are doing, for the household admin.
+//! `accordion.local`, and stored files are doing, for the household admin.
 //!
 //! The spec's health page also covers disk space, SMART status, encryption,
 //! backups, mail, and updates. Each will add a check here once it exists.
@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use std::time::{Duration, SystemTime};
 
 use accordion_core::identity::SignedIn;
+use accordion_core::storage::StorageStatus;
 use accordion_gateway::ServerName;
 use accordion_gateway::address::AddressStatus;
 use accordion_gateway::certificates::{Authority, CertificateStatus};
@@ -37,6 +38,8 @@ pub struct Health {
     pub name: Option<NameHealth>,
     /// Set while the server announces `accordion.local`.
     pub local_name: Option<watch::Receiver<LocalNameStatus>>,
+    /// Set once storage upkeep is running.
+    pub storage: Option<watch::Receiver<StorageStatus>>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -101,6 +104,9 @@ impl Health {
         }
         if let Some(local_name) = &self.local_name {
             checks.push(local_name_check(&local_name.borrow(), self.name.as_ref()));
+        }
+        if let Some(storage) = &self.storage {
+            checks.push(storage_check(&storage.borrow()));
         }
         checks
     }
@@ -259,6 +265,46 @@ fn local_name_check(status: &LocalNameStatus, name: Option<&NameHealth>) -> Chec
     }
 }
 
+fn storage_check(status: &StorageStatus) -> Check {
+    let (state, summary) = if status.damaged > 0 {
+        (
+            Level::Problem,
+            format!(
+                "Accordion found {} that changed or went missing on the disk after they were \
+                 saved. The disk may be failing, so check its health. Then restore the damaged \
+                 files from a backup. Uploading a damaged file again also repairs it.",
+                count(status.damaged, "stored file")
+            ),
+        )
+    } else if let Some(error) = &status.last_error {
+        (
+            Level::Warning,
+            format!(
+                "Accordion's hourly storage upkeep failed ({error}). It'll try again in an hour."
+            ),
+        )
+    } else if status.rebuilding_view {
+        (
+            Level::Ok,
+            "Accordion is rebuilding the plain copy of everyone's files in storage/files. Saving \
+             files waits until it's done."
+                .to_owned(),
+        )
+    } else {
+        (
+            Level::Ok,
+            "Accordion checks a few stored files each hour for damage, and none has turned up."
+                .to_owned(),
+        )
+    };
+    Check {
+        id: "storage",
+        title: "Stored files",
+        state,
+        summary,
+    }
+}
+
 /// A rough length of time, such as "three days" or "12 hours".
 fn in_words(duration: Duration) -> String {
     let minutes = duration.as_secs().div_ceil(60);
@@ -354,6 +400,7 @@ mod tests {
                 address: address.map(|address| watch::channel(address).1),
             }),
             local_name: None,
+            storage: None,
         }
     }
 
@@ -508,6 +555,43 @@ mod tests {
             local(&health)
                 .summary
                 .ends_with("at https://accordion.example.com.")
+        );
+    }
+
+    #[test]
+    fn reports_stored_files() {
+        let check = |status: StorageStatus| {
+            let health = Health {
+                storage: Some(watch::channel(status).1),
+                ..Health::default()
+            };
+            health.checks(now()).pop().unwrap()
+        };
+
+        let ok = check(StorageStatus::default());
+        assert_eq!((ok.id, ok.state), ("storage", Level::Ok));
+
+        let failed = check(StorageStatus {
+            last_error: Some("No space left on device (os error 28)".into()),
+            ..StorageStatus::default()
+        });
+        assert_eq!(failed.state, Level::Warning);
+        assert!(
+            failed
+                .summary
+                .contains("(No space left on device (os error 28)).")
+        );
+
+        let damaged = check(StorageStatus {
+            damaged: 2,
+            last_error: Some("ignored".into()),
+            ..StorageStatus::default()
+        });
+        assert_eq!(damaged.state, Level::Problem);
+        assert!(
+            damaged
+                .summary
+                .starts_with("Accordion found two stored files")
         );
     }
 
