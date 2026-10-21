@@ -66,7 +66,7 @@ impl From<identity::Error> for ApiError {
             InvalidUsername | InvalidDisplayName | PasswordTooShort | PasswordTooLong => {
                 StatusCode::BAD_REQUEST
             }
-            UsernameTaken | OwnerExists => StatusCode::CONFLICT,
+            UsernameTaken | UsernameReserved | OwnerExists => StatusCode::CONFLICT,
             UserNotFound => StatusCode::NOT_FOUND,
             WrongCredentials => StatusCode::UNAUTHORIZED,
             TooManyTries { wait } => {
