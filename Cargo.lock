@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#c1eedaba38ec04c6a867c61a4624dee7db345f1b"
+source = "git+https://github.com/accordion-suite/accordion-drive#b7b5fb85d893d9b9e0dda3517f8d543f3f3e38e0"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -40,7 +40,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#01e61374e7bc278650a509e73d4fda59a97ad5fe"
+source = "git+https://github.com/accordion-suite/accordion-gateway#140e64f8e192159a8ca43be889ab050cfc173424"
 dependencies = [
  "axum",
  "hickory-resolver",
