@@ -72,7 +72,7 @@ These are design targets. Benchmarking will confirm them.
 
 Accordion trusts the server owner and no one else: not the network, not your internet provider, not someone who steals the disk, and not Accordion's own developers.
 
-- TLS 1.3 everywhere, and WireGuard for remote access
+- TLS everywhere (TLS 1.3, or 1.2 for older clients such as File Explorer on Windows), and WireGuard for remote access
 - Full-disk encryption, set up by the appliance image
 - Optional end-to-end encrypted vaults for data that even your server can't read
 - Backups encrypted before they leave the box
