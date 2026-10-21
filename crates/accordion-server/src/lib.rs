@@ -8,6 +8,7 @@ mod home;
 pub mod modules;
 pub mod network;
 mod origin;
+mod requests;
 mod session;
 pub mod setup;
 
@@ -18,7 +19,7 @@ use accordion_gateway::host::reject_unknown_hosts;
 use accordion_gateway::{AllowedHosts, ServerName};
 use axum::Router;
 use axum::extract::FromRef;
-use axum::middleware::from_fn_with_state;
+use axum::middleware::{from_fn, from_fn_with_state};
 use axum::routing::{get, post};
 
 /// Shared state for every request handler. Cloning it is cheap.
@@ -97,13 +98,14 @@ pub fn router(state: AppState, site: &Site) -> Router {
             origin::reject_cross_origin,
         ))
         .with_state(state);
-    match site {
+    let router = match site {
         Site::Unnamed => router,
-        // The outermost layer, so requests for other names never reach a
-        // handler. That blocks DNS rebinding (decision 5).
+        // Outside every other check, so requests for other names never reach
+        // a handler. That blocks DNS rebinding (decision 5).
         Site::Named { name, .. } => router.layer(from_fn_with_state(
             AllowedHosts::new([name.as_str()]),
             reject_unknown_hosts,
         )),
-    }
+    };
+    router.layer(from_fn(requests::log))
 }
