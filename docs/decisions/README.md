@@ -10,5 +10,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [4](0004-encryption-at-rest.md) | How user data is encrypted at rest | Accepted |
 | [5](0005-server-name-and-certificates.md) | How the server gets its name and certificate | Accepted |
 | [6](0006-file-storage.md) | How file contents are stored on disk | Accepted |
+| [7](0007-module-interface.md) | How modules plug into the server | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
