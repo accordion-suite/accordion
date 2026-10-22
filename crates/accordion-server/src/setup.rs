@@ -10,14 +10,19 @@
 //! An appliance with no screen has nowhere to show the code. When the admin
 //! turns on the setup window, the server accepts one claim without the code
 //! for 30 minutes after it starts.
+//!
+//! Instead of a name, the wizard can restore a backup (decision 8). It
+//! brings back the owner, the name, and everything else, so once the restore
+//! is done, the server starts again with the restored data and setup is over.
 
 use std::collections::HashMap;
 use std::io;
 use std::net::{IpAddr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
+use accordion_core::backup::{self, Backup};
 use accordion_core::identity::{self, AuthMethod, Client, NewUser};
 use accordion_gateway::ServerName;
 use accordion_gateway::address::{AddressSource, detect_address};
@@ -56,6 +61,10 @@ pub const SETUP_WINDOW: Duration = Duration::from_secs(30 * 60);
 const MAX_WRONG_CODES: u32 = 5;
 const LOCKOUT: Duration = Duration::from_secs(60);
 
+/// How long the server waits after a restore before it starts again, so the
+/// wizard, which checks every few seconds, can say it's done first.
+const RESTART_DELAY: Duration = Duration::from_secs(5);
+
 /// The setup wizard's state, shared by the plain HTTP wizard and the HTTPS
 /// owner step.
 pub struct Setup {
@@ -65,8 +74,10 @@ pub struct Setup {
     authority: Authority,
     https_port: u16,
     address: Option<AddressSource>,
+    backup: Option<Backup>,
     state: Mutex<Inner>,
     named: watch::Sender<Option<Settings>>,
+    restored: watch::Sender<bool>,
 }
 
 pub struct SetupOptions {
@@ -79,6 +90,8 @@ pub struct SetupOptions {
     pub open_window: bool,
     /// Where the name's address record points, or `None` to leave it alone.
     pub address: Option<AddressSource>,
+    /// For restoring a backup instead of setting up from scratch.
+    pub backup: Option<Backup>,
 }
 
 #[derive(Default)]
@@ -92,6 +105,7 @@ struct Inner {
     wrong_codes: u32,
     locked_until: Option<Instant>,
     progress: Progress,
+    restore: RestoreProgress,
     /// The server's HTTPS origin, once it has a name.
     origin: Option<String>,
 }
@@ -111,6 +125,24 @@ pub enum Progress {
     /// `url` carries the handoff token after `#`, so it never reaches a log.
     Done {
         url: String,
+    },
+}
+
+/// How a restore from a backup is going.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum RestoreProgress {
+    #[default]
+    NotStarted,
+    Working {
+        percent: u8,
+    },
+    Failed {
+        error: String,
+    },
+    /// `url` is the restored server's address, if it had a name.
+    Done {
+        url: Option<String>,
     },
 }
 
@@ -142,8 +174,10 @@ impl Setup {
             authority: options.authority,
             https_port: options.https_port,
             address: options.address,
+            backup: options.backup,
             state: Mutex::new(state),
             named,
+            restored: watch::Sender::new(false),
         });
         Ok((setup, receiver))
     }
@@ -151,6 +185,12 @@ impl Setup {
     /// The code, grouped so it's easier to read aloud, such as `abcde-fghij`.
     pub fn display_code(&self) -> String {
         group_code(&self.code)
+    }
+
+    /// Changes to `true` once a restore is done, when the server should
+    /// start again to open the restored data.
+    pub fn restored(&self) -> watch::Receiver<bool> {
+        self.restored.subscribe()
     }
 
     /// Whether the window for claiming without the code is open.
@@ -255,6 +295,7 @@ impl Setup {
                 }
                 Progress::NotStarted | Progress::Failed { .. } => {}
             }
+            check_not_restoring(&state)?;
             state.progress = Progress::Working {
                 name: settings.name.to_string(),
             };
@@ -316,6 +357,80 @@ impl Setup {
             .map_err(|err| err.to_string())
     }
 
+    fn backup(&self) -> Result<Backup, ApiError> {
+        self.backup.clone().ok_or_else(|| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Restoring from a backup isn't available on this server.",
+            )
+        })
+    }
+
+    /// Restores a backup in the background, because a large one can take an
+    /// hour. The wizard asks for progress meanwhile. Once it's done, the
+    /// server starts again with the restored data.
+    fn start_restore(
+        self: &Arc<Self>,
+        path: PathBuf,
+        key: String,
+        snapshot: String,
+    ) -> Result<(), ApiError> {
+        let backup = self.backup()?;
+        {
+            let mut state = self.lock();
+            check_not_restoring(&state)?;
+            if matches!(
+                state.progress,
+                Progress::Working { .. } | Progress::Done { .. }
+            ) {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "This server already has a name, so it can't restore a backup now. \
+                     Continue setting it up instead.",
+                ));
+            }
+            state.restore = RestoreProgress::Working { percent: 0 };
+        }
+        tracing::info!(location = %path.display(), "restoring a backup");
+        let setup = Arc::clone(self);
+        tokio::spawn(async move {
+            let reporter = Arc::clone(&setup);
+            let result = backup
+                .restore(&path, &key, &snapshot, move |done| {
+                    // Restic reaches 100% before Accordion checks the
+                    // database, so the last percent waits for that.
+                    let percent = (done * 100.0).clamp(0.0, 99.0) as u8;
+                    reporter.lock().restore = RestoreProgress::Working { percent };
+                })
+                .await;
+            drop(backup);
+            match result {
+                Ok(restored) => {
+                    let url = match Settings::load(&restored.join("gateway")) {
+                        Ok(settings) => {
+                            settings.map(|settings| https_origin(&settings.name, setup.https_port))
+                        }
+                        Err(err) => {
+                            tracing::warn!("couldn't read the restored server's name: {err}");
+                            None
+                        }
+                    };
+                    setup.lock().restore = RestoreProgress::Done { url };
+                    tracing::info!("restored the backup, so Accordion is starting again");
+                    tokio::time::sleep(RESTART_DELAY).await;
+                    setup.restored.send_replace(true);
+                }
+                Err(err) => {
+                    tracing::warn!("the setup wizard couldn't restore the backup: {err}");
+                    setup.lock().restore = RestoreProgress::Failed {
+                        error: err.to_string(),
+                    };
+                }
+            }
+        });
+        Ok(())
+    }
+
     /// Checks that whoever is creating the owner account claimed the
     /// wizard: with the handoff from the name step, or else the setup code.
     fn check_owner_step(&self, handoff: Option<&str>, code: Option<&str>) -> Result<(), ApiError> {
@@ -358,6 +473,21 @@ impl Setup {
 impl Inner {
     fn window_open(&self) -> bool {
         self.open_until.is_some_and(|until| Instant::now() < until)
+    }
+}
+
+/// Refuses to start anything else while a restore runs or after it's done.
+fn check_not_restoring(state: &Inner) -> Result<(), ApiError> {
+    match state.restore {
+        RestoreProgress::Working { .. } => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "Accordion is restoring a backup. Wait for it to finish.",
+        )),
+        RestoreProgress::Done { .. } => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "Accordion restored a backup and is starting again with it.",
+        )),
+        RestoreProgress::NotStarted | RestoreProgress::Failed { .. } => Ok(()),
     }
 }
 
@@ -493,6 +623,8 @@ pub fn wizard_router(setup: Arc<Setup>) -> Router {
         .route("/api/setup", get(wizard_status))
         .route("/api/setup/claim", post(claim))
         .route("/api/setup/name", post(set_name))
+        .route("/api/setup/restore/find", post(find_backups))
+        .route("/api/setup/restore", post(restore))
         .fallback(after_naming)
         .layer(from_fn_with_state(None, origin::reject_cross_origin))
         .layer(from_fn(only_home_network))
@@ -562,17 +694,18 @@ struct WizardStatus {
     /// Only for whoever claimed the wizard.
     #[serde(skip_serializing_if = "Option::is_none")]
     progress: Option<Progress>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    restore: Option<RestoreProgress>,
 }
 
 /// `GET /api/setup`: whether the code is needed, and for whoever claimed
 /// the wizard, how the name step is going.
 async fn wizard_status(State(setup): State<Arc<Setup>>, headers: HeaderMap) -> Json<WizardStatus> {
+    let claimed = setup.check_claim(&headers).is_ok();
     Json(WizardStatus {
         code_needed: !setup.window_open(),
-        progress: setup
-            .check_claim(&headers)
-            .is_ok()
-            .then(|| setup.progress()),
+        progress: claimed.then(|| setup.progress()),
+        restore: claimed.then(|| setup.lock().restore.clone()),
     })
 }
 
@@ -633,6 +766,87 @@ async fn set_name(
         token,
         authority: setup.authority,
     })?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+#[derive(Deserialize)]
+struct FindRequest {
+    /// The full path to the backup folder, such as on a USB disk.
+    path: String,
+    recovery_key: String,
+}
+
+#[derive(Serialize)]
+struct FoundBackups {
+    snapshots: Vec<SnapshotView>,
+}
+
+#[derive(Serialize)]
+struct SnapshotView {
+    id: String,
+    /// Milliseconds since 1970, for the page to show in local time.
+    time: u64,
+    size: Option<u64>,
+}
+
+fn restore_error(err: backup::Error) -> ApiError {
+    use backup::Error as E;
+    match err {
+        E::Db(_) | E::Sqlite(_) | E::Io(_) => {
+            tracing::error!(%err, "restoring a backup failed");
+            ApiError::server_problem()
+        }
+        E::Busy => ApiError::new(StatusCode::CONFLICT, err.to_string()),
+        err => ApiError::new(StatusCode::BAD_REQUEST, err.to_string()),
+    }
+}
+
+/// `POST /api/setup/restore/find`: lists the backups in a folder, once the
+/// recovery key opens them.
+async fn find_backups(
+    State(setup): State<Arc<Setup>>,
+    headers: HeaderMap,
+    Json(request): Json<FindRequest>,
+) -> Result<Json<FoundBackups>, ApiError> {
+    setup.check_claim(&headers)?;
+    let backup = setup.backup()?;
+    let snapshots = backup
+        .find_snapshots(Path::new(request.path.trim()), &request.recovery_key)
+        .await
+        .map_err(restore_error)?;
+    Ok(Json(FoundBackups {
+        snapshots: snapshots
+            .into_iter()
+            .map(|snapshot| SnapshotView {
+                id: snapshot.id,
+                time: snapshot.time.duration_since(UNIX_EPOCH).map_or(0, |since| {
+                    u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+                }),
+                size: snapshot.size,
+            })
+            .collect(),
+    }))
+}
+
+#[derive(Deserialize)]
+struct RestoreRequest {
+    path: String,
+    recovery_key: String,
+    snapshot: String,
+}
+
+/// `POST /api/setup/restore`: starts restoring a backup.
+async fn restore(
+    State(setup): State<Arc<Setup>>,
+    headers: HeaderMap,
+    Json(request): Json<RestoreRequest>,
+) -> Result<StatusCode, ApiError> {
+    setup.check_claim(&headers)?;
+    setup.start_restore(
+        PathBuf::from(request.path.trim()),
+        request.recovery_key,
+        request.snapshot,
+    )?;
     Ok(StatusCode::ACCEPTED)
 }
 
@@ -736,6 +950,7 @@ mod tests {
             https_port: 443,
             open_window,
             address: None,
+            backup: None,
         })
         .unwrap();
         (dir, setup)
@@ -768,6 +983,7 @@ mod tests {
             https_port: 443,
             open_window: false,
             address: None,
+            backup: None,
         })
         .unwrap();
         assert_eq!(first.code, second.code);

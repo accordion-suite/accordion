@@ -83,6 +83,13 @@ fn api_error(err: backup::Error) -> ApiError {
             StatusCode::BAD_REQUEST
         }
         E::KeyMismatch => StatusCode::BAD_REQUEST,
+        // Only from restoring, which the setup wizard does.
+        E::BadKey
+        | E::KeyDoesntOpen(_)
+        | E::NoSnapshots(_)
+        | E::NoSuchSnapshot
+        | E::NoDatabase
+        | E::DamagedDatabase(_) => StatusCode::BAD_REQUEST,
         E::NotFound => StatusCode::NOT_FOUND,
         E::NoRecoveryKey
         | E::KeyExists

@@ -22,6 +22,50 @@
     <button type="submit">Continue</button>
   </form>
 
+  <section id="start" hidden>
+    <h2>Start fresh or restore</h2>
+    <p>If you used Accordion before and kept backups, restore one to bring back everyone's accounts, files, and settings, including the server's name. Otherwise, set up a new server.</p>
+    <button id="choose-new" type="button">Set up a new server</button>
+    <button id="choose-restore" type="button" class="secondary">Restore from a backup</button>
+  </section>
+
+  <form id="restore" hidden>
+    <h2>Restore from a backup</h2>
+    <p>First, connect the disk with your backups to this server, such as a USB disk.</p>
+    <label for="restore-path">Backup folder</label>
+    <p class="hint">The full path to the folder you chose when you set up backups, such as /media/usb/accordion-backups.</p>
+    <input id="restore-path" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+    <label for="restore-key">Recovery key</label>
+    <p class="hint">The 30 letters you wrote down or printed when you turned on backups. Spaces are optional.</p>
+    <input id="restore-key" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+    <button type="submit">Find backups</button>
+    <button id="restore-back" type="button" class="secondary">Set up a new server instead</button>
+  </form>
+
+  <form id="choose" hidden>
+    <h2>Choose a backup</h2>
+    <p>The newest backup has your most recent files. Choose an earlier one only if the newest has a problem.</p>
+    <div id="snapshots"></div>
+    <p class="hint">Restoring replaces everything on this server. A large backup can take up to an hour.</p>
+    <button type="submit">Restore this backup</button>
+    <button id="choose-back" type="button" class="secondary">Back</button>
+  </form>
+
+  <section id="restoring" hidden>
+    <h2>Restoring your data</h2>
+    <progress id="restore-progress" max="100" value="0" aria-label="Restore progress"></progress>
+    <p id="restore-percent"></p>
+    <p>A large backup can take up to an hour. Keep this page open.</p>
+  </section>
+
+  <section id="restored" hidden>
+    <h2>Your data is back</h2>
+    <p>Accordion is starting again with your restored data. Sign in with the same account you used before.</p>
+    <p id="restored-named"><a id="restored-link" href="#">Go to your server</a></p>
+    <p id="restored-unnamed" hidden>Open Accordion the way you did before.</p>
+    <p class="hint">If the page doesn't open, wait a minute while the server's name updates to point at this server, then try again.</p>
+  </section>
+
   <form id="name" hidden>
     <h2>Choose the server's name</h2>
     <p>Your devices find Accordion by this name, and it gets a certificate so browsers trust it. The name has to be under a domain whose DNS is hosted at deSEC or Cloudflare.</p>
@@ -38,6 +82,7 @@
     <input id="token" type="password" autocomplete="off" required>
     <p class="hint">Accordion gets its certificate from Let's Encrypt. Continuing means agreeing to the <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">Let's Encrypt Subscriber Agreement</a>.</p>
     <button type="submit">Get certificate</button>
+    <button id="name-back" type="button" class="secondary">Back</button>
   </form>
 
   <section id="working" hidden>

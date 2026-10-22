@@ -133,6 +133,8 @@ Once the server has a name, `https://<name>/health` shows how its certificate, i
 
 To try backups, install [restic](https://restic.net) 0.19.1, the program that makes them, and set `ACCORDION_RESTIC` to its full path if it isn't on your `PATH`. Then open `/backups` as the owner: turn backups on, save the recovery key, and add a folder on another disk as the place backups go. Backups run every night at 3 a.m., and **Back up now** runs one right away. The health page warns when the last backup that worked is more than 48 hours old.
 
+To try restoring, start a server with an empty data folder, open the setup wizard, and select **Restore from a backup**. Enter the backup folder and the recovery key, then choose a backup. Accordion restores everything, including the owner account and the server's name if it had one, then starts again with the restored data. Sign in with the account you used before.
+
 Drive is the first module. To open your Drive files in File Explorer, Finder, or another WebDAV client, sign in at `/account` and create an app password. Then connect the client to `/dav/drive/` with your username and that app password. Your account password doesn't work there. File Explorer on Windows only connects over HTTPS, so try it with a server that has a name. Over plain HTTP, you can list your files with `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
 
 To run the server as a system service, see [packaging](packaging/README.md).

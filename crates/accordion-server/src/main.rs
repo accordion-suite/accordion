@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use accordion_core::backup::Backup;
+use accordion_core::backup::{self, Backup};
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
@@ -80,7 +80,11 @@ async fn main() -> ExitCode {
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
-        [] => serve().await,
+        [] => match serve().await {
+            Ok(Served::Stopped) => Ok(()),
+            Ok(Served::Restored) => Err(start_again()),
+            Err(err) => Err(err),
+        },
         ["setup-code"] => show_setup_code(),
         ["create-owner", username, display_name] => create_owner(username, display_name).await,
         ["set-name", name, provider] => set_name(name, provider, Authority::LetsEncrypt).await,
@@ -105,8 +109,28 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn serve() -> Result<(), Box<dyn Error>> {
+/// How the server stopped.
+enum Served {
+    Stopped,
+    /// The setup wizard restored a backup, which the server opens when it
+    /// starts again.
+    Restored,
+}
+
+async fn serve() -> Result<Served, Box<dyn Error>> {
     let data_dir = data_dir()?;
+    // Before anything opens the database, which a restore replaces.
+    let restored = backup::apply_restore(&data_dir).map_err(|err| {
+        format!(
+            "Accordion couldn't finish restoring the backup into {}: {err}. Check that the \
+             disk has space, then start Accordion again.",
+            data_dir.display()
+        )
+    })?;
+    if restored {
+        let _ = std::fs::remove_file(data_dir.join(SETUP_CODE_FILE));
+        tracing::info!("finished restoring the backup");
+    }
     let db = open_database(&data_dir)?;
     let identity = Identity::new(db.clone()).await?;
     let storage = Storage::open(db.clone(), identity.clone(), &data_dir.join("storage")).await?;
@@ -116,9 +140,11 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     let settings = Settings::load(&gateway_dir)?;
 
     let (stop, stopped) = watch::channel(false);
+    let stop = Arc::new(stop);
+    let signal_stop = Arc::clone(&stop);
     tokio::spawn(async move {
         shutdown_signal().await;
-        let _ = stop.send(true);
+        let _ = signal_stop.send(true);
     });
     let until_stopped = || {
         let mut stopped = stopped.clone();
@@ -164,7 +190,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         .await?;
         finish(background).await?;
         tracing::info!("stopped");
-        return Ok(());
+        return Ok(Served::Stopped);
     }
 
     let https = listen("ACCORDION_HTTPS_LISTEN", 443).await?;
@@ -181,6 +207,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
             https_port,
             open_window: setup_window()?,
             address,
+            backup: Some(backup.clone()),
         })?)
     };
     let local_name_on = local_name_on()?;
@@ -224,6 +251,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         }
         (None, Some((setup, mut named))) => {
             log_wizard(&setup, http.local_addr()?.port());
+            let mut restored = setup.restored();
             let wizard = axum::serve(
                 http,
                 setup::wizard_router(setup).into_make_service_with_connect_info::<Peer>(),
@@ -232,16 +260,23 @@ async fn serve() -> Result<(), Box<dyn Error>> {
             .into_future();
             let wizard = tokio::spawn(wizard);
             let named = async { named.wait_for(Option::is_some).await.ok()?.clone() };
-            tokio::select! {
-                Some(settings) = named => (settings, wizard),
-                () = until_stopped() => {
+            let restored = async { restored.wait_for(|&restored| restored).await.is_ok() };
+            let served = tokio::select! {
+                Some(settings) = named => Err(settings),
+                true = restored => Ok(Served::Restored),
+                () = until_stopped() => Ok(Served::Stopped),
+            };
+            match served {
+                Err(settings) => (settings, wizard),
+                Ok(served) => {
+                    let _ = stop.send(true);
                     wizard.await??;
                     if let Some(local_name) = local_name {
                         local_name.await?;
                     }
                     finish(background).await?;
                     tracing::info!("stopped");
-                    return Ok(());
+                    return Ok(served);
                 }
             }
         }
@@ -255,7 +290,28 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     }
     finish(background).await?;
     tracing::info!("stopped");
-    Ok(())
+    Ok(Served::Stopped)
+}
+
+/// Starts Accordion again in place of this process, after the setup wizard
+/// restored a backup. Nothing from this run stays open, such as a database
+/// connection that could write to the restored database's files. Returns only
+/// if it couldn't.
+fn start_again() -> Box<dyn Error> {
+    use std::os::unix::process::CommandExt;
+
+    tracing::info!("starting again to open the restored backup");
+    let err = match std::env::current_exe() {
+        Ok(program) => std::process::Command::new(program)
+            .args(std::env::args_os().skip(1))
+            .exec(),
+        Err(err) => err,
+    };
+    format!(
+        "Accordion restored the backup, but couldn't start again ({err}). Start Accordion \
+         again to finish."
+    )
+    .into()
 }
 
 /// Waits for background work, such as storage upkeep, to finish after the
