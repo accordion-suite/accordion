@@ -46,6 +46,24 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # restic makes backups (decision 8), and core's backup tests run it.
+      # The checksums are from restic's signed SHA256SUMS for this version.
+      - name: Install restic
+        env:
+          RESTIC_VERSION: 0.19.1
+          ARCH: ${{ matrix.arch }}
+        run: |
+          case "$ARCH" in
+            x86_64) platform=linux_amd64 sha256=f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c ;;
+            arm64) platform=linux_arm64 sha256=a5f64aaab53d51e311fa3829124c5b703f2d14cf187d8640b6be3b2b49376465 ;;
+          esac
+          file="restic_${RESTIC_VERSION}_${platform}.bz2"
+          curl -fsSLo "$file" "https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/${file}"
+          echo "${sha256}  ${file}" | sha256sum --check
+          bunzip2 "$file"
+          sudo install -m 0755 "${file%.bz2}" /usr/local/bin/restic
+          rm "${file%.bz2}"
+          restic version
       - run: cargo test --workspace --all-features --locked
 
   deny:
