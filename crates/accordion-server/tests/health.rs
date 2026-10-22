@@ -61,6 +61,7 @@ async fn start_with(
         }),
         local_name: None,
         storage: Some(watch::channel(StorageStatus::default()).1),
+        backup: None,
     };
     let app = router(
         AppState {
@@ -69,6 +70,7 @@ async fn start_with(
             health,
             admin_access,
             modules: Default::default(),
+            backup: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

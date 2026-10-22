@@ -2,6 +2,7 @@
 //! core services in `accordion-core` (decision 1 in `docs/decisions`).
 
 mod account;
+mod backups;
 mod device;
 pub mod health;
 mod home;
@@ -14,6 +15,7 @@ pub mod setup;
 
 use std::sync::Arc;
 
+use accordion_core::backup::Backup;
 use accordion_core::identity::Identity;
 use accordion_gateway::host::reject_unknown_hosts;
 use accordion_gateway::{AllowedHosts, ServerName};
@@ -34,6 +36,8 @@ pub struct AppState {
     pub admin_access: network::AdminAccess,
     /// The routes of the modules that are running, such as Drive.
     pub modules: modules::Mounted,
+    /// Backups, once the server is running with an owner.
+    pub backup: Option<Backup>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -88,6 +92,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .merge(
             setup::owner_routes()
                 .merge(health::routes())
+                .merge(backups::routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,

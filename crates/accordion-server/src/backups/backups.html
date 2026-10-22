@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backups</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/backups.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Backups</h1>
+
+  <form id="sign-in" hidden>
+    <p>Sign in with an admin account to manage backups.</p>
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+
+  <form id="confirm" hidden>
+    <p>For your security, enter your password again before you see the recovery key.</p>
+    <label for="confirm-password">Your password</label>
+    <input id="confirm-password" type="password" autocomplete="current-password" required>
+    <button type="submit">Confirm</button>
+  </form>
+
+  <section id="turn-on" hidden>
+    <p>Backups keep a copy of everything on this server somewhere else, such as a USB disk, so a broken disk or a lost server doesn't lose your family's files.</p>
+    <p>Every backup is locked with a recovery key. You'll need it to get your files back if this server is ever lost, so you'll write it down first.</p>
+    <button id="turn-on-button" type="button">Turn on backups</button>
+  </section>
+
+  <section id="key" hidden>
+    <h2>Your recovery key</h2>
+    <p class="secret"><code id="key-letters"></code></p>
+    <p><strong>Write it down or print it, and keep it somewhere safe away from this server.</strong> Without it, nobody can restore your backups, not even you. Spaces are optional.</p>
+    <button id="print" type="button" class="secondary">Print</button>
+    <form id="key-confirm">
+      <label for="typed-key">Type the recovery key to show you've saved it</label>
+      <input id="typed-key" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+      <button type="submit">I've saved it</button>
+    </form>
+  </section>
+
+  <section id="unconfirmed" hidden>
+    <p><strong>Confirm that you've saved the recovery key.</strong> Backups are running, but you'll need the key to restore them.</p>
+    <button id="show-key" type="button">Show recovery key</button>
+  </section>
+
+  <div id="manage" hidden>
+    <section>
+      <h2>Status</h2>
+      <p id="summary"></p>
+      <button id="run" type="button">Back up now</button>
+      <label for="hour">Back up every night at</label>
+      <p class="hint">In the server's time zone.</p>
+      <select id="hour"></select>
+    </section>
+
+    <section>
+      <h2>Where backups go</h2>
+      <p id="no-targets" class="hint">Add a place for backups to go, such as a USB disk plugged into this server.</p>
+      <ul id="targets" class="passwords"></ul>
+      <form id="add-target">
+        <h2>Add a location</h2>
+        <label for="target-name">Name</label>
+        <p class="hint">So you can tell your backups apart, such as "Blue USB disk".</p>
+        <input id="target-name" maxlength="100" required>
+        <label for="target-path">Folder</label>
+        <p class="hint">The full path to a folder on another disk, such as /media/usb/accordion-backups. Accordion creates the last folder if it doesn't exist.</p>
+        <input id="target-path" autocapitalize="none" spellcheck="false" required>
+        <button type="submit">Add location</button>
+      </form>
+      <p class="hint" id="key-again"><button id="show-key-again" type="button" class="secondary">Show recovery key</button></p>
+    </section>
+  </div>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

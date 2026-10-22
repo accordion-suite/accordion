@@ -1,0 +1,280 @@
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+
+const PROBLEM = "Accordion ran into a problem. Try again in a moment.";
+
+// How often the page checks again while a backup or test runs.
+const RUNNING_MS = 3 * 1000;
+
+let status = null;
+// What to do once the admin confirms their password.
+let afterConfirm = null;
+
+function showError(message) {
+  $("error").textContent = message;
+  $("error").hidden = !message;
+}
+
+// Returns the response's status with its data, so callers can tell "not
+// signed in" from other problems.
+async function api(method, path, body) {
+  let response;
+  try {
+    response = await fetch(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body && JSON.stringify(body),
+    });
+  } catch {
+    throw new Error("Accordion didn't respond. Check that the server is on, then try again.");
+  }
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
+// Such as "October 22, 2026 at 3:04 AM", in the reader's time zone.
+function when(millis) {
+  return new Date(millis).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" });
+}
+
+function hourLabel(hour) {
+  if (hour === 0) return "midnight";
+  if (hour === 12) return "noon";
+  return hour < 12 ? `${hour} a.m.` : `${hour - 12} p.m.`;
+}
+
+function show(id) {
+  for (const section of ["sign-in", "confirm", "turn-on", "key", "unconfirmed", "manage"]) {
+    $(section).hidden = section !== id && !(id === "unconfirmed" && section === "manage");
+  }
+}
+
+function describeTarget(target) {
+  const lines = [];
+  const backup = target.last_backup;
+  if (!backup) {
+    lines.push(`No backups yet. The first one starts at ${hourLabel(status.hour)}.`);
+  } else if (backup.ok) {
+    lines.push(`Last backed up ${when(backup.finished_at)}.`);
+  } else {
+    let line = `The last backup, ${when(backup.finished_at)}, didn't work. ${backup.problem}`;
+    if (target.last_good_backup) {
+      line += ` The last one that worked was ${when(target.last_good_backup)}.`;
+    }
+    lines.push(line);
+  }
+  if (target.last_check && !target.last_check.ok) {
+    lines.push(`The last check found a problem. ${target.last_check.problem}`);
+  }
+  const test = target.last_restore_test;
+  if (!test) {
+    lines.push("No restore test yet. Accordion runs one each month.");
+  } else if (test.ok) {
+    lines.push(`Restore test passed ${when(test.finished_at)}.`);
+  } else {
+    lines.push(`The restore test ${when(test.finished_at)} didn't pass. ${test.problem}`);
+  }
+  return lines;
+}
+
+function renderTargets() {
+  const list = $("targets");
+  list.replaceChildren();
+  $("no-targets").hidden = status.targets.length > 0;
+  for (const target of status.targets) {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    name.textContent = target.name;
+    const location = document.createElement("p");
+    location.className = "hint";
+    location.textContent = target.location;
+    item.append(name, location);
+    for (const line of describeTarget(target)) {
+      const text = document.createElement("p");
+      text.textContent = line;
+      item.append(text);
+    }
+    const test = document.createElement("button");
+    test.type = "button";
+    test.className = "secondary";
+    test.textContent = "Test restore";
+    test.disabled = status.running || !target.last_good_backup;
+    test.addEventListener("click", () => act(test, "POST", `/api/backups/targets/${target.id}/test`));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => removeTarget(target, remove));
+    item.append(test, " ", remove);
+    list.append(item);
+  }
+}
+
+function render() {
+  if (status.key === "none") {
+    show("turn-on");
+    return;
+  }
+  if ($("key").hidden || status.key === "confirmed") {
+    show(status.key === "unconfirmed" ? "unconfirmed" : "manage");
+  }
+  let summary;
+  if (status.running) {
+    summary = "A backup or test is running. This page updates when it's done.";
+  } else if (status.targets.length === 0) {
+    summary = "Backups are on, but there's nowhere for them to go yet. Add a location below.";
+  } else {
+    summary = `Accordion backs up to every location below each night at ${hourLabel(status.hour)}.`;
+  }
+  $("summary").textContent = summary;
+  $("run").disabled = status.running || status.targets.length === 0;
+  if ($("hour").value !== String(status.hour)) $("hour").value = String(status.hour);
+  renderTargets();
+}
+
+async function load() {
+  try {
+    const { status: code, data } = await api("GET", "/api/backups");
+    if (code === 401) {
+      show("sign-in");
+      return;
+    }
+    if (code !== 200) throw new Error(data.error || PROBLEM);
+    status = data;
+    render();
+    if (status.running) setTimeout(load, RUNNING_MS);
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+function showKey(grouped) {
+  $("key-letters").textContent = grouped;
+  $("typed-key").value = "";
+  show("key");
+}
+
+// Gets the recovery key with `method`: POST creates it, GET shows it again.
+// Asks for the password first if the sign-in isn't recent.
+async function fetchKey(method) {
+  const { status: code, data } = await api(method, "/api/backups/key");
+  if (code === 403 && !data.error?.startsWith("Only admins")) {
+    afterConfirm = () => fetchKey(method);
+    show("confirm");
+    $("confirm-password").focus();
+    return;
+  }
+  if (code !== 200 && code !== 201) throw new Error(data.error || PROBLEM);
+  showKey(data.recovery_key);
+}
+
+async function act(button, method, path, body) {
+  showError("");
+  button.disabled = true;
+  try {
+    const { status: code, data } = await api(method, path, body);
+    if (code >= 300) throw new Error(data.error || PROBLEM);
+    await load();
+  } catch (error) {
+    showError(error.message);
+    button.disabled = false;
+  }
+}
+
+async function removeTarget(target, button) {
+  const sure = confirm(
+    `Stop backing up to ${target.name}? The backups already there stay, so you can still restore them.`,
+  );
+  if (sure) await act(button, "DELETE", `/api/backups/targets/${target.id}`);
+}
+
+function onSubmit(id, action) {
+  $(id).addEventListener("submit", async (event) => {
+    event.preventDefault();
+    showError("");
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      await action();
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+onSubmit("sign-in", async () => {
+  const { status: code, data } = await api("POST", "/api/session", {
+    username: $("username").value,
+    password: $("password").value,
+  });
+  if (code !== 200) throw new Error(data.error || PROBLEM);
+  $("password").value = "";
+  await load();
+});
+
+onSubmit("confirm", async () => {
+  const { status: code, data } = await api("POST", "/api/session/confirm", {
+    password: $("confirm-password").value,
+  });
+  if (code !== 204) throw new Error(data.error || PROBLEM);
+  $("confirm-password").value = "";
+  const next = afterConfirm;
+  afterConfirm = null;
+  if (next) await next();
+});
+
+onSubmit("key-confirm", async () => {
+  const { status: code, data } = await api("POST", "/api/backups/key/confirm", {
+    recovery_key: $("typed-key").value,
+  });
+  if (code !== 204) throw new Error(data.error || PROBLEM);
+  $("key-letters").textContent = "";
+  $("key").hidden = true;
+  await load();
+});
+
+onSubmit("add-target", async () => {
+  const { status: code, data } = await api("POST", "/api/backups/targets", {
+    name: $("target-name").value,
+    path: $("target-path").value,
+  });
+  if (code !== 201) throw new Error(data.error || PROBLEM);
+  $("target-name").value = "";
+  $("target-path").value = "";
+  await load();
+});
+
+for (const [id, method] of [
+  ["turn-on-button", "POST"],
+  ["show-key", "GET"],
+  ["show-key-again", "GET"],
+]) {
+  $(id).addEventListener("click", async () => {
+    showError("");
+    try {
+      await fetchKey(method);
+    } catch (error) {
+      showError(error.message);
+    }
+  });
+}
+
+$("print").addEventListener("click", () => window.print());
+$("run").addEventListener("click", () => act($("run"), "POST", "/api/backups/run"));
+
+for (let hour = 0; hour < 24; hour++) {
+  const option = document.createElement("option");
+  option.value = String(hour);
+  option.textContent = hourLabel(hour);
+  $("hour").append(option);
+}
+$("hour").addEventListener("change", async () => {
+  // Unlike the buttons, nothing else turns the menu back on.
+  await act($("hour"), "PUT", "/api/backups/settings", { hour: Number($("hour").value) });
+  $("hour").disabled = false;
+});
+
+load();

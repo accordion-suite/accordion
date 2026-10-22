@@ -1,12 +1,14 @@
 //! The health page: how the server's certificate, its name's address record,
-//! `accordion.local`, and stored files are doing, for the household admin.
+//! `accordion.local`, stored files, and backups are doing, for the household
+//! admin.
 //!
 //! The spec's health page also covers disk space, SMART status, encryption,
-//! backups, mail, and updates. Each will add a check here once it exists.
+//! mail, and updates. Each will add a check here once it exists.
 
 use std::fmt::Write as _;
 use std::time::{Duration, SystemTime};
 
+use accordion_core::backup::{BackupStatus, KeyState};
 use accordion_core::identity::SignedIn;
 use accordion_core::storage::StorageStatus;
 use accordion_gateway::ServerName;
@@ -31,6 +33,9 @@ use accordion_module::Authenticated;
 /// means about three weeks of failed renewals.
 const EXPIRY_PROBLEM: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
+/// A newest working backup older than this is a problem, as the spec asks.
+const BACKUP_PROBLEM: Duration = Duration::from_secs(48 * 60 * 60);
+
 /// Where the health page gets its news. Cloning it is cheap.
 #[derive(Clone, Default)]
 pub struct Health {
@@ -40,6 +45,8 @@ pub struct Health {
     pub local_name: Option<watch::Receiver<LocalNameStatus>>,
     /// Set once storage upkeep is running.
     pub storage: Option<watch::Receiver<StorageStatus>>,
+    /// Set once the backup schedule is running.
+    pub backup: Option<watch::Receiver<BackupStatus>>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -107,6 +114,9 @@ impl Health {
         }
         if let Some(storage) = &self.storage {
             checks.push(storage_check(&storage.borrow()));
+        }
+        if let Some(backup) = &self.backup {
+            checks.push(backup_check(&backup.borrow(), now));
         }
         checks
     }
@@ -305,6 +315,112 @@ fn storage_check(status: &StorageStatus) -> Check {
     }
 }
 
+fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
+    let check = |state, summary: String| Check {
+        id: "backups",
+        title: "Backups",
+        state,
+        summary,
+    };
+    if status.key == KeyState::None {
+        return check(
+            Level::Warning,
+            "Backups are off, so a failing disk could lose everything on this server. Turn \
+             them on from the Backups page."
+                .to_owned(),
+        );
+    }
+    if status.targets.is_empty() {
+        return check(
+            Level::Warning,
+            "Backups are on, but there's nowhere for them to go. Add a location, such as a USB \
+             disk, on the Backups page."
+                .to_owned(),
+        );
+    }
+
+    let mut state = Level::Ok;
+    let mut notes = Vec::new();
+    for target in &status.targets {
+        let name = &target.target.name;
+        let problem =
+            |outcome: &accordion_core::backup::Outcome| outcome.problem.clone().unwrap_or_default();
+        let age = target
+            .last_good_backup
+            .map(|good| now.duration_since(good).unwrap_or_default());
+        match (&target.last_backup, age) {
+            (None, _) => notes.push(format!(
+                "Nothing has been backed up to {name} yet. The first backup starts at {}.",
+                hour_label(status.hour)
+            )),
+            (Some(last), Some(age)) if age <= BACKUP_PROBLEM => {
+                if last.ok {
+                    notes.push(format!("Backed up to {name} {} ago.", in_words(age)));
+                } else {
+                    state = state.max(Level::Warning);
+                    notes.push(format!(
+                        "The last backup to {name} didn't work. {} The last one that worked \
+                         was {} ago.",
+                        problem(last),
+                        in_words(age)
+                    ));
+                }
+            }
+            (Some(last), Some(age)) => {
+                state = Level::Problem;
+                let mut note = format!(
+                    "The last backup to {name} that worked was {} ago.",
+                    in_words(age)
+                );
+                if !last.ok {
+                    let _ = write!(note, " {}", problem(last));
+                }
+                notes.push(note);
+            }
+            (Some(last), None) => {
+                state = Level::Problem;
+                notes.push(format!(
+                    "No backup to {name} has worked yet. {}",
+                    problem(last)
+                ));
+            }
+        }
+        if let Some(check) = target.last_check.as_ref().filter(|check| !check.ok) {
+            state = Level::Problem;
+            notes.push(format!(
+                "The last check of the backups in {name} found a problem. {}",
+                problem(check)
+            ));
+        }
+        if let Some(test) = target.last_restore_test.as_ref().filter(|test| !test.ok) {
+            state = Level::Problem;
+            notes.push(format!(
+                "The last restore test from {name} didn't pass. {}",
+                problem(test)
+            ));
+        }
+    }
+    if status.key == KeyState::Unconfirmed {
+        state = state.max(Level::Warning);
+        notes.push(
+            "Confirm on the Backups page that you've saved the recovery key. You'll need it to \
+             restore a backup."
+                .to_owned(),
+        );
+    }
+    check(state, notes.join(" "))
+}
+
+/// Such as "3 a.m." or "midnight".
+fn hour_label(hour: u8) -> String {
+    match hour {
+        0 => "midnight".to_owned(),
+        12 => "noon".to_owned(),
+        1..=11 => format!("{hour} a.m."),
+        _ => format!("{} p.m.", hour - 12),
+    }
+}
+
 /// A rough length of time, such as "three days" or "12 hours".
 fn in_words(duration: Duration) -> String {
     let minutes = duration.as_secs().div_ceil(60);
@@ -401,6 +517,7 @@ mod tests {
             }),
             local_name: None,
             storage: None,
+            backup: None,
         }
     }
 
@@ -593,6 +710,77 @@ mod tests {
                 .summary
                 .starts_with("Accordion found two stored files")
         );
+    }
+
+    #[test]
+    fn reports_backups() {
+        use accordion_core::backup::{Outcome, Target, TargetStatus};
+
+        let check = |status: BackupStatus| {
+            let health = Health {
+                backup: Some(watch::channel(status).1),
+                ..Health::default()
+            };
+            health.checks(now()).pop().unwrap()
+        };
+        let usb = |last_backup: Option<Outcome>, last_good: Option<Duration>| TargetStatus {
+            target: Target {
+                id: accordion_types::BackupTargetId::generate(),
+                name: "Blue USB disk".into(),
+                location: "/media/usb/backups".into(),
+                created_at: "2026-10-22T00:00:00.000Z".into(),
+            },
+            last_backup,
+            last_good_backup: last_good.map(|ago| now() - ago),
+            last_check: None,
+            last_restore_test: None,
+        };
+        let outcome = |ago: Duration, ok: bool| Outcome {
+            finished_at: now() - ago,
+            ok,
+            problem: (!ok).then(|| "The disk is full.".to_owned()),
+        };
+        let on = |targets| BackupStatus {
+            key: KeyState::Confirmed,
+            hour: 3,
+            running: false,
+            targets,
+        };
+
+        let off = check(BackupStatus::default());
+        assert_eq!((off.id, off.state), ("backups", Level::Warning));
+        assert!(off.summary.starts_with("Backups are off"));
+        assert_eq!(check(on(vec![])).state, Level::Warning);
+
+        let waiting = check(on(vec![usb(None, None)]));
+        assert_eq!(waiting.state, Level::Ok);
+        assert!(waiting.summary.contains("starts at 3 a.m."));
+
+        let hour = Duration::from_secs(60 * 60);
+        let fine = check(on(vec![usb(Some(outcome(5 * hour, true)), Some(5 * hour))]));
+        assert_eq!(fine.state, Level::Ok);
+        assert_eq!(fine.summary, "Backed up to Blue USB disk five hours ago.");
+
+        let failed_once = check(on(vec![usb(Some(outcome(hour, false)), Some(25 * hour))]));
+        assert_eq!(failed_once.state, Level::Warning);
+        assert!(failed_once.summary.contains("The disk is full."));
+
+        let stale = check(on(vec![usb(Some(outcome(hour, false)), Some(3 * DAY))]));
+        assert_eq!(stale.state, Level::Problem);
+        assert!(stale.summary.contains("three days ago"));
+
+        let mut tested = usb(Some(outcome(hour, true)), Some(hour));
+        tested.last_restore_test = Some(outcome(hour, false));
+        assert_eq!(check(on(vec![tested])).state, Level::Problem);
+
+        let mut unconfirmed = on(vec![usb(Some(outcome(hour, true)), Some(hour))]);
+        unconfirmed.key = KeyState::Unconfirmed;
+        let unconfirmed = check(unconfirmed);
+        assert_eq!(unconfirmed.state, Level::Warning);
+        assert!(unconfirmed.summary.ends_with("restore a backup."));
+
+        assert_eq!(hour_label(0), "midnight");
+        assert_eq!(hour_label(15), "3 p.m.");
     }
 
     #[test]

@@ -65,6 +65,7 @@ async fn start() -> Server {
             health: Default::default(),
             admin_access: Default::default(),
             modules,
+            backup: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

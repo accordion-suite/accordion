@@ -38,6 +38,7 @@ async fn start(with_owner: bool) -> (tempfile::TempDir, Router) {
             health: Default::default(),
             admin_access: Default::default(),
             modules: Default::default(),
+            backup: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

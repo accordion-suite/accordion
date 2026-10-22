@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use accordion_core::backup::Backup;
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
@@ -64,6 +65,9 @@ Settings, from environment variables:
   ACCORDION_LOCAL_NAME    on announces accordion.local on the home network,
                           where people find the setup wizard and, later, the
                           redirect to the server's name (default: on)
+  ACCORDION_RESTIC        The full path to restic, the program that makes
+                          backups (default: restic next to accordion, or on
+                          PATH)
   RUST_LOG                Log detail, such as info or debug (default: info)";
 
 #[tokio::main]
@@ -106,6 +110,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     let db = open_database(&data_dir)?;
     let identity = Identity::new(db.clone()).await?;
     let storage = Storage::open(db.clone(), identity.clone(), &data_dir.join("storage")).await?;
+    let backup = Backup::open(db.clone(), storage.clone(), &data_dir, restic_program()?).await?;
     let gateway_dir = gateway_dir(&data_dir);
     let has_owner = identity.has_owner().await?;
     let settings = Settings::load(&gateway_dir)?;
@@ -126,10 +131,12 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     // case the server stopped partway through a change.
     let health = Health {
         storage: Some(storage.status()),
+        backup: Some(backup.status()),
         ..Health::default()
     };
     let mut background = JoinSet::new();
     background.spawn(storage.clone().maintain(until_stopped()));
+    background.spawn(backup.clone().maintain(until_stopped()));
     let modules = modules::start(
         modules::all(),
         &Services {
@@ -150,6 +157,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
                 health,
                 admin_access: admin_access()?,
                 modules,
+                backup: Some(backup),
             },
             until_stopped(),
         )
@@ -182,6 +190,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         health,
         admin_access: admin_access()?,
         modules,
+        backup: Some(backup),
     };
 
     let local_name = if local_name_on {
@@ -526,6 +535,45 @@ async fn start_identity(data_dir: &Path) -> Result<Identity, Box<dyn Error>> {
 }
 
 /// Whether the wizard skips the setup code for its first 30 minutes.
+/// Where restic is: `ACCORDION_RESTIC`, or next to this program, where
+/// packages install it, or on `PATH`.
+fn restic_program() -> Result<PathBuf, String> {
+    if let Some(path) = std::env::var_os("ACCORDION_RESTIC").filter(|path| !path.is_empty()) {
+        let path = PathBuf::from(path);
+        if !path.is_absolute() {
+            return Err(format!(
+                "ACCORDION_RESTIC is \"{}\". Set it to restic's full path, starting with /.",
+                path.display()
+            ));
+        }
+        return Ok(path);
+    }
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.join("restic")));
+    let on_path = std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|dir| dir.join("restic"));
+    match beside
+        .into_iter()
+        .chain(on_path)
+        .find(|path| path.is_file())
+    {
+        Some(path) => Ok(path),
+        None => {
+            // The server still starts, and the backups page and health page
+            // say what's wrong once a backup tries to run.
+            tracing::warn!(
+                "Accordion couldn't find restic, so backups won't work. Install restic, or \
+                 set ACCORDION_RESTIC to its full path."
+            );
+            Ok(PathBuf::from("restic"))
+        }
+    }
+}
+
 fn setup_window() -> Result<bool, String> {
     match std::env::var("ACCORDION_SETUP_WINDOW")
         .as_deref()
