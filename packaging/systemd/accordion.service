@@ -16,6 +16,9 @@ ExecStart=/usr/bin/accordion
 User=accordion
 Group=accordion
 Environment=ACCORDION_DATA_DIR=/var/lib/accordion
+# restic, the program that makes backups, in the version Accordion is tested
+# with. It's kept apart from any restic the distribution installs.
+Environment=ACCORDION_RESTIC=/usr/lib/accordion/restic
 # systemd creates the data folder, owned by the accordion user, and only that
 # user can open it. It holds the database, the DNS token, and private keys.
 StateDirectory=accordion
@@ -33,6 +36,9 @@ NoNewPrivileges=yes
 # Accordion needs its data folder and the network, and nothing else on the
 # machine. If it were ever compromised, these keep it from reaching more.
 ProtectSystem=strict
+# Except where backup disks are mounted, such as a USB disk. The minus means
+# it's fine if a folder doesn't exist.
+ReadWritePaths=-/media -/mnt
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
