@@ -66,18 +66,19 @@ jobs:
           restic version
       # Core's tests back up to rclone's S3 server, which stands in for a
       # storage provider. The checksums are from rclone's signed SHA256SUMS
-      # for this version.
+      # for this version. rclone reads every RCLONE_ variable as one of its
+      # own settings, so the version is in RELEASE instead.
       - name: Install rclone
         env:
-          RCLONE_VERSION: 1.75.2
+          RELEASE: 1.75.2
           ARCH: ${{ matrix.arch }}
         run: |
           case "$ARCH" in
             x86_64) platform=linux-amd64 sha256=349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702 ;;
             arm64) platform=linux-arm64 sha256=7e1e8d69654941b7b7df84ee74c5f7fb09cce7d5496947fb7bf16b55ff427d10 ;;
           esac
-          name="rclone-v${RCLONE_VERSION}-${platform}"
-          curl -fsSLo "${name}.zip" "https://github.com/rclone/rclone/releases/download/v${RCLONE_VERSION}/${name}.zip"
+          name="rclone-v${RELEASE}-${platform}"
+          curl -fsSLo "${name}.zip" "https://github.com/rclone/rclone/releases/download/v${RELEASE}/${name}.zip"
           echo "${sha256}  ${name}.zip" | sha256sum --check
           unzip -q "${name}.zip"
           sudo install -m 0755 "${name}/rclone" /usr/local/bin/rclone
