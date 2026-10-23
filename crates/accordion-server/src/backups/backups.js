@@ -236,14 +236,36 @@ onSubmit("key-confirm", async () => {
   await load();
 });
 
+// Shows the fields for a folder or a bucket. Turning the other set off
+// keeps its empty, required fields from blocking the form.
+for (const radio of document.querySelectorAll("input[name=target-kind]")) {
+  radio.addEventListener("change", () => {
+    const s3 = radio.value === "s3";
+    $("target-folder").hidden = $("target-folder").disabled = s3;
+    $("target-s3").hidden = $("target-s3").disabled = !s3;
+  });
+}
+
 onSubmit("add-target", async () => {
+  const kind = document.querySelector("input[name=target-kind]:checked").value;
+  const place =
+    kind === "s3"
+      ? {
+          kind,
+          endpoint: $("target-endpoint").value,
+          bucket: $("target-bucket").value,
+          key_id: $("target-key-id").value,
+          secret_key: $("target-secret").value,
+        }
+      : { kind, path: $("target-path").value };
   const { status: code, data } = await api("POST", "/api/backups/targets", {
     name: $("target-name").value,
-    path: $("target-path").value,
+    ...place,
   });
   if (code !== 201) throw new Error(data.error || PROBLEM);
-  $("target-name").value = "";
-  $("target-path").value = "";
+  for (const id of ["target-name", "target-path", "target-endpoint", "target-bucket", "target-key-id", "target-secret"]) {
+    $(id).value = "";
+  }
   await load();
 });
 

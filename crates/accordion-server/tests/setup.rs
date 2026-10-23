@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use accordion_core::backup::{self, Backup};
+use accordion_core::backup::{self, Backup, Place};
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
@@ -151,7 +151,10 @@ async fn back_up_a_server(folder: &Path) -> String {
         .await
         .unwrap();
     let key = backup.create_recovery_key().await.unwrap();
-    backup.add_folder("USB disk", folder).await.unwrap();
+    backup
+        .add_target("USB disk", &Place::Folder(folder.to_owned()))
+        .await
+        .unwrap();
     backup.back_up().await.unwrap();
     key.grouped()
 }
@@ -361,7 +364,7 @@ async fn the_wizard_restores_a_backup_and_starts_again() {
     let app = wizard(&setup, "192.168.1.30");
 
     // Restoring needs a claim.
-    let find = json!({ "path": usb, "recovery_key": key });
+    let find = json!({ "kind": "folder", "path": usb, "recovery_key": key });
     let (status, _) = call(
         &app,
         "POST",
@@ -383,7 +386,7 @@ async fn the_wizard_restores_a_backup_and_starts_again() {
     let (_, body) = call_claimed(&app, "GET", "/api/setup", &token, Value::Null).await;
     assert_eq!(body["restore"], json!({ "state": "not_started" }));
 
-    let wrong = json!({ "path": usb, "recovery_key": "abcde fghij klmno pqrst uvwxy zabcd" });
+    let wrong = json!({ "kind": "folder", "path": usb, "recovery_key": "abcde fghij klmno pqrst uvwxy zabcd" });
     let (status, body) = call_claimed(&app, "POST", "/api/setup/restore/find", &token, wrong).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(
@@ -404,7 +407,7 @@ async fn the_wizard_restores_a_backup_and_starts_again() {
         "POST",
         "/api/setup/restore",
         &token,
-        json!({ "path": usb, "recovery_key": key, "snapshot": snapshot }),
+        json!({ "kind": "folder", "path": usb, "recovery_key": key, "snapshot": snapshot }),
     )
     .await;
     assert_eq!(status, StatusCode::ACCEPTED);

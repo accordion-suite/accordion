@@ -7,7 +7,9 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use accordion_core::backup::{self, Backup, BackupStatus, KeyState, Outcome, TargetStatus};
+use accordion_core::backup::{
+    self, Backup, BackupStatus, KeyState, Outcome, Place, S3Bucket, TargetStatus,
+};
 use accordion_core::identity::SignedIn;
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::{BackupTargetId, Role};
@@ -79,9 +81,14 @@ fn api_error(err: backup::Error) -> ApiError {
             tracing::error!(%err, "backup service error");
             return ApiError::server_problem();
         }
-        E::BadName | E::NotAbsolute | E::InsideData | E::NoSuchFolder(_) | E::BadHour => {
-            StatusCode::BAD_REQUEST
-        }
+        E::BadName
+        | E::NotAbsolute
+        | E::InsideData
+        | E::NoSuchFolder(_)
+        | E::BadHour
+        | E::BadEndpoint
+        | E::BadBucket
+        | E::NoKeys => StatusCode::BAD_REQUEST,
         E::KeyMismatch => StatusCode::BAD_REQUEST,
         // Only from restoring, which the setup wizard does.
         E::BadKey
@@ -97,7 +104,9 @@ fn api_error(err: backup::Error) -> ApiError {
         | E::Busy
         | E::WrongKey(_)
         | E::TargetExists => StatusCode::CONFLICT,
-        E::Restic(_) => StatusCode::UNPROCESSABLE_ENTITY,
+        E::Restic(_) | E::KeysRefused(_) | E::NoBucket { .. } | E::Unreachable { .. } => {
+            StatusCode::UNPROCESSABLE_ENTITY
+        }
     };
     ApiError::new(status, err.to_string())
 }
@@ -114,6 +123,7 @@ struct StatusView {
 struct TargetView {
     id: BackupTargetId,
     name: String,
+    /// A folder's path, or which bucket at which provider.
     location: String,
     last_backup: Option<OutcomeView>,
     /// Milliseconds since 1970, for the page to show in local time.
@@ -150,7 +160,10 @@ impl From<&TargetStatus> for TargetView {
         Self {
             id: status.target.id,
             name: status.target.name.clone(),
-            location: status.target.location.clone(),
+            location: match status.target.bucket() {
+                Some((host, bucket)) => format!("Bucket {bucket} at {host}"),
+                None => status.target.location.clone(),
+            },
             last_backup: status.last_backup.as_ref().map(Into::into),
             last_good_backup: status.last_good_backup.map(millis),
             last_check: status.last_check.as_ref().map(Into::into),
@@ -257,14 +270,51 @@ async fn confirm_key(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Where backups go, or where to restore from, as the backups page and the
+/// setup wizard send it.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub(crate) enum PlaceRequest {
+    Folder {
+        /// The full path, such as to a folder on a USB disk.
+        path: String,
+    },
+    S3 {
+        endpoint: String,
+        bucket: String,
+        key_id: String,
+        secret_key: String,
+    },
+}
+
+impl From<PlaceRequest> for Place {
+    fn from(request: PlaceRequest) -> Self {
+        match request {
+            PlaceRequest::Folder { path } => Place::Folder(path.trim().into()),
+            PlaceRequest::S3 {
+                endpoint,
+                bucket,
+                key_id,
+                secret_key,
+            } => Place::S3(S3Bucket {
+                endpoint,
+                bucket,
+                key_id,
+                secret_key,
+            }),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct NewTarget {
     name: String,
-    /// A folder's full path, such as on a USB disk.
-    path: String,
+    #[serde(flatten)]
+    place: PlaceRequest,
 }
 
-/// `POST /api/backups/targets`: adds a folder for backups to go to.
+/// `POST /api/backups/targets`: adds a folder or bucket for backups to go
+/// to.
 async fn add_target(
     State(state): State<AppState>,
     Authenticated(me): Authenticated,
@@ -272,7 +322,7 @@ async fn add_target(
 ) -> Result<StatusCode, ApiError> {
     let backup = service(&state, &me)?;
     let target = backup
-        .add_folder(&request.name, std::path::Path::new(request.path.trim()))
+        .add_target(&request.name, &request.place.into())
         .await
         .map_err(api_error)?;
     tracing::info!(user = %me.user.id, target = %target.id, "added a backup location");

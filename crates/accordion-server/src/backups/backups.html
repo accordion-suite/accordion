@@ -69,9 +69,28 @@
         <label for="target-name">Name</label>
         <p class="hint">So you can tell your backups apart, such as "Blue USB disk".</p>
         <input id="target-name" maxlength="100" required>
-        <label for="target-path">Folder</label>
-        <p class="hint">The full path to a folder on another disk, such as /media/usb/accordion-backups. Accordion creates the last folder if it doesn't exist.</p>
-        <input id="target-path" autocapitalize="none" spellcheck="false" required>
+        <fieldset>
+          <legend>Where</legend>
+          <label class="choice"><input type="radio" name="target-kind" value="folder" checked> <span><strong>A folder on another disk,</strong> such as a USB disk plugged into this server.</span></label>
+          <label class="choice"><input type="radio" name="target-kind" value="s3"> <span><strong>An S3 bucket at a storage provider,</strong> such as Backblaze B2 or Wasabi. Your backups are safe from a fire or theft at home. Accordion locks them with your recovery key before they leave, so the provider can't read them.</span></label>
+        </fieldset>
+        <fieldset id="target-folder">
+          <label for="target-path">Folder</label>
+          <p class="hint">The full path to a folder on another disk, such as /media/usb/accordion-backups. Accordion creates the last folder if it doesn't exist.</p>
+          <input id="target-path" autocapitalize="none" spellcheck="false" required>
+        </fieldset>
+        <fieldset id="target-s3" hidden disabled>
+          <p class="hint">At your storage provider, create a private bucket for Accordion, and a key that can read and write only that bucket. Accordion keeps the key on this server, so backups run on their own.</p>
+          <label for="target-endpoint">S3 address</label>
+          <p class="hint">Your provider shows it with the bucket, such as https://s3.us-west-004.backblazeb2.com.</p>
+          <input id="target-endpoint" inputmode="url" autocapitalize="none" spellcheck="false" required>
+          <label for="target-bucket">Bucket</label>
+          <input id="target-bucket" autocapitalize="none" spellcheck="false" required>
+          <label for="target-key-id">Key ID</label>
+          <input id="target-key-id" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+          <label for="target-secret">Secret key</label>
+          <input id="target-secret" type="password" autocomplete="off" required>
+        </fieldset>
         <button type="submit">Add location</button>
       </form>
       <p class="hint" id="key-again"><button id="show-key-again" type="button" class="secondary">Show recovery key</button></p>

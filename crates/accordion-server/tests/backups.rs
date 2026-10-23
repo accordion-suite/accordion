@@ -203,7 +203,7 @@ async fn an_admin_sets_up_and_runs_backups() {
             "POST",
             "/api/backups/targets",
             &server.owner,
-            Some(json!({ "name": "Blue USB disk", "path": usb })),
+            Some(json!({ "name": "Blue USB disk", "kind": "folder", "path": usb })),
         )
         .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -212,7 +212,7 @@ async fn an_admin_sets_up_and_runs_backups() {
             "POST",
             "/api/backups/targets",
             &server.owner,
-            Some(json!({ "name": "Nowhere", "path": "backups" })),
+            Some(json!({ "name": "Nowhere", "kind": "folder", "path": "backups" })),
         )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -288,4 +288,132 @@ async fn only_admins_at_home_manage_backups() {
         .send("POST", "/api/backups/key", &away.owner, None)
         .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+/// rclone's S3 server, standing in for a storage provider, with one empty
+/// bucket. Set `ACCORDION_RCLONE` to its path, or put it on `PATH`. It stops
+/// when dropped.
+struct Provider {
+    _root: tempfile::TempDir,
+    server: std::process::Child,
+    endpoint: String,
+}
+
+impl Provider {
+    fn start() -> Self {
+        let rclone = std::env::var_os("ACCORDION_RCLONE")
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::split_paths(&std::env::var_os("PATH")?)
+                    .map(|dir| dir.join("rclone"))
+                    .find(|path| path.is_file())
+            })
+            .expect(
+                "These tests run rclone's S3 server. Install rclone 1.75.2, or set \
+                 ACCORDION_RCLONE.",
+            );
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("household-backups")).unwrap();
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let address = format!("127.0.0.1:{port}");
+        let server = std::process::Command::new(rclone)
+            .args([
+                "serve",
+                "s3",
+                "--auth-key",
+                "test-key,test-secret-0123456789",
+            ])
+            .args(["--addr", &address])
+            .arg(root.path())
+            .env("RCLONE_CONFIG", "/dev/null")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        while std::net::TcpStream::connect(&address).is_err() {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "rclone didn't start"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        Self {
+            _root: root,
+            server,
+            endpoint: format!("http://{address}"),
+        }
+    }
+}
+
+impl Drop for Provider {
+    fn drop(&mut self) {
+        let _ = self.server.kill();
+        let _ = self.server.wait();
+    }
+}
+
+#[tokio::test]
+async fn an_admin_backs_up_to_a_bucket() {
+    let provider = Provider::start();
+    let server = start("192.168.1.30").await;
+    let (status, _) = server
+        .send("POST", "/api/backups/key", &server.owner, None)
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let bucket = |secret: &str| {
+        json!({
+            "name": "Backblaze",
+            "kind": "s3",
+            "endpoint": provider.endpoint,
+            "bucket": "household-backups",
+            "key_id": "test-key",
+            "secret_key": secret,
+        })
+    };
+    let (status, body) = server
+        .send(
+            "POST",
+            "/api/backups/targets",
+            &server.owner,
+            Some(bucket("not-the-secret")),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("didn't accept the key ID and secret key"),
+        "{body}"
+    );
+
+    let (status, _) = server
+        .send(
+            "POST",
+            "/api/backups/targets",
+            &server.owner,
+            Some(bucket("test-secret-0123456789")),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _) = server
+        .send("POST", "/api/backups/run", &server.owner, None)
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let body = server.wait_until_idle().await;
+    let target = &body["targets"][0];
+    let host = provider.endpoint.trim_start_matches("http://");
+    assert_eq!(
+        target["location"],
+        format!("Bucket household-backups at {host}")
+    );
+    assert_eq!(target["last_backup"]["ok"], true, "{target}");
+    // The page never gets the secret back.
+    assert!(!body.to_string().contains("test-secret"), "{body}");
 }

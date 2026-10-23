@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
-use accordion_core::backup::{self, Backup};
+use accordion_core::backup::{self, Backup, Place};
 use accordion_core::identity::{self, AuthMethod, Client, NewUser};
 use accordion_gateway::ServerName;
 use accordion_gateway::address::{AddressSource, detect_address};
@@ -45,6 +45,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
+use crate::backups::PlaceRequest;
 use crate::session::SessionResponse;
 use crate::{AppState, device, network, origin};
 
@@ -371,7 +372,7 @@ impl Setup {
     /// server starts again with the restored data.
     fn start_restore(
         self: &Arc<Self>,
-        path: PathBuf,
+        place: Place,
         key: String,
         snapshot: String,
     ) -> Result<(), ApiError> {
@@ -391,12 +392,12 @@ impl Setup {
             }
             state.restore = RestoreProgress::Working { percent: 0 };
         }
-        tracing::info!(location = %path.display(), "restoring a backup");
+        tracing::info!(?place, "restoring a backup");
         let setup = Arc::clone(self);
         tokio::spawn(async move {
             let reporter = Arc::clone(&setup);
             let result = backup
-                .restore(&path, &key, &snapshot, move |done| {
+                .restore(&place, &key, &snapshot, move |done| {
                     // Restic reaches 100% before Accordion checks the
                     // database, so the last percent waits for that.
                     let percent = (done * 100.0).clamp(0.0, 99.0) as u8;
@@ -771,8 +772,8 @@ async fn set_name(
 
 #[derive(Deserialize)]
 struct FindRequest {
-    /// The full path to the backup folder, such as on a USB disk.
-    path: String,
+    #[serde(flatten)]
+    place: PlaceRequest,
     recovery_key: String,
 }
 
@@ -801,8 +802,8 @@ fn restore_error(err: backup::Error) -> ApiError {
     }
 }
 
-/// `POST /api/setup/restore/find`: lists the backups in a folder, once the
-/// recovery key opens them.
+/// `POST /api/setup/restore/find`: lists the backups in a folder or bucket,
+/// once the recovery key opens them.
 async fn find_backups(
     State(setup): State<Arc<Setup>>,
     headers: HeaderMap,
@@ -811,7 +812,7 @@ async fn find_backups(
     setup.check_claim(&headers)?;
     let backup = setup.backup()?;
     let snapshots = backup
-        .find_snapshots(Path::new(request.path.trim()), &request.recovery_key)
+        .find_snapshots(&request.place.into(), &request.recovery_key)
         .await
         .map_err(restore_error)?;
     Ok(Json(FoundBackups {
@@ -830,7 +831,8 @@ async fn find_backups(
 
 #[derive(Deserialize)]
 struct RestoreRequest {
-    path: String,
+    #[serde(flatten)]
+    place: PlaceRequest,
     recovery_key: String,
     snapshot: String,
 }
@@ -842,11 +844,7 @@ async fn restore(
     Json(request): Json<RestoreRequest>,
 ) -> Result<StatusCode, ApiError> {
     setup.check_claim(&headers)?;
-    setup.start_restore(
-        PathBuf::from(request.path.trim()),
-        request.recovery_key,
-        request.snapshot,
-    )?;
+    setup.start_restore(request.place.into(), request.recovery_key, request.snapshot)?;
     Ok(StatusCode::ACCEPTED)
 }
 

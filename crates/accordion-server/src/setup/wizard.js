@@ -198,6 +198,31 @@ $("choose-back").addEventListener("click", () => {
   show("restore");
 });
 
+// Shows the fields for a disk or a bucket. Turning the other set off keeps
+// its empty, required fields from blocking the form.
+for (const radio of document.querySelectorAll("input[name=restore-kind]")) {
+  radio.addEventListener("change", () => {
+    const s3 = radio.value === "s3";
+    $("restore-folder").hidden = $("restore-folder").disabled = s3;
+    $("restore-s3").hidden = $("restore-s3").disabled = !s3;
+  });
+}
+
+// Where the backups are, as the server expects it.
+function restorePlace() {
+  const kind = document.querySelector("input[name=restore-kind]:checked").value;
+  if (kind === "s3") {
+    return {
+      kind,
+      endpoint: $("restore-endpoint").value,
+      bucket: $("restore-bucket").value,
+      key_id: $("restore-key-id").value,
+      secret_key: $("restore-secret").value,
+    };
+  }
+  return { kind, path: $("restore-path").value };
+}
+
 $("restore").addEventListener("submit", async (event) => {
   event.preventDefault();
   showError("");
@@ -205,7 +230,7 @@ $("restore").addEventListener("submit", async (event) => {
   button.disabled = true;
   try {
     const { snapshots } = await api("POST", "/api/setup/restore/find", {
-      path: $("restore-path").value,
+      ...restorePlace(),
       recovery_key: $("restore-key").value,
     });
     showSnapshots(snapshots);
@@ -229,11 +254,12 @@ $("choose").addEventListener("submit", async (event) => {
   button.disabled = true;
   try {
     await api("POST", "/api/setup/restore", {
-      path: $("restore-path").value,
+      ...restorePlace(),
       recovery_key: $("restore-key").value,
       snapshot: chosen.value,
     });
     $("restore-key").value = "";
+    $("restore-secret").value = "";
     await refresh();
   } catch (error) {
     forgetExpired(error);

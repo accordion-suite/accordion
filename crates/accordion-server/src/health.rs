@@ -714,7 +714,7 @@ mod tests {
 
     #[test]
     fn reports_backups() {
-        use accordion_core::backup::{Outcome, Target, TargetStatus};
+        use accordion_core::backup::{Outcome, Target, TargetKind, TargetStatus};
 
         let check = |status: BackupStatus| {
             let health = Health {
@@ -727,6 +727,7 @@ mod tests {
             target: Target {
                 id: accordion_types::BackupTargetId::generate(),
                 name: "Blue USB disk".into(),
+                kind: TargetKind::Folder,
                 location: "/media/usb/backups".into(),
                 created_at: "2026-10-22T00:00:00.000Z".into(),
             },

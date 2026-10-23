@@ -136,6 +136,9 @@ button.secondary {
   border: 1px solid var(--border);
 }
 
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+legend { font-weight: 600; margin: 16px 0 4px; padding: 0; }
+
 /* The setup wizard's restore. */
 .choice { display: flex; gap: 10px; align-items: baseline; font-weight: normal; margin: 10px 0; }
 .choice input { width: auto; }

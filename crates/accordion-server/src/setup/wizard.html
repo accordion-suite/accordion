@@ -31,10 +31,28 @@
 
   <form id="restore" hidden>
     <h2>Restore from a backup</h2>
-    <p>First, connect the disk with your backups to this server, such as a USB disk.</p>
-    <label for="restore-path">Backup folder</label>
-    <p class="hint">The full path to the folder you chose when you set up backups, such as /media/usb/accordion-backups.</p>
-    <input id="restore-path" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+    <fieldset>
+      <legend>Where are your backups?</legend>
+      <label class="choice"><input type="radio" name="restore-kind" value="folder" checked> <span><strong>On a disk,</strong> such as a USB disk. Connect it to this server first.</span></label>
+      <label class="choice"><input type="radio" name="restore-kind" value="s3"> <span><strong>In an S3 bucket</strong> at a storage provider, such as Backblaze B2.</span></label>
+    </fieldset>
+    <fieldset id="restore-folder">
+      <label for="restore-path">Backup folder</label>
+      <p class="hint">The full path to the folder you chose when you set up backups, such as /media/usb/accordion-backups.</p>
+      <input id="restore-path" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+    </fieldset>
+    <fieldset id="restore-s3" hidden disabled>
+      <p class="hint">Your storage provider shows these details. If you don't have the key anymore, create a new one that can read the bucket.</p>
+      <label for="restore-endpoint">S3 address</label>
+      <p class="hint">Such as https://s3.us-west-004.backblazeb2.com.</p>
+      <input id="restore-endpoint" inputmode="url" autocapitalize="none" spellcheck="false" required>
+      <label for="restore-bucket">Bucket</label>
+      <input id="restore-bucket" autocapitalize="none" spellcheck="false" required>
+      <label for="restore-key-id">Key ID</label>
+      <input id="restore-key-id" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+      <label for="restore-secret">Secret key</label>
+      <input id="restore-secret" type="password" autocomplete="off" required>
+    </fieldset>
     <label for="restore-key">Recovery key</label>
     <p class="hint">The 30 letters you wrote down or printed when you turned on backups. Spaces are optional.</p>
     <input id="restore-key" autocomplete="off" autocapitalize="none" spellcheck="false" required>
