@@ -1,14 +1,14 @@
 use std::error::Error;
 use std::future::IntoFuture;
 use std::io::{self, BufRead, IsTerminal, Write};
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
 use accordion_core::backup::{self, Backup};
 use accordion_core::db::Database;
-use accordion_core::identity::{Identity, NewUser};
+use accordion_core::identity::{AppPasswords, Identity, NewUser};
 use accordion_core::storage::Storage;
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
@@ -35,6 +35,8 @@ Usage:
                                                at http://accordion.local.
   accordion setup-code                         Show the setup wizard's code
   accordion create-owner <username> <name>     Create the owner account
+  accordion reset-owner-password               Make a link for the owner to
+                                               choose a new password
   accordion set-name <name> <dns-provider>     Set the server's name and get its
                                                certificate. The DNS provider is
                                                desec or cloudflare. Add --staging
@@ -87,6 +89,7 @@ async fn main() -> ExitCode {
         },
         ["setup-code"] => show_setup_code(),
         ["create-owner", username, display_name] => create_owner(username, display_name).await,
+        ["reset-owner-password"] => reset_owner_password().await,
         ["set-name", name, provider] => set_name(name, provider, Authority::LetsEncrypt).await,
         ["set-name", name, provider, "--staging"] => {
             set_name(name, provider, Authority::LetsEncryptStaging).await
@@ -499,6 +502,73 @@ async fn create_owner(username: &str, display_name: &str) -> Result<(), Box<dyn 
     // The wizard's code isn't needed once there's an owner.
     let _ = std::fs::remove_file(data_dir()?.join(SETUP_CODE_FILE));
     Ok(())
+}
+
+/// Makes a link for the owner to choose a new password, for when they've
+/// forgotten it.
+///
+/// Nobody can reset the owner's password on `/people`, so an admin can't take
+/// over the server. This command needs access to the server itself, which can
+/// already read everything, so it gives no one new power. It prints a link to
+/// `/welcome` rather than asking for the password here, so the password isn't
+/// shown on screen and a password manager can save it.
+async fn reset_owner_password() -> Result<(), Box<dyn Error>> {
+    let data_dir = data_dir()?;
+    let identity = start_identity(&data_dir).await?;
+    let owner = identity
+        .members()
+        .await?
+        .into_iter()
+        .map(|member| member.user)
+        .find(|user| user.role == Role::Owner)
+        .ok_or(
+            "This server doesn't have an owner yet, so there's no password to reset. Start \
+             Accordion and open the setup wizard to create the owner account.",
+        )?;
+    let origin = match Settings::load(&gateway_dir(&data_dir))? {
+        Some(settings) => {
+            setup::https_origin(&settings.name, listen_port("ACCORDION_HTTPS_LISTEN", 443))
+        }
+        None => plain_http_origin(),
+    };
+    // They forgot it, so their devices stay connected. If someone else might
+    // know it, they can delete app passwords once they're signed in.
+    let (token, _) = identity
+        .make_password_link(owner.id, AppPasswords::Keep)
+        .await?;
+    eprintln!(
+        "Your password for {} is reset, and you're signed out everywhere. Devices that use app \
+         passwords stay connected.\n\nTo choose a new password, open this link in a browser. It \
+         works once, in the next 24 hours:\n",
+        owner.username
+    );
+    println!("{origin}/welcome#{}", token.as_str());
+    eprintln!(
+        "\nIf someone else might know the old password, delete your app passwords on your account \
+         page after you sign in."
+    );
+    Ok(())
+}
+
+/// The port in an address setting such as `ACCORDION_HTTPS_LISTEN`.
+fn listen_port(variable: &str, default: u16) -> u16 {
+    std::env::var(variable)
+        .ok()
+        .and_then(|address| address.parse::<SocketAddr>().ok())
+        .map_or(default, |address| address.port())
+}
+
+/// Where a server with no name serves plain HTTP. An address that means
+/// every interface, such as `0.0.0.0`, isn't one a browser can open, so it
+/// becomes `localhost`.
+fn plain_http_origin() -> String {
+    let listen = std::env::var("ACCORDION_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
+    match listen.parse::<SocketAddr>() {
+        Ok(address) if address.ip().is_unspecified() => {
+            format!("http://localhost:{}", address.port())
+        }
+        _ => format!("http://{listen}"),
+    }
 }
 
 /// Sets the server's name and DNS provider, and gets its first certificate.

@@ -38,7 +38,7 @@ async function load() {
     if (status !== 200) throw new Error(data.error || PROBLEM);
     if (data.purpose === "reset") {
       $("title").textContent = "Choose a new password";
-      $("greeting").textContent = `Hi ${data.display_name}. Your admin reset your password, so choose a new one.`;
+      $("greeting").textContent = `Hi ${data.display_name}. Your password was reset, so choose a new one.`;
     } else {
       $("greeting").textContent = `Hi ${data.display_name}. Choose a password to finish setting up your account.`;
     }
