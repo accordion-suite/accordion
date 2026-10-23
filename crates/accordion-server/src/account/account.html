@@ -64,6 +64,23 @@
       <p id="none" class="hint">You don't have any app passwords yet.</p>
       <ul id="passwords" class="passwords"></ul>
     </section>
+
+    <section>
+      <form id="change-password">
+        <h2>Change your password</h2>
+        <p class="hint">Your other browsers and apps are signed out when you change it. Devices that use app passwords keep working.</p>
+        <input id="change-username" autocomplete="username" hidden>
+        <label for="current-password">Current password</label>
+        <input id="current-password" type="password" autocomplete="current-password" required>
+        <label for="new-password">New password</label>
+        <p class="hint">At least 8 characters.</p>
+        <input id="new-password" type="password" autocomplete="new-password" minlength="8" required>
+        <label for="repeat-password">Type the new password again</label>
+        <input id="repeat-password" type="password" autocomplete="new-password" minlength="8" required>
+        <button type="submit">Change password</button>
+        <p id="changed" role="status" hidden>Your password is changed.</p>
+      </form>
+    </section>
   </div>
 
   <p id="error" class="error" role="alert" hidden></p>

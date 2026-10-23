@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/people.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>People</h1>
+
+  <form id="sign-in" hidden>
+    <p>Sign in with an admin account to manage people.</p>
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+
+  <form id="confirm" hidden>
+    <p>For your security, enter your password again before you change someone's account.</p>
+    <label for="confirm-password">Your password</label>
+    <input id="confirm-password" type="password" autocomplete="current-password" required>
+    <button type="submit">Confirm</button>
+    <button id="confirm-cancel" type="button" class="secondary">Cancel</button>
+  </form>
+
+  <form id="reset" hidden>
+    <h2 id="reset-title"></h2>
+    <p>They're signed out everywhere, and can't sign in until they use the link you send them. Why are you resetting it?</p>
+    <label class="choice"><input type="radio" name="reason" value="forgot" checked> <span><strong>They forgot it.</strong> Their devices that use app passwords, such as File Explorer, stay connected.</span></label>
+    <label class="choice"><input type="radio" name="reason" value="exposed"> <span><strong>Someone else might know it.</strong> Accordion also deletes their app passwords, in case someone else made one. Each of their devices then needs a new app password.</span></label>
+    <button type="submit">Reset password</button>
+    <button id="reset-cancel" type="button" class="secondary">Cancel</button>
+  </form>
+
+  <section id="link" hidden>
+    <h2 id="link-title"></h2>
+    <p id="link-help"></p>
+    <p class="secret link"><code id="link-address"></code></p>
+    <p class="hint" id="link-expires"></p>
+    <button id="copy" type="button">Copy link</button>
+    <button id="link-done" type="button" class="secondary">Done</button>
+  </section>
+
+  <div id="manage" hidden>
+    <ul id="people" class="passwords"></ul>
+
+    <section>
+      <form id="add">
+        <h2>Add someone</h2>
+        <p class="hint">Accordion makes a link for them to set their own password. You won't see or choose it.</p>
+        <label for="display-name">Name</label>
+        <p class="hint">How Accordion shows them to others, such as "Sam Lee".</p>
+        <input id="display-name" maxlength="100" required>
+        <label for="new-username">Username</label>
+        <p class="hint">What they sign in with. Lowercase letters and numbers, with single periods, hyphens, or underscores between them.</p>
+        <input id="new-username" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+        <div id="role-field">
+          <label for="role">Role</label>
+          <p class="hint">Admins can add people, check the server's health, and manage backups.</p>
+          <select id="role">
+            <option value="user">Standard account</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <button type="submit">Add person</button>
+      </form>
+    </section>
+  </div>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

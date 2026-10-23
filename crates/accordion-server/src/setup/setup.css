@@ -140,3 +140,6 @@ button.secondary {
 .choice { display: flex; gap: 10px; align-items: baseline; font-weight: normal; margin: 10px 0; }
 .choice input { width: auto; }
 progress { width: 100%; height: 12px; margin-bottom: 8px; accent-color: var(--accent); }
+
+/* The people page's password links. */
+.secret.link code { font-size: 0.95rem; letter-spacing: 0; text-align: left; overflow-wrap: anywhere; }

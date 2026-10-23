@@ -82,6 +82,7 @@ async function load() {
     }
     showError("");
     $("signed-in-as").textContent = session.data.user.username;
+    $("change-username").value = session.data.user.username;
     $("dav-username").textContent = session.data.user.username;
     $("dav-address").textContent = `${location.origin}/dav/drive/`;
     renderPasswords(data);
@@ -184,6 +185,26 @@ $("confirm").addEventListener("submit", (event) =>
     if (!(await create())) {
       throw new Error(PROBLEM);
     }
+  }),
+);
+
+$("change-password").addEventListener("submit", (event) =>
+  withButton(event, async () => {
+    $("changed").hidden = true;
+    if ($("new-password").value !== $("repeat-password").value) {
+      throw new Error("The two new passwords don't match. Type them again.");
+    }
+    const { status, data } = await api("POST", "/api/account/password", {
+      current_password: $("current-password").value,
+      new_password: $("new-password").value,
+    });
+    if (status !== 204) {
+      throw new Error(data.error || PROBLEM);
+    }
+    for (const id of ["current-password", "new-password", "repeat-password"]) {
+      $(id).value = "";
+    }
+    $("changed").hidden = false;
   }),
 );
 

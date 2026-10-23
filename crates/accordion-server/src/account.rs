@@ -1,20 +1,21 @@
 //! `/account`: where people create app passwords, so standard clients such
 //! as File Explorer, Finder, and phone apps can reach Drive (decision 3 in
-//! `docs/decisions`).
+//! `docs/decisions`), and change their password.
 //!
 //! Every user can open it from anywhere, unlike the admin pages. It stands
 //! in until the web app has its own settings pages.
 
-use accordion_core::identity::{AppPassword, AppPasswordUse};
+use accordion_core::identity::{self, AppPassword, AppPasswordUse};
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::AppPasswordId;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{delete, get};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use crate::network::Connection;
 use crate::setup::asset;
 
 pub fn routes() -> Router<AppState> {
@@ -32,6 +33,7 @@ pub fn routes() -> Router<AppState> {
             get(app_passwords).post(create_app_password),
         )
         .route("/api/app-passwords/{id}", delete(delete_app_password))
+        .route("/api/account/password", post(change_password))
 }
 
 const ACCOUNT_HTML: &str = include_str!("account/account.html");
@@ -145,5 +147,46 @@ async fn delete_app_password(
         return Err(ApiError::not_found());
     }
     tracing::info!(user = %me.user.id, app_password = %id, "deleted an app password");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct NewPassword {
+    current_password: String,
+    new_password: String,
+}
+
+/// `POST /api/account/password`: changes the signed-in user's password, and
+/// signs out their other browsers and apps, in case someone else knew the
+/// old one. App passwords keep working.
+async fn change_password(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    connection: Connection,
+    Json(request): Json<NewPassword>,
+) -> Result<StatusCode, ApiError> {
+    match state
+        .identity
+        .check_password(
+            &me.user.username,
+            &request.current_password,
+            connection.sign_in_from(),
+        )
+        .await
+    {
+        Ok(_) => {}
+        Err(identity::Error::WrongCredentials) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "Your current password isn't right. Check it, then try again.",
+            ));
+        }
+        Err(err) => return Err(err.into()),
+    }
+    state
+        .identity
+        .set_password(me.user.id, request.new_password, Some(me.session.id))
+        .await?;
+    tracing::info!(user = %me.user.id, "changed their password");
     Ok(StatusCode::NO_CONTENT)
 }

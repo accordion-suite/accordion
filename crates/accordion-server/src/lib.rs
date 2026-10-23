@@ -9,9 +9,11 @@ mod home;
 pub mod modules;
 pub mod network;
 mod origin;
+mod people;
 mod requests;
 mod session;
 pub mod setup;
+mod welcome;
 
 use std::sync::Arc;
 
@@ -89,10 +91,12 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .route("/api/session/confirm", post(session::confirm))
         .merge(home::routes())
         .merge(account::routes())
+        .merge(welcome::routes())
         .merge(
             setup::owner_routes()
                 .merge(health::routes())
                 .merge(backups::routes())
+                .merge(people::routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,

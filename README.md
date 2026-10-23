@@ -131,6 +131,8 @@ To try the setup wizard instead, start with an empty data folder and skip `creat
 
 Once the server has a name, `https://<name>/health` shows how its certificate, its address record, and `accordion.local` are doing. Open it from a device on your home network, and sign in with the owner account. Admin pages like this one don't open from outside the home network, unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
 
+To add the rest of your household, open `/people` as the owner or an admin. Each new person gets a one-time link, which you send them. They open it at `/welcome` and choose their own password, so you never see it. The same page makes reset links for forgotten passwords, turns accounts off and on, and lets the owner make someone an admin. Admins manage standard accounts, and only the owner manages admins. Everyone can change their own password at `/account`.
+
 To try backups, install [restic](https://restic.net) 0.19.1, the program that makes them, and set `ACCORDION_RESTIC` to its full path if it isn't on your `PATH`. Then open `/backups` as the owner: turn backups on, save the recovery key, and add a folder on another disk as the place backups go. Backups run every night at 3 a.m., and **Back up now** runs one right away. The health page warns when the last backup that worked is more than 48 hours old.
 
 To try restoring, start a server with an empty data folder, open the setup wizard, and select **Restore from a backup**. Enter the backup folder and the recovery key, then choose a backup. Accordion restores everything, including the owner account and the server's name if it had one, then starts again with the restored data. Sign in with the account you used before.

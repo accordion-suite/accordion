@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to Accordion</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/welcome.js" defer></script>
+</head>
+<body>
+<main>
+  <h1 id="title">Welcome to Accordion</h1>
+
+  <form id="choose" hidden>
+    <p id="greeting"></p>
+    <p>Your username is <strong id="welcome-username"></strong>. You'll sign in with it and the password you choose here.</p>
+    <input id="username" autocomplete="username" hidden>
+    <label for="new-password">Password</label>
+    <p class="hint">At least 8 characters. A few words in a row that only you would put together make a strong password you can remember.</p>
+    <input id="new-password" type="password" autocomplete="new-password" minlength="8" required>
+    <label for="repeat-password">Type it again</label>
+    <input id="repeat-password" type="password" autocomplete="new-password" minlength="8" required>
+    <button type="submit">Set password</button>
+  </form>
+
+  <section id="done" hidden>
+    <p>Your password is set, and you're signed in on this browser.</p>
+    <p>To open your Drive files in File Explorer on Windows, Finder on a Mac, or a phone app, create an app password on your <a href="/account">account page</a>.</p>
+  </section>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>
