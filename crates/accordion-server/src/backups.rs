@@ -382,14 +382,6 @@ async fn remove_target(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Refuses to start a second run while one is going.
-fn check_idle(backup: &Backup) -> Result<(), ApiError> {
-    if backup.status().borrow().running {
-        return Err(api_error(backup::Error::Busy));
-    }
-    Ok(())
-}
-
 /// `POST /api/backups/run`: starts a backup to every location now. It runs
 /// in the background, and `GET /api/backups` shows when it's done.
 async fn run_now(
@@ -397,16 +389,13 @@ async fn run_now(
     Authenticated(me): Authenticated,
 ) -> Result<StatusCode, ApiError> {
     let backup = service(&state, &me)?;
-    check_idle(&backup)?;
     if backup.status().borrow().targets.is_empty() {
         return Err(api_error(backup::Error::NoTargets));
     }
+    // It shows as running before this answers, so the page that's waiting
+    // for it doesn't see it idle and stop.
+    backup.start_back_up().map_err(api_error)?;
     tracing::info!(user = %me.user.id, "started a backup");
-    tokio::spawn(async move {
-        if let Err(err) = backup.back_up().await {
-            tracing::warn!(%err, "a backup started by hand failed");
-        }
-    });
     Ok(StatusCode::ACCEPTED)
 }
 
@@ -418,7 +407,6 @@ async fn test_restore(
     Path(id): Path<BackupTargetId>,
 ) -> Result<StatusCode, ApiError> {
     let backup = service(&state, &me)?;
-    check_idle(&backup)?;
     let target = backup
         .status()
         .borrow()
@@ -427,12 +415,8 @@ async fn test_restore(
         .find(|status| status.target.id == id)
         .map(|status| status.target.clone())
         .ok_or_else(ApiError::not_found)?;
+    backup.start_test_restore(target).map_err(api_error)?;
     tracing::info!(user = %me.user.id, target = %id, "started a restore test");
-    tokio::spawn(async move {
-        if let Err(err) = backup.test_restore(&target).await {
-            tracing::warn!(%err, "a restore test started by hand failed to run");
-        }
-    });
     Ok(StatusCode::ACCEPTED)
 }
 
