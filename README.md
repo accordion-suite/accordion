@@ -117,7 +117,7 @@ Please open issues here, whichever module they're about.
 
 ## Building from source
 
-There's nothing to install yet, but you can build the server and try signing in. You need [Rust](https://rustup.rs) and bash (on Windows, use WSL).
+There's nothing to install yet, but you can build the server and try it. You need [Rust](https://rustup.rs) and bash (on Windows, use WSL).
 
 ```sh
 scripts/clone-workspace.sh                         # Clone the other Accordion repos next to this one
@@ -125,23 +125,40 @@ cargo run -- create-owner <username> "<Your name>"  # Create the owner account (
 cargo run                                          # Start the server on http://127.0.0.1:8080
 ```
 
-To try HTTPS, you need a name under a domain whose DNS is hosted at deSEC or Cloudflare, and an API token that can change the name's A record and its `_acme-challenge` TXT record. Run `cargo run -- set-name <name> <desec|cloudflare> --staging`. It asks for the token and gets a test certificate from Let's Encrypt, which browsers don't trust. From then on, the server serves `https://<name>` on port 443 and redirects port 80 there. To use higher ports, set `ACCORDION_HTTPS_LISTEN` and `ACCORDION_HTTP_LISTEN`. `cargo run -- --help` lists every setting. The server points the name at its own address on your network, and updates the record if the address changes. In a container, or to use a different address, set `ACCORDION_ADDRESS`.
+`cargo run -- --help` lists every command and setting. To run the server as a system service, see [packaging](packaging/README.md).
 
-To try the setup wizard instead, start with an empty data folder and skip `create-owner`. Set `ACCORDION_CERTIFICATE_AUTHORITY=lets-encrypt-staging`, then run `cargo run`. The log shows the wizard's address and setup code. Other devices on your network can also open it at `http://accordion.local`, which the server announces with multicast DNS. The wizard asks for the name and token, gets the certificate, and then opens `https://<name>/setup`, where you create the owner account.
+### Trying each part
 
-Once the server has a name, `https://<name>/health` shows how its certificate, its address record, and `accordion.local` are doing. Open it from a device on your home network, and sign in with the owner account. Admin pages like this one don't open from outside the home network, unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
+**HTTPS.** You need a name under a domain whose DNS is at deSEC or Cloudflare, and an API token that can change the name's A record and its `_acme-challenge` TXT record. Run `cargo run -- set-name <name> <desec|cloudflare> --staging`, which asks for the token and gets a test certificate from Let's Encrypt that browsers don't trust. The server then serves `https://<name>` on port 443, redirects port 80 there, and keeps the name pointed at its address on your network.
 
-To add the rest of your household, open `/people` as the owner or an admin. Each new person gets a one-time link, which you send them. They open it at `/welcome` and choose their own password, so you never see it. The same page makes reset links for forgotten passwords, turns accounts off and on, and lets the owner make someone an admin. Admins manage standard accounts, and only the owner manages admins. Everyone can change their own password at `/account`. Nobody can reset the owner's password on `/people`, so if the owner forgets it, run `cargo run -- reset-owner-password` on the server. It prints a link for choosing a new one.
+- For other ports, set `ACCORDION_HTTPS_LISTEN` and `ACCORDION_HTTP_LISTEN`.
+- For a different address, such as in a container, set `ACCORDION_ADDRESS`.
 
-To try backups, install [restic](https://restic.net) 0.19.1, the program that makes them, and set `ACCORDION_RESTIC` to its full path if it isn't on your `PATH`. Then open `/backups` as the owner: turn backups on, save the recovery key, and add a place for backups to go. That's a folder on another disk, an S3 bucket at a storage provider such as Backblaze B2, or a folder on another computer over SFTP, such as a NAS. A bucket or another computer keeps a copy away from the server. For a bucket, enter the provider's S3 address, the bucket's name, and a key that can read and write it. Make the bucket private, and give the key access to that bucket only. At Backblaze, also set the bucket's lifecycle to **Keep only the last version**. Otherwise, Backblaze keeps everything restic deletes in its weekly cleanup as old versions, which still take up space you pay for. For another computer, the backups page shows Accordion's SSH key. Add it to `~/.ssh/authorized_keys` for the user Accordion signs in as, then enter the computer's name, that username, and a folder. Accordion remembers how the computer identifies itself, and stops backing up to it if that changes. Backups run every night at 3 a.m., and **Back up now** runs one right away. The health page warns when the last backup that worked is more than 48 hours old.
+**The setup wizard.** Skip `create-owner`, and start with an empty data folder and `ACCORDION_CERTIFICATE_AUTHORITY=lets-encrypt-staging`. The log shows the wizard's address and setup code. Other devices on your network can also open it at `http://accordion.local`. The wizard gets the name and certificate, then moves to `https://<name>/setup` to create the owner account.
 
-To try restoring, start a server with an empty data folder, open the setup wizard, and select **Restore from a backup**. Enter where the backups are and the recovery key, then choose a backup. To restore from another computer over SFTP, first add the key the wizard shows, because the old server's key is inside the backup. Accordion restores everything, including the owner account, the server's name if it had one, and where backups go, then starts again with the restored data. Sign in with the account you used before.
+**The health page.** `https://<name>/health` shows how the certificate, the address record, `accordion.local`, and backups are doing. Like every admin page, it opens only from your home network unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
 
-Drive is the first module. To open your Drive files in File Explorer, Finder, or another WebDAV client, sign in at `/account` and create an app password. Then connect the client to `/dav/drive/` with your username and that app password. Your account password doesn't work there. File Explorer on Windows only connects over HTTPS, so try it with a server that has a name. Over plain HTTP, you can list your files with `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
+**Your household.** At `/people`, the owner or an admin adds people, makes reset links, and turns accounts off and on. Each new person gets a one-time link to `/welcome`, where they choose their own password. Everyone can change theirs at `/account`. If the owner forgets theirs, `cargo run -- reset-owner-password` prints a link for choosing a new one.
 
-To run the server as a system service, see [packaging](packaging/README.md).
+**Backups.** Install [restic](https://restic.net) 0.19.1, and set `ACCORDION_RESTIC` to its full path if it isn't on your `PATH`. At `/backups`, turn backups on, save the recovery key, and add a place for backups to go:
 
-`clone-workspace.sh` also makes local builds use your checkouts of the other repos. Before you commit `Cargo.lock`, push those repos and run `scripts/pin-versions.sh`, so it pins the versions on GitHub. Don't build between pinning and committing, because a build removes the pins again. A pre-commit hook refuses a `Cargo.lock` without them.
+- **A folder on another disk.**
+- **An S3 bucket,** such as at Backblaze B2. Make the bucket private, and give the key access to that bucket only. At Backblaze, set the bucket's lifecycle to **Keep only the last version**, or the data restic deletes keeps taking up space you pay for.
+- **A folder on another computer over SFTP,** such as a NAS. Add the SSH key the page shows to `~/.ssh/authorized_keys` for the user Accordion signs in as.
+
+Backups run every night at 3 a.m., and **Back up now** runs one right away.
+
+**Restoring.** Start with an empty data folder, and select **Restore from a backup** in the setup wizard. For a backup on another computer, first add the new SSH key the wizard shows. Accordion restores everything, including accounts and the server's name, then starts again. Sign in with the account you used before.
+
+**Drive over WebDAV.** Create an app password at `/account`, then connect File Explorer, Finder, or another WebDAV client to `/dav/drive/` with your username and that app password. File Explorer needs HTTPS, so use a server with a name. Over plain HTTP, try `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
+
+### Working across repos
+
+`clone-workspace.sh` makes local builds use your checkouts of the other repos. To commit `Cargo.lock`:
+
+1. Push the other repos.
+2. Run `scripts/pin-versions.sh`, which pins the versions on GitHub.
+3. Commit without building first. A build removes the pins, and a pre-commit hook refuses a `Cargo.lock` without them.
 
 ## Contributing
 
