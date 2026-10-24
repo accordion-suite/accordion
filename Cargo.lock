@@ -5,13 +5,14 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#abf67f9fd73391cc472d937d0668d05dd03fbd1e"
+source = "git+https://github.com/accordion-suite/accordion-core#7159e0ae5790a1b8ed656b538fa94ff6afbb38d6"
 dependencies = [
  "accordion-types",
  "argon2",
  "base64ct",
  "getrandom 0.4.3",
  "jiff",
+ "libc",
  "rusqlite",
  "serde_json",
  "sha2",
@@ -67,7 +68,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#abf67f9fd73391cc472d937d0668d05dd03fbd1e"
+source = "git+https://github.com/accordion-suite/accordion-core#7159e0ae5790a1b8ed656b538fa94ff6afbb38d6"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -103,7 +104,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#abf67f9fd73391cc472d937d0668d05dd03fbd1e"
+source = "git+https://github.com/accordion-suite/accordion-core#7159e0ae5790a1b8ed656b538fa94ff6afbb38d6"
 dependencies = [
  "serde",
  "uuid",
