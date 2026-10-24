@@ -7,7 +7,7 @@ Files for installing Accordion on a Linux machine as a system service. The .deb 
 | `systemd/accordion.service` | `/etc/systemd/system/accordion.service` | Starts Accordion when the machine starts, and restarts it if it stops unexpectedly |
 | `systemd/accordion.sysusers` | `/etc/sysusers.d/accordion.conf` | Creates the `accordion` user that Accordion runs as |
 
-Accordion also needs [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)). The service expects it at `/usr/lib/accordion/restic`, apart from any restic your distribution installs, so Accordion always runs the version it was tested with.
+Accordion also needs [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)). The service expects it at `/usr/lib/accordion/restic`, apart from any restic your distribution installs, so Accordion always runs the version it was tested with. Backups to another computer over SFTP also need OpenSSH's client, the `ssh` and `ssh-keygen` programs, which most systems already have. On Debian and Ubuntu, it's the `openssh-client` package.
 
 ## What the service does
 

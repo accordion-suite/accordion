@@ -386,6 +386,34 @@ async fn the_wizard_restores_a_backup_and_starts_again() {
     let (_, body) = call_claimed(&app, "GET", "/api/setup", &token, Value::Null).await;
     assert_eq!(body["restore"], json!({ "state": "not_started" }));
 
+    // The key to add before restoring over SFTP, only for whoever claimed
+    // the wizard.
+    let (status, _) = call(
+        &app,
+        "GET",
+        "accordion.local",
+        "/api/setup/restore/ssh-key",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, body) = call_claimed(
+        &app,
+        "GET",
+        "/api/setup/restore/ssh-key",
+        &token,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        body["public_key"]
+            .as_str()
+            .unwrap()
+            .starts_with("ssh-ed25519 "),
+        "{body}"
+    );
+
     let wrong = json!({ "kind": "folder", "path": usb, "recovery_key": "abcde fghij klmno pqrst uvwxy zabcd" });
     let (status, body) = call_claimed(&app, "POST", "/api/setup/restore/find", &token, wrong).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);

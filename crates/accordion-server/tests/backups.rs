@@ -417,3 +417,113 @@ async fn an_admin_backs_up_to_a_bucket() {
     // The page never gets the secret back.
     assert!(!body.to_string().contains("test-secret"), "{body}");
 }
+
+#[tokio::test]
+async fn an_admin_backs_up_to_another_computer_over_sftp() {
+    let server = start("192.168.1.30").await;
+    let (status, _) = server
+        .send("POST", "/api/backups/key", &server.owner, None)
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, body) = server
+        .send("GET", "/api/backups/ssh-key", &server.owner, None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let public = body["public_key"].as_str().unwrap().to_owned();
+    let (status, _) = server
+        .send("GET", "/api/backups/ssh-key", &server.user, None)
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // rclone's SFTP server, which lets in only a key that isn't Accordion's
+    // until the owner adds it.
+    let root = tempfile::tempdir().unwrap();
+    let host_key = root.path().join("host");
+    let status = std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+        .arg(&host_key)
+        .status()
+        .expect("These tests run ssh-keygen. Install OpenSSH's client.");
+    assert!(status.success());
+    let authorized = root.path().join("authorized_keys");
+    std::fs::write(
+        &authorized,
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOpxJSehVegSset/luntvtC4D8ejfU/a2K5lLh1qACf6\n",
+    )
+    .unwrap();
+    std::fs::create_dir(root.path().join("files")).unwrap();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let address = format!("127.0.0.1:{port}");
+    let rclone = std::env::var_os("ACCORDION_RCLONE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "rclone".into());
+    let serve = || {
+        let server = std::process::Command::new(&rclone)
+            .args(["serve", "sftp", "--addr", &address, "--key"])
+            .arg(&host_key)
+            .arg("--authorized-keys")
+            .arg(&authorized)
+            .arg(root.path().join("files"))
+            .env("RCLONE_CONFIG", "/dev/null")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        while std::net::TcpStream::connect(&address).is_err() {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "rclone didn't start"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        server
+    };
+    let mut sftp = serve();
+    let folder = json!({
+        "name": "NAS",
+        "kind": "sftp",
+        "server": address,
+        "username": "accordion",
+        "folder": "backups/accordion",
+    });
+    let (status, body) = server
+        .send(
+            "POST",
+            "/api/backups/targets",
+            &server.owner,
+            Some(folder.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("didn't accept Accordion's SSH key"),
+        "{body}"
+    );
+
+    sftp.kill().unwrap();
+    sftp.wait().unwrap();
+    std::fs::write(&authorized, format!("{public}\n")).unwrap();
+    let mut sftp = serve();
+    let (status, body) = server
+        .send("POST", "/api/backups/targets", &server.owner, Some(folder))
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let (status, _) = server
+        .send("POST", "/api/backups/run", &server.owner, None)
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let body = server.wait_until_idle().await;
+    let target = &body["targets"][0];
+    assert_eq!(target["location"], "Folder backups/accordion on 127.0.0.1");
+    assert_eq!(target["last_backup"]["ok"], true, "{target}");
+    sftp.kill().unwrap();
+    sftp.wait().unwrap();
+}

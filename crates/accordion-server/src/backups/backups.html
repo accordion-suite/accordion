@@ -73,6 +73,7 @@
           <legend>Where</legend>
           <label class="choice"><input type="radio" name="target-kind" value="folder" checked> <span><strong>A folder on another disk,</strong> such as a USB disk plugged into this server.</span></label>
           <label class="choice"><input type="radio" name="target-kind" value="s3"> <span><strong>An S3 bucket at a storage provider,</strong> such as Backblaze B2 or Wasabi. Your backups are safe from a fire or theft at home. Accordion locks them with your recovery key before they leave, so the provider can't read them.</span></label>
+          <label class="choice"><input type="radio" name="target-kind" value="sftp"> <span><strong>A folder on another computer,</strong> such as a NAS, or a computer at a relative's house. Accordion reaches it over SFTP, which the computer needs to have turned on.</span></label>
         </fieldset>
         <fieldset id="target-folder">
           <label for="target-path">Folder</label>
@@ -94,6 +95,20 @@
           <label for="target-secret">Secret key</label>
           <p class="hint">Backblaze calls it the applicationKey. Amazon and most other providers call it the secret access key.</p>
           <input id="target-secret" type="password" autocomplete="off" required>
+        </fieldset>
+        <fieldset id="target-sftp" hidden disabled>
+          <p class="hint">Accordion signs in to the other computer with its own key. On that computer, add this key as a line in ~/.ssh/authorized_keys for the user Accordion signs in as. The first time Accordion connects, it remembers how the computer identifies itself, and stops backing up if that ever changes.</p>
+          <p class="secret link"><code id="target-ssh-key"></code></p>
+          <button id="target-copy-key" type="button" class="secondary">Copy key</button>
+          <label for="target-server">Computer</label>
+          <p class="hint">Its name or address, such as nas.local or 192.168.1.50. Add :port at the end if SSH doesn't use port 22.</p>
+          <input id="target-server" autocapitalize="none" spellcheck="false" required>
+          <label for="target-username">Username</label>
+          <p class="hint">The user on that computer that Accordion signs in as.</p>
+          <input id="target-username" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+          <label for="target-remote-folder">Folder</label>
+          <p class="hint">A full path, such as /volume1/backups/accordion, or a folder inside the user's home folder, such as backups/accordion.</p>
+          <input id="target-remote-folder" autocapitalize="none" spellcheck="false" required>
         </fieldset>
         <button type="submit">Add location</button>
       </form>

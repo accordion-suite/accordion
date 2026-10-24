@@ -45,7 +45,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
-use crate::backups::PlaceRequest;
+use crate::backups::{PlaceRequest, SshKeyView};
 use crate::session::SessionResponse;
 use crate::{AppState, device, network, origin};
 
@@ -625,6 +625,7 @@ pub fn wizard_router(setup: Arc<Setup>) -> Router {
         .route("/api/setup/claim", post(claim))
         .route("/api/setup/name", post(set_name))
         .route("/api/setup/restore/find", post(find_backups))
+        .route("/api/setup/restore/ssh-key", get(restore_ssh_key))
         .route("/api/setup/restore", post(restore))
         .fallback(after_naming)
         .layer(from_fn_with_state(None, origin::reject_cross_origin))
@@ -800,6 +801,22 @@ fn restore_error(err: backup::Error) -> ApiError {
         E::Busy => ApiError::new(StatusCode::CONFLICT, err.to_string()),
         err => ApiError::new(StatusCode::BAD_REQUEST, err.to_string()),
     }
+}
+
+/// `GET /api/setup/restore/ssh-key`: this server's SSH public key, for the
+/// owner to add to the computer that holds backups before restoring over
+/// SFTP. The old server's key is inside the backup, so it can't be used yet.
+async fn restore_ssh_key(
+    State(setup): State<Arc<Setup>>,
+    headers: HeaderMap,
+) -> Result<Json<SshKeyView>, ApiError> {
+    setup.check_claim(&headers)?;
+    let public_key = setup
+        .backup()?
+        .ssh_public_key()
+        .await
+        .map_err(restore_error)?;
+    Ok(Json(SshKeyView { public_key }))
 }
 
 /// `POST /api/setup/restore/find`: lists the backups in a folder or bucket,

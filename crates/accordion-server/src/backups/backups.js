@@ -236,34 +236,75 @@ onSubmit("key-confirm", async () => {
   await load();
 });
 
-// Shows the fields for a folder or a bucket. Turning the other set off
-// keeps its empty, required fields from blocking the form.
+// Shows the fields for the chosen kind of location. Turning the others off
+// keeps their empty, required fields from blocking the form.
 for (const radio of document.querySelectorAll("input[name=target-kind]")) {
-  radio.addEventListener("change", () => {
-    const s3 = radio.value === "s3";
-    $("target-folder").hidden = $("target-folder").disabled = s3;
-    $("target-s3").hidden = $("target-s3").disabled = !s3;
+  radio.addEventListener("change", async () => {
+    for (const kind of ["folder", "s3", "sftp"]) {
+      const fields = $(`target-${kind}`);
+      fields.hidden = fields.disabled = kind !== radio.value;
+    }
+    if (radio.value === "sftp" && !$("target-ssh-key").textContent) {
+      showError("");
+      try {
+        const { status: code, data } = await api("GET", "/api/backups/ssh-key");
+        if (code !== 200) throw new Error(data.error || PROBLEM);
+        $("target-ssh-key").textContent = data.public_key;
+      } catch (error) {
+        showError(error.message);
+      }
+    }
   });
 }
 
+$("target-copy-key").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("target-ssh-key").textContent);
+    $("target-copy-key").textContent = "Copied";
+  } catch {
+    // Clipboard access needs HTTPS. Select the key so it's one copy away.
+    const range = document.createRange();
+    range.selectNodeContents($("target-ssh-key"));
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    showError("Accordion couldn't copy the key, so it's selected for you to copy.");
+  }
+});
+
 onSubmit("add-target", async () => {
   const kind = document.querySelector("input[name=target-kind]:checked").value;
-  const place =
-    kind === "s3"
-      ? {
-          kind,
-          endpoint: $("target-endpoint").value,
-          bucket: $("target-bucket").value,
-          key_id: $("target-key-id").value,
-          secret_key: $("target-secret").value,
-        }
-      : { kind, path: $("target-path").value };
+  const place = {
+    folder: { kind, path: $("target-path").value },
+    s3: {
+      kind,
+      endpoint: $("target-endpoint").value,
+      bucket: $("target-bucket").value,
+      key_id: $("target-key-id").value,
+      secret_key: $("target-secret").value,
+    },
+    sftp: {
+      kind,
+      server: $("target-server").value,
+      username: $("target-username").value,
+      folder: $("target-remote-folder").value,
+    },
+  }[kind];
   const { status: code, data } = await api("POST", "/api/backups/targets", {
     name: $("target-name").value,
     ...place,
   });
   if (code !== 201) throw new Error(data.error || PROBLEM);
-  for (const id of ["target-name", "target-path", "target-endpoint", "target-bucket", "target-key-id", "target-secret"]) {
+  for (const id of [
+    "target-name",
+    "target-path",
+    "target-endpoint",
+    "target-bucket",
+    "target-key-id",
+    "target-secret",
+    "target-server",
+    "target-username",
+    "target-remote-folder",
+  ]) {
     $(id).value = "";
   }
   await load();

@@ -198,29 +198,61 @@ $("choose-back").addEventListener("click", () => {
   show("restore");
 });
 
-// Shows the fields for a disk or a bucket. Turning the other set off keeps
-// its empty, required fields from blocking the form.
+// Shows the fields for where the backups are. Turning the others off keeps
+// their empty, required fields from blocking the form.
 for (const radio of document.querySelectorAll("input[name=restore-kind]")) {
-  radio.addEventListener("change", () => {
-    const s3 = radio.value === "s3";
-    $("restore-folder").hidden = $("restore-folder").disabled = s3;
-    $("restore-s3").hidden = $("restore-s3").disabled = !s3;
+  radio.addEventListener("change", async () => {
+    for (const kind of ["folder", "s3", "sftp"]) {
+      const fields = $(`restore-${kind}`);
+      fields.hidden = fields.disabled = kind !== radio.value;
+    }
+    if (radio.value === "sftp" && !$("restore-ssh-key").textContent) {
+      showError("");
+      try {
+        const { public_key } = await api("GET", "/api/setup/restore/ssh-key");
+        $("restore-ssh-key").textContent = public_key;
+      } catch (error) {
+        forgetExpired(error);
+        showError(error.message);
+      }
+    }
   });
 }
+
+$("restore-copy-key").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("restore-ssh-key").textContent);
+    $("restore-copy-key").textContent = "Copied";
+  } catch {
+    // Clipboard access needs HTTPS, which the wizard doesn't have yet.
+    // Select the key so it's one copy away.
+    const range = document.createRange();
+    range.selectNodeContents($("restore-ssh-key"));
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    showError("Accordion couldn't copy the key, so it's selected for you to copy.");
+  }
+});
 
 // Where the backups are, as the server expects it.
 function restorePlace() {
   const kind = document.querySelector("input[name=restore-kind]:checked").value;
-  if (kind === "s3") {
-    return {
+  return {
+    folder: { kind, path: $("restore-path").value },
+    s3: {
       kind,
       endpoint: $("restore-endpoint").value,
       bucket: $("restore-bucket").value,
       key_id: $("restore-key-id").value,
       secret_key: $("restore-secret").value,
-    };
-  }
-  return { kind, path: $("restore-path").value };
+    },
+    sftp: {
+      kind,
+      server: $("restore-server").value,
+      username: $("restore-username").value,
+      folder: $("restore-remote-folder").value,
+    },
+  }[kind];
 }
 
 $("restore").addEventListener("submit", async (event) => {

@@ -8,7 +8,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use accordion_core::backup::{
-    self, Backup, BackupStatus, KeyState, Outcome, Place, S3Bucket, TargetStatus,
+    self, Backup, BackupStatus, KeyState, Outcome, Place, S3Bucket, SftpFolder, TargetStatus,
 };
 use accordion_core::identity::SignedIn;
 use accordion_module::{ApiError, Authenticated};
@@ -36,6 +36,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/backups", get(status))
         .route("/api/backups/key", get(show_key).post(create_key))
         .route("/api/backups/key/confirm", post(confirm_key))
+        .route("/api/backups/ssh-key", get(ssh_key))
         .route("/api/backups/targets", post(add_target))
         .route("/api/backups/targets/{id}", delete(remove_target))
         .route("/api/backups/targets/{id}/test", post(test_restore))
@@ -88,7 +89,10 @@ fn api_error(err: backup::Error) -> ApiError {
         | E::BadHour
         | E::BadEndpoint
         | E::BadBucket
-        | E::NoKeys => StatusCode::BAD_REQUEST,
+        | E::NoKeys
+        | E::BadServer
+        | E::BadUsername
+        | E::BadRemoteFolder => StatusCode::BAD_REQUEST,
         E::KeyMismatch => StatusCode::BAD_REQUEST,
         // Only from restoring, which the setup wizard does.
         E::BadKey
@@ -104,9 +108,13 @@ fn api_error(err: backup::Error) -> ApiError {
         | E::Busy
         | E::WrongKey(_)
         | E::TargetExists => StatusCode::CONFLICT,
-        E::Restic(_) | E::KeysRefused(_) | E::NoBucket { .. } | E::Unreachable { .. } => {
-            StatusCode::UNPROCESSABLE_ENTITY
-        }
+        E::Restic(_)
+        | E::KeysRefused(_)
+        | E::NoBucket { .. }
+        | E::Unreachable { .. }
+        | E::NoSsh
+        | E::SshKeyRefused { .. }
+        | E::HostKeyChanged(_) => StatusCode::UNPROCESSABLE_ENTITY,
     };
     ApiError::new(status, err.to_string())
 }
@@ -160,9 +168,10 @@ impl From<&TargetStatus> for TargetView {
         Self {
             id: status.target.id,
             name: status.target.name.clone(),
-            location: match status.target.bucket() {
-                Some((host, bucket)) => format!("Bucket {bucket} at {host}"),
-                None => status.target.location.clone(),
+            location: match (status.target.bucket(), status.target.sftp()) {
+                (Some((host, bucket)), _) => format!("Bucket {bucket} at {host}"),
+                (_, Some((_, host, folder))) => format!("Folder {folder} on {host}"),
+                _ => status.target.location.clone(),
             },
             last_backup: status.last_backup.as_ref().map(Into::into),
             last_good_backup: status.last_good_backup.map(millis),
@@ -285,6 +294,11 @@ pub(crate) enum PlaceRequest {
         key_id: String,
         secret_key: String,
     },
+    Sftp {
+        server: String,
+        username: String,
+        folder: String,
+    },
 }
 
 impl From<PlaceRequest> for Place {
@@ -302,8 +316,34 @@ impl From<PlaceRequest> for Place {
                 key_id,
                 secret_key,
             }),
+            PlaceRequest::Sftp {
+                server,
+                username,
+                folder,
+            } => Place::Sftp(SftpFolder {
+                server,
+                username,
+                folder,
+            }),
         }
     }
+}
+
+#[derive(Serialize)]
+pub(crate) struct SshKeyView {
+    /// For `~/.ssh/authorized_keys` on the other computer.
+    pub public_key: String,
+}
+
+/// `GET /api/backups/ssh-key`: the public half of the key Accordion signs in
+/// to SFTP servers with. It's created the first time it's asked for.
+async fn ssh_key(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+) -> Result<Json<SshKeyView>, ApiError> {
+    let backup = service(&state, &me)?;
+    let public_key = backup.ssh_public_key().await.map_err(api_error)?;
+    Ok(Json(SshKeyView { public_key }))
 }
 
 #[derive(Deserialize)]
@@ -313,8 +353,8 @@ struct NewTarget {
     place: PlaceRequest,
 }
 
-/// `POST /api/backups/targets`: adds a folder or bucket for backups to go
-/// to.
+/// `POST /api/backups/targets`: adds a folder, bucket, or folder over SFTP
+/// for backups to go to.
 async fn add_target(
     State(state): State<AppState>,
     Authenticated(me): Authenticated,
