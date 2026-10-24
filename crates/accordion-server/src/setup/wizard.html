@@ -44,13 +44,16 @@
     <fieldset id="restore-s3" hidden disabled>
       <p class="hint">Your storage provider shows these details. If you don't have the key anymore, create a new one that can read the bucket.</p>
       <label for="restore-endpoint">S3 address</label>
-      <p class="hint">Such as https://s3.us-west-004.backblazeb2.com.</p>
+      <p class="hint">Your provider shows it with the bucket. Backblaze calls it the endpoint, such as s3.us-west-004.backblazeb2.com.</p>
       <input id="restore-endpoint" inputmode="url" autocapitalize="none" spellcheck="false" required>
       <label for="restore-bucket">Bucket</label>
+      <p class="hint">The name you gave the bucket.</p>
       <input id="restore-bucket" autocapitalize="none" spellcheck="false" required>
       <label for="restore-key-id">Key ID</label>
+      <p class="hint">Backblaze calls it the keyID. Amazon and most other providers call it the access key ID.</p>
       <input id="restore-key-id" autocomplete="off" autocapitalize="none" spellcheck="false" required>
       <label for="restore-secret">Secret key</label>
+      <p class="hint">Backblaze calls it the applicationKey. Amazon and most other providers call it the secret access key.</p>
       <input id="restore-secret" type="password" autocomplete="off" required>
     </fieldset>
     <label for="restore-key">Recovery key</label>

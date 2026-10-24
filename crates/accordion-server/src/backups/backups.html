@@ -81,14 +81,18 @@
         </fieldset>
         <fieldset id="target-s3" hidden disabled>
           <p class="hint">At your storage provider, create a private bucket for Accordion, and a key that can read and write only that bucket. Accordion keeps the key on this server, so backups run on their own.</p>
+          <p class="hint">Some providers, such as Backblaze, keep old versions of deleted files by default. Set the bucket to keep only the last version, so the space old backups used is freed.</p>
           <label for="target-endpoint">S3 address</label>
-          <p class="hint">Your provider shows it with the bucket, such as https://s3.us-west-004.backblazeb2.com.</p>
+          <p class="hint">Your provider shows it with the bucket. Backblaze calls it the endpoint, such as s3.us-west-004.backblazeb2.com.</p>
           <input id="target-endpoint" inputmode="url" autocapitalize="none" spellcheck="false" required>
           <label for="target-bucket">Bucket</label>
+          <p class="hint">The name you gave the bucket.</p>
           <input id="target-bucket" autocapitalize="none" spellcheck="false" required>
           <label for="target-key-id">Key ID</label>
+          <p class="hint">Backblaze calls it the keyID. Amazon and most other providers call it the access key ID.</p>
           <input id="target-key-id" autocomplete="off" autocapitalize="none" spellcheck="false" required>
           <label for="target-secret">Secret key</label>
+          <p class="hint">Backblaze calls it the applicationKey. Amazon and most other providers call it the secret access key.</p>
           <input id="target-secret" type="password" autocomplete="off" required>
         </fieldset>
         <button type="submit">Add location</button>
