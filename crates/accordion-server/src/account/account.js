@@ -9,6 +9,9 @@ const USES = {
   mail: "Mail",
 };
 
+// The signed-in user's username, to tell when they're changing it.
+let currentUsername = "";
+
 function showError(message) {
   $("error").textContent = message;
   $("error").hidden = !message;
@@ -81,7 +84,15 @@ async function load() {
       throw new Error(data.error || PROBLEM);
     }
     showError("");
-    $("signed-in-as").textContent = session.data.user.username;
+    const user = session.data.user;
+    $("signed-in-as").textContent = user.username;
+    // Only fill the name form when it isn't being edited.
+    if (currentUsername !== user.username) {
+      currentUsername = user.username;
+      $("display-name").value = user.display_name;
+      $("new-username").value = user.username;
+      showRenamePassword();
+    }
     $("change-username").value = session.data.user.username;
     $("dav-username").textContent = session.data.user.username;
     $("dav-address").textContent = `${location.origin}/dav/drive/`;
@@ -205,6 +216,39 @@ $("change-password").addEventListener("submit", (event) =>
       $(id).value = "";
     }
     $("changed").hidden = false;
+  }),
+);
+
+function newUsername() {
+  return $("new-username").value.trim().toLowerCase() !== currentUsername;
+}
+
+// A new username needs the current password, so ask for it only then.
+function showRenamePassword() {
+  $("rename-password").hidden = !newUsername();
+  $("rename-current-password").required = newUsername();
+}
+
+$("rename").addEventListener("input", () => {
+  $("renamed").hidden = true;
+  showRenamePassword();
+});
+
+$("rename").addEventListener("submit", (event) =>
+  withButton(event, async () => {
+    $("renamed").hidden = true;
+    const { status, data } = await api("PUT", "/api/account/name", {
+      display_name: $("display-name").value,
+      username: $("new-username").value,
+      current_password: $("rename-current-password").value,
+    });
+    if (status !== 204) {
+      throw new Error(data.error || PROBLEM);
+    }
+    $("rename-current-password").value = "";
+    currentUsername = "";
+    await load();
+    $("renamed").hidden = false;
   }),
 );
 

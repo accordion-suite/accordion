@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use accordion_core::backup::Backup;
 use accordion_core::identity::Identity;
+use accordion_core::storage::Storage;
 use accordion_gateway::host::reject_unknown_hosts;
 use accordion_gateway::{AllowedHosts, ServerName};
 use axum::Router;
@@ -40,6 +41,8 @@ pub struct AppState {
     pub modules: modules::Mounted,
     /// Backups, once the server is running with an owner.
     pub backup: Option<Backup>,
+    /// Everyone's files, for the People page when it deletes an account.
+    pub storage: Option<Storage>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.

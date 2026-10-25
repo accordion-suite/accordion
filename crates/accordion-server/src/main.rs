@@ -171,7 +171,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         &Services {
             db,
             identity: identity.clone(),
-            storage,
+            storage: storage.clone(),
         },
         &Stopping::new(stopped.clone()),
         &mut background,
@@ -187,6 +187,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 admin_access: admin_access()?,
                 modules,
                 backup: Some(backup),
+                storage: Some(storage),
             },
             until_stopped(),
         )
@@ -221,6 +222,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         admin_access: admin_access()?,
         modules,
         backup: Some(backup),
+        storage: Some(storage),
     };
 
     let local_name = if local_name_on {

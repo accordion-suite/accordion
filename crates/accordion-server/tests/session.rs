@@ -56,6 +56,7 @@ async fn start_server(site: &Site) -> (tempfile::TempDir, Router) {
                 admin_access: Default::default(),
                 modules: Default::default(),
                 backup: None,
+                storage: None,
             },
             site,
         ),

@@ -138,7 +138,7 @@ cargo run                                          # Start the server on http://
 
 **The health page.** `https://<name>/health` shows how the certificate, the address record, `accordion.local`, and backups are doing. Like every admin page, it opens only from your home network unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
 
-**Your household.** At `/people`, the owner or an admin adds people, makes reset links, and turns accounts off and on. Each new person gets a one-time link to `/welcome`, where they choose their own password. Everyone can change theirs at `/account`. If the owner forgets theirs, `cargo run -- reset-owner-password` prints a link for choosing a new one.
+**Your household.** At `/people`, the owner or an admin adds people, renames them, makes reset links, turns accounts off and on, and deletes them. Deleting someone gives their files to another person or deletes them. Each new person gets a one-time link to `/welcome`, where they choose their own password. Everyone can change their password and name at `/account`. If the owner forgets theirs, `cargo run -- reset-owner-password` prints a link for choosing a new one.
 
 **Backups.** Install [restic](https://restic.net) 0.19.1, and set `ACCORDION_RESTIC` to its full path if it isn't on your `PATH`. At `/backups`, turn backups on, save the recovery key, and add a place for backups to go:
 

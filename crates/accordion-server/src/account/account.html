@@ -66,6 +66,25 @@
     </section>
 
     <section>
+      <form id="rename">
+        <h2>Your name</h2>
+        <label for="display-name">Name</label>
+        <p class="hint">How Accordion shows you to others, such as "Sam Lee".</p>
+        <input id="display-name" maxlength="100" required>
+        <label for="new-username">Username</label>
+        <p class="hint">What you sign in with. If you change it, also change it on each device that uses an app password, such as File Explorer.</p>
+        <input id="new-username" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+        <div id="rename-password" hidden>
+          <label for="rename-current-password">Current password</label>
+          <p class="hint">Needed to change your username.</p>
+          <input id="rename-current-password" type="password" autocomplete="current-password">
+        </div>
+        <button type="submit">Save name</button>
+        <p id="renamed" role="status" hidden>Your name is saved.</p>
+      </form>
+    </section>
+
+    <section>
       <form id="change-password">
         <h2>Change your password</h2>
         <p class="hint">Your other browsers and apps are signed out when you change it. Devices that use app passwords keep working.</p>

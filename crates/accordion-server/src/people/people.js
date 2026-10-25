@@ -14,10 +14,22 @@ const ROLES = {
 let afterConfirm = null;
 // Whose password the reset form is for.
 let resetting = null;
+// Whose name the rename form is for.
+let renaming = null;
+// Whose account the delete form is for.
+let deleting = null;
+// The last list of people, for the delete form's choices.
+let people = { people: [], you: null };
 
 function showError(message) {
   $("error").textContent = message;
   $("error").hidden = !message;
+}
+
+// Says what a change did, above the list of people.
+function showDone(message) {
+  $("done").textContent = message;
+  $("done").hidden = !message;
 }
 
 // Returns the response's status with its data, so callers can tell "not
@@ -43,7 +55,7 @@ function when(iso) {
 }
 
 function show(id) {
-  for (const section of ["sign-in", "confirm", "reset", "link", "manage"]) {
+  for (const section of ["sign-in", "confirm", "reset", "rename", "delete", "link", "manage"]) {
     $(section).hidden = section !== id;
   }
 }
@@ -71,6 +83,7 @@ function button(text, action) {
 }
 
 function render(data) {
+  people = data;
   const list = $("people");
   list.replaceChildren();
   for (const person of data.people) {
@@ -99,11 +112,13 @@ function render(data) {
         const text = role === "admin" ? "Make admin" : "Make standard account";
         buttons.push(button(text, (b) => setRole(person, role, b)));
       }
+      buttons.push(button("Rename", () => renamePerson(person)));
       if (person.state === "turned_off") {
         buttons.push(button("Turn on", (b) => act(b, "POST", `/api/people/${person.id}/turn-on`)));
       } else {
         buttons.push(button("Turn off", (b) => turnOff(person, b)));
       }
+      buttons.push(button("Delete", () => deletePerson(person)));
       for (const [index, element] of buttons.entries()) {
         if (index > 0) item.append(" ");
         item.append(element);
@@ -124,7 +139,8 @@ async function load() {
     }
     if (status !== 200) throw new Error(data.error || PROBLEM);
     render(data);
-    if ($("link").hidden && $("confirm").hidden && $("reset").hidden) show("manage");
+    const busy = ["link", "confirm", "reset", "rename", "delete"].some((id) => !$(id).hidden);
+    if (!busy) show("manage");
   } catch (error) {
     showError(error.message);
   }
@@ -175,6 +191,7 @@ function showLink(data, name, purpose, deletedAppPasswords = false) {
 
 async function act(element, method, path, body, onDone) {
   showError("");
+  showDone("");
   element.disabled = true;
   afterChange = onDone || (async () => {
     show("manage");
@@ -218,6 +235,54 @@ function turnOff(person, element) {
     `Turn off ${person.display_name}'s account? They'll be signed out everywhere, including File Explorer and other apps, and can't sign in until you turn it back on. Their files are kept.`,
   );
   if (sure) return act(element, "POST", `/api/people/${person.id}/turn-off`);
+}
+
+function renamePerson(person) {
+  showError("");
+  showDone("");
+  renaming = person;
+  $("rename-title").textContent = `Rename ${person.display_name}`;
+  $("rename-display-name").value = person.display_name;
+  $("rename-username").value = person.username;
+  show("rename");
+  $("rename-display-name").focus();
+}
+
+function givingFiles() {
+  return $("delete").querySelector('input[value="give"]').checked;
+}
+
+function deletePerson(person) {
+  showError("");
+  showDone("");
+  deleting = person;
+  $("delete-title").textContent = `Delete ${person.display_name}'s account`;
+  $("delete-username-label").textContent = `To confirm, type their username: ${person.username}`;
+  $("delete-username").value = "";
+  const choices = $("delete-give-to");
+  choices.replaceChildren();
+  for (const other of people.people) {
+    if (other.id === person.id) continue;
+    const option = document.createElement("option");
+    option.value = other.id;
+    option.textContent = other.id === people.you ? `${other.display_name} (you)` : other.display_name;
+    option.selected = other.id === people.you;
+    choices.append(option);
+  }
+  $("delete").querySelector('input[value="give"]').checked = true;
+  $("delete-give-to").disabled = false;
+  show("delete");
+}
+
+// What a deletion did, once it's done.
+function deleted(person, data, givenTo) {
+  if (data.folder) {
+    return `${person.display_name}'s account is deleted. Their files are in ${givenTo}'s Drive, in the folder "${data.folder}".`;
+  }
+  if (givenTo) {
+    return `${person.display_name}'s account is deleted. They didn't have any files.`;
+  }
+  return `${person.display_name}'s account and files are deleted.`;
 }
 
 function onSubmit(id, action) {
@@ -264,6 +329,52 @@ $("reset").addEventListener("submit", async (event) => {
   await makeLink(resetting, event.submitter, {
     delete_app_passwords: reason === "exposed",
   });
+});
+
+$("rename").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await act(event.submitter, "PUT", `/api/people/${renaming.id}/name`, {
+    display_name: $("rename-display-name").value,
+    username: $("rename-username").value,
+  });
+});
+
+$("rename-cancel").addEventListener("click", () => {
+  renaming = null;
+  show("manage");
+});
+
+// The person list only matters while giving the files to someone.
+$("delete").addEventListener("change", () => {
+  $("delete-give-to").disabled = !givingFiles();
+});
+
+$("delete").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const person = deleting;
+  const give = givingFiles();
+  const to = $("delete-give-to").value;
+  const givenTo = give ? people.people.find((other) => other.id === to)?.display_name : null;
+  await act(
+    event.submitter,
+    "DELETE",
+    `/api/people/${person.id}`,
+    {
+      username: $("delete-username").value,
+      files: give ? { give_to: to } : "delete",
+    },
+    async (data) => {
+      deleting = null;
+      show("manage");
+      await load();
+      showDone(deleted(person, data, givenTo));
+    },
+  );
+});
+
+$("delete-cancel").addEventListener("click", () => {
+  deleting = null;
+  show("manage");
 });
 
 $("reset-cancel").addEventListener("click", () => {

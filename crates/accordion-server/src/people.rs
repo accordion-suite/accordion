@@ -1,5 +1,5 @@
 //! `/people`: where admins add the people in the household, make password
-//! links, change roles, and turn accounts off.
+//! links, change roles and names, turn accounts off, and delete them.
 //!
 //! Admins never choose or see anyone's password. A new account gets a
 //! one-time link, which the admin passes on, and the person sets their own
@@ -14,12 +14,13 @@
 use accordion_core::identity::{
     AppPasswords, LinkPurpose, LinkToken, Member, PasswordLink, SignedIn, User,
 };
+use accordion_core::storage::LeaveFiles;
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::{Role, UserId};
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +38,8 @@ pub fn routes() -> Router<AppState> {
             get(|| async { asset(PEOPLE_JS, "text/javascript") }),
         )
         .route("/api/people", get(list).post(add))
+        .route("/api/people/{id}", delete(delete_person))
+        .route("/api/people/{id}/name", put(rename))
         .route("/api/people/{id}/password-link", post(password_link))
         .route("/api/people/{id}/role", put(set_role))
         .route("/api/people/{id}/turn-off", post(turn_off))
@@ -114,6 +117,9 @@ struct PeopleView {
     people: Vec<PersonView>,
     /// Whether the signed-in admin may make admins, so the page offers it.
     can_add_admins: bool,
+    /// The signed-in admin, whom the page suggests for a deleted account's
+    /// files.
+    you: UserId,
 }
 
 #[derive(Serialize)]
@@ -182,6 +188,7 @@ async fn list(
             .map(|member| person(member, &me.user))
             .collect(),
         can_add_admins: me.user.role == Role::Owner,
+        you: me.user.id,
     }))
 }
 
@@ -315,4 +322,121 @@ async fn turn_on(
     state.identity.turn_on_member(id).await?;
     tracing::info!(user = %me.user.id, target = %id, "turned on an account");
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct NewName {
+    username: String,
+    display_name: String,
+}
+
+/// `PUT /api/people/{id}/name`: changes someone's name and username.
+async fn rename(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    Path(id): Path<UserId>,
+    Json(request): Json<NewName>,
+) -> Result<StatusCode, ApiError> {
+    let before = manageable(&state, &me, id).await?;
+    let user = state
+        .identity
+        .rename_member(id, &request.username, &request.display_name)
+        .await?;
+    if user.username != before.username {
+        follow_new_username(&state).await;
+    }
+    tracing::info!(user = %me.user.id, target = %id, "renamed an account");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Storage's plain view names each person's folder after their username, so
+/// it's rebuilt after a new one. A failure only leaves the view behind until
+/// the next rebuild, so it's logged rather than shown.
+pub(crate) async fn follow_new_username(state: &AppState) {
+    if let Some(storage) = &state.storage
+        && let Err(err) = storage.rebuild_view().await
+    {
+        tracing::error!(%err, "couldn't rebuild the plain view after a new username");
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Files {
+    /// Move them into a folder in this person's Drive.
+    GiveTo(UserId),
+    Delete,
+}
+
+#[derive(Deserialize)]
+struct Deletion {
+    /// The account's username, typed by the admin to show they mean it.
+    username: String,
+    /// Required, so a request that leaves it out never deletes files.
+    files: Files,
+}
+
+#[derive(Serialize)]
+struct Deleted {
+    /// The folder the files went into, if they were given to someone and
+    /// there were any.
+    folder: Option<String>,
+}
+
+/// `DELETE /api/people/{id}`: deletes an account, after giving its files to
+/// someone else or deleting them.
+async fn delete_person(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    Path(id): Path<UserId>,
+    Json(request): Json<Deletion>,
+) -> Result<Json<Deleted>, ApiError> {
+    let target = manageable(&state, &me, id).await?;
+    if request.username.trim().to_lowercase() != target.username {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "To confirm, type {}'s username exactly: {}",
+                target.display_name, target.username
+            ),
+        ));
+    }
+    let storage = state
+        .storage
+        .as_ref()
+        .ok_or_else(ApiError::server_problem)?;
+    let (files, given_to) = match request.files {
+        Files::GiveTo(to) => (
+            LeaveFiles::GiveTo {
+                owner: to,
+                // Display names can hold any character, but a folder name
+                // can't hold a slash.
+                folder_name: format!("{}'s files", target.display_name.replace('/', "-")),
+            },
+            Some(to),
+        ),
+        Files::Delete => (LeaveFiles::Delete, None),
+    };
+    // Off first: they're signed out everywhere, and nothing new arrives
+    // while their files move. If a step fails, the account stays off, and
+    // trying again picks up where it stopped.
+    state.identity.turn_off_member(id).await?;
+    let folder = storage.remove_owner(id, files).await?;
+    state.identity.delete_member(id).await?;
+    match given_to {
+        Some(to) => tracing::info!(
+            user = %me.user.id,
+            target = %id,
+            files_to = %to,
+            "deleted an account and gave its files away"
+        ),
+        None => tracing::info!(
+            user = %me.user.id,
+            target = %id,
+            "deleted an account and its files"
+        ),
+    }
+    Ok(Json(Deleted {
+        folder: folder.map(|folder| folder.name),
+    }))
 }

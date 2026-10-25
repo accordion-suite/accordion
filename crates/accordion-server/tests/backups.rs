@@ -84,6 +84,7 @@ async fn start(client: &str) -> Server {
             admin_access: AdminAccess::HomeNetwork,
             modules: Default::default(),
             backup: Some(backup),
+            storage: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

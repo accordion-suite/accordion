@@ -1,6 +1,6 @@
 //! `/account`: where people create app passwords, so standard clients such
 //! as File Explorer, Finder, and phone apps can reach Drive (decision 3 in
-//! `docs/decisions`), and change their password.
+//! `docs/decisions`), change their password, and change their name.
 //!
 //! Every user can open it from anywhere, unlike the admin pages. It stands
 //! in until the web app has its own settings pages.
@@ -10,7 +10,7 @@ use accordion_module::{ApiError, Authenticated};
 use accordion_types::AppPasswordId;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +34,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/app-passwords/{id}", delete(delete_app_password))
         .route("/api/account/password", post(change_password))
+        .route("/api/account/name", put(rename))
 }
 
 const ACCOUNT_HTML: &str = include_str!("account/account.html");
@@ -150,6 +151,27 @@ async fn delete_app_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Checks the signed-in user's password, for changes that need it.
+async fn check_current_password(
+    state: &AppState,
+    me: &identity::SignedIn,
+    password: &str,
+    connection: &Connection,
+) -> Result<(), ApiError> {
+    match state
+        .identity
+        .check_password(&me.user.username, password, connection.sign_in_from())
+        .await
+    {
+        Ok(_) => Ok(()),
+        Err(identity::Error::WrongCredentials) => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Your current password isn't right. Check it, then try again.",
+        )),
+        Err(err) => Err(err.into()),
+    }
+}
+
 #[derive(Deserialize)]
 struct NewPassword {
     current_password: String,
@@ -165,28 +187,43 @@ async fn change_password(
     connection: Connection,
     Json(request): Json<NewPassword>,
 ) -> Result<StatusCode, ApiError> {
-    match state
-        .identity
-        .check_password(
-            &me.user.username,
-            &request.current_password,
-            connection.sign_in_from(),
-        )
-        .await
-    {
-        Ok(_) => {}
-        Err(identity::Error::WrongCredentials) => {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "Your current password isn't right. Check it, then try again.",
-            ));
-        }
-        Err(err) => return Err(err.into()),
-    }
+    check_current_password(&state, &me, &request.current_password, &connection).await?;
     state
         .identity
         .set_password(me.user.id, request.new_password, Some(me.session.id))
         .await?;
     tracing::info!(user = %me.user.id, "changed their password");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct NewName {
+    username: String,
+    display_name: String,
+    /// Needed only for a new username, which is what everyone signs in with.
+    #[serde(default)]
+    current_password: String,
+}
+
+/// `PUT /api/account/name`: changes the signed-in user's name, and their
+/// username if they give their password.
+async fn rename(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    connection: Connection,
+    Json(request): Json<NewName>,
+) -> Result<StatusCode, ApiError> {
+    let new_username = request.username.trim().to_lowercase() != me.user.username;
+    if new_username {
+        check_current_password(&state, &me, &request.current_password, &connection).await?;
+    }
+    let user = state
+        .identity
+        .rename_member(me.user.id, &request.username, &request.display_name)
+        .await?;
+    if user.username != me.user.username {
+        crate::people::follow_new_username(&state).await;
+    }
+    tracing::info!(user = %me.user.id, "changed their name");
     Ok(StatusCode::NO_CONTENT)
 }
