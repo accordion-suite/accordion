@@ -1,13 +1,18 @@
 # Packaging
 
-Files for installing Accordion on a Linux machine as a system service. The .deb and .rpm packages will install them. Until those exist, you can install them by hand, as described below.
+Files for installing Accordion on a Linux machine as a system service, and the Debian package that installs them ([decision 9](../docs/decisions/0009-releases-and-installing.md)).
 
 | File | Installed as | What it does |
 |---|---|---|
-| `systemd/accordion.service` | `/etc/systemd/system/accordion.service` | Starts Accordion when the machine starts, and restarts it if it stops unexpectedly |
-| `systemd/accordion.sysusers` | `/etc/sysusers.d/accordion.conf` | Creates the `accordion` user that Accordion runs as |
+| `systemd/accordion.service` | `/usr/lib/systemd/system/accordion.service` | Starts Accordion when the machine starts, and restarts it if it stops unexpectedly |
+| `systemd/accordion.sysusers` | `/usr/lib/sysusers.d/accordion.conf` | Creates the `accordion` user that Accordion runs as |
+| `debian/postinst`, `prerm`, `postrm` | Package scripts | Create the user, and turn the service on when installed and off when removed |
+| `debian/copyright` | `/usr/share/doc/accordion/copyright` | Accordion's and restic's licenses |
+| `third-party-licenses.py` | `/usr/share/doc/accordion/third-party-licenses.txt` | Collects the licenses of the Rust libraries built into Accordion |
 
-Accordion also needs [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)). The service expects it at `/usr/lib/accordion/restic`, apart from any restic your distribution installs, so Accordion always runs the version it was tested with. Backups to another computer over SFTP also need OpenSSH's client, the `ssh` and `ssh-keygen` programs, which most systems already have. On Debian and Ubuntu, it's the `openssh-client` package.
+The package also includes [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)), as `/usr/lib/accordion/restic`. It's kept apart from any restic your distribution installs, so Accordion always runs the version it was tested with. Backups to another computer over SFTP also need OpenSSH's client, which the package recommends.
+
+The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi OS based on Debian 12 or later, on x86_64 and ARM64.
 
 ## What the service does
 
@@ -16,70 +21,50 @@ Accordion also needs [restic](https://restic.net) 0.19.1, the program that makes
 - **It can't touch the rest of the machine.** The service sees the system as read-only, can't see home folders, and can't load kernel modules, change the clock, or use most system calls. If Accordion were ever compromised, this limits what an attacker could reach.
 - **It can write backups to disks mounted under `/media` or `/mnt`,** such as a USB disk, and nowhere else outside its data folder. Mount backup disks there, and make the backup folder writable by the `accordion` user.
 
-## Installing by hand
+## Building the packages
 
-These steps need `sudo`. Run them from the root of this repo.
+`scripts/build-packages.sh` builds `accordion_<version>_amd64.deb` and `accordion_<version>_arm64.deb` in `target/packages`, with their `SHA256SUMS`. The same commit gives the same files on any machine, which lets the developer check CI's release packages before signing them. For that, it needs:
 
-1. Build the server:
+- **The Rust version in `rust-toolchain.toml`.** rustup installs it.
+- **zig 0.14.1 and cargo-zigbuild 0.23.4,** which build both architectures from one machine. Install cargo-zigbuild with `cargo install --locked cargo-zigbuild --version 0.23.4`.
+- **A clone outside the workspace,** with no changes that aren't committed. In the workspace, Cargo builds your checkouts of the other repos instead of the versions in `Cargo.lock`.
 
-   ```sh
-   cargo build --release
-   ```
+```sh
+git clone https://github.com/accordion-suite/accordion ~/accordion-release
+cd ~/accordion-release
+scripts/build-packages.sh
+```
 
-2. Install the server, the service, and the user it runs as:
+## Installing a package
 
-   ```sh
-   sudo install -m 0755 target/release/accordion /usr/bin/accordion
-   sudo install -m 0644 packaging/systemd/accordion.service /etc/systemd/system/accordion.service
-   sudo install -D -m 0644 packaging/systemd/accordion.sysusers /etc/sysusers.d/accordion.conf
-   sudo systemd-sysusers
-   ```
+Install the package for your machine with apt, which also installs what it needs:
 
-   Some distributions, such as Ubuntu, don't create `/etc/sysusers.d` until something needs it. The `-D` creates it.
+```sh
+sudo apt install ./accordion_0.1.0_arm64.deb
+```
 
-3. Install restic, checking the download against the checksum from restic's signed list of checksums. On a Raspberry Pi or another ARM64 machine, use the second pair of lines instead of the first:
+Accordion starts right away, and every time the machine starts. Find the setup wizard's address and code in the log:
 
-   ```sh
-   file=restic_0.19.1_linux_amd64.bz2 sha256=f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c
-   # file=restic_0.19.1_linux_arm64.bz2 sha256=a5f64aaab53d51e311fa3829124c5b703f2d14cf187d8640b6be3b2b49376465
-   curl -fsSLO "https://github.com/restic/restic/releases/download/v0.19.1/$file"
-   echo "$sha256  $file" | sha256sum --check
-   bunzip2 "$file"
-   sudo install -D -m 0755 "${file%.bz2}" /usr/lib/accordion/restic
-   rm "${file%.bz2}"
-   ```
+```sh
+journalctl -u accordion
+```
 
-   If `sha256sum` doesn't say `OK`, stop: the download isn't the file restic published.
+You can also show the code with this command:
 
-4. Start Accordion now, and every time the machine starts:
+```sh
+sudo -u accordion env ACCORDION_DATA_DIR=/var/lib/accordion accordion setup-code
+```
 
-   ```sh
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now accordion
-   ```
-
-5. Find the setup wizard's address and code in the log:
-
-   ```sh
-   journalctl -u accordion
-   ```
-
-   You can also show the code with this command:
-
-   ```sh
-   sudo -u accordion env ACCORDION_DATA_DIR=/var/lib/accordion accordion setup-code
-   ```
-
-   Run other `accordion` commands the same way, as the `accordion` user, so the files they create belong to the service.
+Run other `accordion` commands the same way, as the `accordion` user, so the files they create belong to the service.
 
 To change a setting, such as `ACCORDION_ADDRESS`, run `sudo systemctl edit accordion` and add it under `[Service]`, for example `Environment=ACCORDION_ADDRESS=192.168.1.20`. Then run `sudo systemctl restart accordion`. `accordion --help` lists every setting.
 
-## Updating
+To update, install the newer package the same way. Accordion restarts into the new version.
 
-Build the new version, install it over the old one, and restart the service:
+## Removing Accordion
 
 ```sh
-cargo build --release
-sudo install -m 0755 target/release/accordion /usr/bin/accordion
-sudo systemctl restart accordion
+sudo apt remove accordion
 ```
+
+This stops Accordion and removes its programs, but **never deletes `/var/lib/accordion`**, even with `apt purge`. That folder holds everyone's files, the database, and the server's keys, and installing Accordion again uses it. If you don't need it, make sure you have a backup, then delete it with `sudo rm -r /var/lib/accordion`.

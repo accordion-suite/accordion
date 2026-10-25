@@ -1,0 +1,22 @@
+#!/bin/sh
+# Runs after the package is installed or upgraded.
+set -e
+
+if [ "$1" = configure ]; then
+    systemd-sysusers accordion.conf
+    # Without a running systemd, such as while an image is being built, the
+    # service is turned on for the next start instead.
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        if [ -z "$2" ]; then
+            # A first install: start now, and every time the machine starts.
+            systemctl enable --now accordion.service
+        else
+            # An upgrade: restart into the new version, unless the admin
+            # stopped the service.
+            systemctl try-restart accordion.service
+        fi
+    elif [ -z "$2" ]; then
+        systemctl enable accordion.service
+    fi
+fi

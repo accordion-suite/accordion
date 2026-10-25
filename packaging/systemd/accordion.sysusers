@@ -1,3 +1,3 @@
-# The user Accordion runs as. Install as /usr/lib/sysusers.d/accordion.conf
-# (packages) or /etc/sysusers.d/accordion.conf (by hand).
+# The user Accordion runs as. The .deb installs it as
+# /usr/lib/sysusers.d/accordion.conf.
 u accordion - "Accordion" /var/lib/accordion

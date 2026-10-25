@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs before the package is removed or upgraded. An upgrade leaves the
+# service running, and the new version's postinst restarts it.
+set -e
+
+if [ "$1" = remove ]; then
+    if [ -d /run/systemd/system ]; then
+        systemctl disable --now accordion.service || true
+    else
+        systemctl disable accordion.service || true
+    fi
+fi

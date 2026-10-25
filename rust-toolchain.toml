@@ -1,0 +1,7 @@
+# The Rust version this repo builds with, including release packages. CI and
+# the developer's release check must build with the same version, or their
+# packages won't match (decision 9). Change it on purpose, after testing,
+# rather than following each stable release.
+[toolchain]
+channel = "1.99.0"
+components = ["clippy", "rustfmt"]

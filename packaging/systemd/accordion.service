@@ -1,6 +1,5 @@
 # Runs Accordion as a system service, for installs without containers. The
-# .deb and .rpm packages will install this file. Until they exist,
-# packaging/README.md explains how to install it by hand.
+# .deb installs it as /usr/lib/systemd/system/accordion.service.
 
 [Unit]
 Description=Accordion
