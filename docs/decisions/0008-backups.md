@@ -179,6 +179,6 @@ An owner can set up more than one target, such as a USB disk and an off-site buc
 
 ## Open questions
 
-- **Protection from a compromised box.** The box holds credentials that can delete its own backups, so ransomware on the box could too. Append-only REST targets and S3 Object Lock both prevent that. Which should Accordion recommend, and should it be on by default where a target supports it?
+- **Protection from a compromised box.** The box holds credentials that can delete its own backups, so ransomware on the box could too. Append-only REST targets and S3 Object Lock both prevent that. Which should Accordion recommend, and should it be on by default where a target supports it? [Decision 10](0010-backups-a-compromised-server-cant-delete.md) answers this.
 - **How the owner confirms the recovery key.** Typing back one group might prove they wrote it down, without being a chore.
 - **Restore speed.** The one-hour target for 500 GB needs measuring on a Raspberry Pi 5, with a USB disk and with an off-site bucket.
