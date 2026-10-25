@@ -12,5 +12,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [6](0006-file-storage.md) | How file contents are stored on disk | Accepted |
 | [7](0007-module-interface.md) | How modules plug into the server | Accepted |
 | [8](0008-backups.md) | How backups work | Accepted |
+| [9](0009-releases-and-installing.md) | How Accordion is released and installed | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
