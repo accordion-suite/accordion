@@ -168,7 +168,7 @@ Releases are signed with an Ed25519 key, the release key. Its public half is in 
 The private half stays offline, on the developer's computer, protected by a passphrase. It is never stored in GitHub. Publishing a release takes these steps:
 
 1. Pushing a version tag starts a CI workflow that builds both packages and `install.sh`, and creates a draft release with `SHA256SUMS`.
-2. The developer builds the same version locally and checks that the checksums match CI's. A match shows that the packages were built from the tagged code and nothing else.
+2. The developer builds the same tag locally and checks that CI's packages hold the same files, byte for byte. A match shows that the packages were built from the tagged code and nothing else. The .deb files themselves can differ slightly, because another version of dpkg packs the same files differently.
 3. The developer signs `SHA256SUMS` with the release key, uploads `SHA256SUMS.sig`, and publishes the release.
 
 If the release key were held in CI, anyone who took over the GitHub account or a workflow could sign a release that every server would install. With the key offline, they'd also need the developer's computer and passphrase. The cost is a few minutes of manual work per release.

@@ -1,0 +1,90 @@
+# Builds the release files and drafts a release (decision 9).
+#
+# Pushing a version tag, such as v0.1.0, builds the packages and install.sh
+# and creates a draft release with them. The developer then builds the same
+# tag locally, checks that CI's files match, signs SHA256SUMS, and publishes
+# the release. scripts/check-release.sh and scripts/sign-release.sh do those
+# steps.
+#
+# Running the workflow by hand makes a trial build of main, kept as a
+# workflow artifact instead of a release, for testing the steps above.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the release files
+    runs-on: ubuntu-24.04
+    steps:
+      # The build runs code from every dependency, so it gets no token it
+      # could push with.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the tag
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [[ "$TAG" != "v$version" ]]; then
+            echo "The tag is $TAG, but Cargo.toml says the version is $version. Tag the commit as v$version instead."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "$TAG isn't on main. Releases are built from main, so tag a commit there."
+            exit 1
+          fi
+      # No caches in this workflow: a cache that another workflow saved could
+      # change what goes into the release.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+          use-cache: false
+      - name: Install cargo-zigbuild
+        run: cargo install --locked cargo-zigbuild --version 0.23.4
+      - name: Build
+        run: scripts/build-packages.sh target/release-files
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-files
+          path: target/release-files
+          if-no-files-found: error
+          retention-days: 30
+
+  draft:
+    name: Draft the release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-files
+          path: release-files
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          (cd release-files && sha256sum --check SHA256SUMS)
+          cat > notes.md <<'EOF'
+          To install Accordion on Debian 12 or later, Ubuntu 24.04 or later, or Raspberry Pi OS (64-bit), run:
+
+          ```sh
+          curl -fsSL https://github.com/accordion-suite/accordion/releases/latest/download/install.sh | sudo sh
+          ```
+          EOF
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "Accordion ${TAG#v}" --notes-file notes.md release-files/*

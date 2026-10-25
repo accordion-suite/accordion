@@ -37,6 +37,41 @@ cd ~/accordion-release
 scripts/build-packages.sh
 ```
 
+## Making a release
+
+Each release is a tag on `main`, built by CI and signed on the developer's computer ([decision 9](../docs/decisions/0009-releases-and-installing.md#signing)). You need:
+
+- **A release clone,** set up as in [Building the packages](#building-the-packages).
+- **gh,** GitHub's command-line tool, signed in with `gh auth login`.
+- **The release key's private half** in `~/.config/accordion/release-signing-key.pem`, or in the file that `ACCORDION_SIGNING_KEY` names, and its passphrase.
+
+To make a release:
+
+1. Set the version in `Cargo.toml`, commit it with the updated `Cargo.lock`, and push to `main`.
+2. Tag the commit and push the tag:
+
+   ```sh
+   git tag -a v0.1.0 -m "Accordion 0.1.0"
+   git push origin v0.1.0
+   ```
+
+   The release workflow builds the release files and creates a draft release. Only people who can push to the repo see drafts.
+3. In the release clone, check CI's files against a build of your own. The script checks out the tag, builds it, and compares:
+
+   ```sh
+   scripts/check-release.sh v0.1.0
+   ```
+
+4. Sign `SHA256SUMS`. openssl asks for the key's passphrase, and the script uploads the signature to the draft:
+
+   ```sh
+   scripts/sign-release.sh v0.1.0
+   ```
+
+5. Add release notes to the draft on GitHub, then publish it. The install command always uses the newest published release.
+
+To try the steps without releasing, open the **Release** workflow on the repo's **Actions** tab, and select **Run workflow**. Then give the run's ID, the number at the end of its address, to both scripts in place of the tag. The signed files stay in `target/release-check/ci`, ready for a test install.
+
 ## Installing a package
 
 Install the package for your machine with apt, which also installs what it needs:
