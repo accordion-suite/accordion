@@ -730,11 +730,14 @@ mod tests {
                 kind: TargetKind::Folder,
                 location: "/media/usb/backups".into(),
                 created_at: "2026-10-22T00:00:00.000Z".into(),
+                append_only: false,
             },
             last_backup,
             last_good_backup: last_good.map(|ago| now() - ago),
             last_check: None,
             last_restore_test: None,
+            stored_bytes: None,
+            oldest_backup: None,
         };
         let outcome = |ago: Duration, ok: bool| Outcome {
             finished_at: now() - ago,

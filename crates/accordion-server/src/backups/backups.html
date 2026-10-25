@@ -74,6 +74,7 @@
           <label class="choice"><input type="radio" name="target-kind" value="folder" checked> <span><strong>A folder on another disk,</strong> such as a USB disk plugged into this server.</span></label>
           <label class="choice"><input type="radio" name="target-kind" value="s3"> <span><strong>An S3 bucket at a storage provider,</strong> such as Backblaze B2 or Wasabi. Your backups are safe from a fire or theft at home. Accordion locks them with your recovery key before they leave, so the provider can't read them.</span></label>
           <label class="choice"><input type="radio" name="target-kind" value="sftp"> <span><strong>A folder on another computer,</strong> such as a NAS, or a computer at a relative's house. Accordion reaches it over SFTP, which the computer needs to have turned on.</span></label>
+          <label class="choice"><input type="radio" name="target-kind" value="rest"> <span><strong>A REST server on another computer,</strong> such as a NAS or a spare Raspberry Pi running rest-server. In append-only mode, it keeps your backups safe even if someone takes over this server.</span></label>
         </fieldset>
         <fieldset id="target-folder">
           <label for="target-path">Folder</label>
@@ -109,6 +110,17 @@
           <label for="target-remote-folder">Folder</label>
           <p class="hint">A full path, such as /volume1/backups/accordion, or a folder inside the user's home folder, such as backups/accordion.</p>
           <input id="target-remote-folder" autocapitalize="none" spellcheck="false" required>
+        </fieldset>
+        <fieldset id="target-rest" hidden disabled>
+          <p class="hint">On the other computer, run rest-server, or rclone serve restic, with HTTPS and append-only mode turned on. In append-only mode, the server never lets anything delete a backup, so someone who takes over this server can't destroy them. The first time Accordion connects, it remembers the server's certificate, and stops backing up if that ever changes.</p>
+          <label for="target-address">Address</label>
+          <p class="hint">Such as https://nas.local:8000/accordion. The last part is the folder for this server's backups.</p>
+          <input id="target-address" inputmode="url" autocapitalize="none" spellcheck="false" required>
+          <label for="target-rest-username">Username</label>
+          <p class="hint">From the REST server's password file. Leave the username and password empty if the server doesn't ask for them.</p>
+          <input id="target-rest-username" autocomplete="off" autocapitalize="none" spellcheck="false">
+          <label for="target-rest-password">Password</label>
+          <input id="target-rest-password" type="password" autocomplete="off">
         </fieldset>
         <button type="submit">Add location</button>
       </form>

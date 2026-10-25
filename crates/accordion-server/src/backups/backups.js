@@ -38,6 +38,13 @@ function when(millis) {
   return new Date(millis).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" });
 }
 
+// Such as "12.4 GB".
+function size(bytes) {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+}
+
 function hourLabel(hour) {
   if (hour === 0) return "midnight";
   if (hour === 12) return "noon";
@@ -66,6 +73,20 @@ function describeTarget(target) {
   }
   if (target.last_check && !target.last_check.ok) {
     lines.push(`The last check found a problem. ${target.last_check.problem}`);
+  }
+  if (target.append_only) {
+    lines.push(
+      "This server keeps every backup, so someone who takes over this server can't delete them.",
+    );
+    if (target.stored_bytes != null && target.oldest_backup != null) {
+      lines.push(
+        `Uses ${size(target.stored_bytes)}, with backups back to ${when(target.oldest_backup)}. Accordion never removes old backups here, so check its free space now and then.`,
+      );
+    }
+  } else if (target.kind === "rest") {
+    lines.push(
+      "This server lets Accordion delete backups, so someone who takes over this server could delete them too. Turn on append-only mode in the REST server to protect them.",
+    );
   }
   const test = target.last_restore_test;
   if (!test) {
@@ -240,7 +261,7 @@ onSubmit("key-confirm", async () => {
 // keeps their empty, required fields from blocking the form.
 for (const radio of document.querySelectorAll("input[name=target-kind]")) {
   radio.addEventListener("change", async () => {
-    for (const kind of ["folder", "s3", "sftp"]) {
+    for (const kind of ["folder", "s3", "sftp", "rest"]) {
       const fields = $(`target-${kind}`);
       fields.hidden = fields.disabled = kind !== radio.value;
     }
@@ -288,6 +309,12 @@ onSubmit("add-target", async () => {
       username: $("target-username").value,
       folder: $("target-remote-folder").value,
     },
+    rest: {
+      kind,
+      address: $("target-address").value,
+      username: $("target-rest-username").value,
+      password: $("target-rest-password").value,
+    },
   }[kind];
   const { status: code, data } = await api("POST", "/api/backups/targets", {
     name: $("target-name").value,
@@ -304,6 +331,9 @@ onSubmit("add-target", async () => {
     "target-server",
     "target-username",
     "target-remote-folder",
+    "target-address",
+    "target-rest-username",
+    "target-rest-password",
   ]) {
     $(id).value = "";
   }

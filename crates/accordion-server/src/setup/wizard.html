@@ -36,6 +36,7 @@
       <label class="choice"><input type="radio" name="restore-kind" value="folder" checked> <span><strong>On a disk,</strong> such as a USB disk. Connect it to this server first.</span></label>
       <label class="choice"><input type="radio" name="restore-kind" value="s3"> <span><strong>In an S3 bucket</strong> at a storage provider, such as Backblaze B2.</span></label>
       <label class="choice"><input type="radio" name="restore-kind" value="sftp"> <span><strong>On another computer,</strong> such as a NAS, over SFTP.</span></label>
+      <label class="choice"><input type="radio" name="restore-kind" value="rest"> <span><strong>On a REST server</strong> on another computer, such as one running rest-server.</span></label>
     </fieldset>
     <fieldset id="restore-folder">
       <label for="restore-path">Backup folder</label>
@@ -70,6 +71,16 @@
       <label for="restore-remote-folder">Folder</label>
       <p class="hint">A full path, such as /volume1/backups/accordion, or a folder inside the user's home folder, such as backups/accordion.</p>
       <input id="restore-remote-folder" autocapitalize="none" spellcheck="false" required>
+    </fieldset>
+    <fieldset id="restore-rest" hidden disabled>
+      <label for="restore-address">Address</label>
+      <p class="hint">The address you gave when you set up backups, such as https://nas.local:8000/accordion.</p>
+      <input id="restore-address" inputmode="url" autocapitalize="none" spellcheck="false" required>
+      <label for="restore-rest-username">Username</label>
+      <p class="hint">From the REST server's password file. Leave the username and password empty if the server doesn't ask for them.</p>
+      <input id="restore-rest-username" autocomplete="off" autocapitalize="none" spellcheck="false">
+      <label for="restore-rest-password">Password</label>
+      <input id="restore-rest-password" type="password" autocomplete="off">
     </fieldset>
     <label for="restore-key">Recovery key</label>
     <p class="hint">The 30 letters you wrote down or printed when you turned on backups. Spaces are optional.</p>

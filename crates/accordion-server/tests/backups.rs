@@ -528,3 +528,103 @@ async fn an_admin_backs_up_to_another_computer_over_sftp() {
     sftp.kill().unwrap();
     sftp.wait().unwrap();
 }
+
+#[tokio::test]
+async fn an_admin_backs_up_to_an_append_only_rest_server() {
+    // rclone's REST server, standing in for rest-server on a NAS, with a
+    // self-signed certificate like most servers on a home network.
+    let root = tempfile::tempdir().unwrap();
+    let certified = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_owned()]).unwrap();
+    std::fs::write(root.path().join("cert.pem"), certified.cert.pem()).unwrap();
+    std::fs::write(
+        root.path().join("key.pem"),
+        certified.signing_key.serialize_pem(),
+    )
+    .unwrap();
+    std::fs::create_dir(root.path().join("repos")).unwrap();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let address = format!("127.0.0.1:{port}");
+    let rclone = std::env::var_os("ACCORDION_RCLONE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "rclone".into());
+    let mut rest = std::process::Command::new(&rclone)
+        .args(["serve", "restic", "--append-only", "--addr", &address])
+        .arg("--cert")
+        .arg(root.path().join("cert.pem"))
+        .arg("--key")
+        .arg(root.path().join("key.pem"))
+        .args(["--user", "household", "--pass", "rest-password-0123"])
+        .arg(root.path().join("repos"))
+        .env("RCLONE_CONFIG", "/dev/null")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    while std::net::TcpStream::connect(&address).is_err() {
+        assert!(started.elapsed().as_secs() < 10, "rclone didn't start");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    let server = start("192.168.1.30").await;
+    let (status, _) = server
+        .send("POST", "/api/backups/key", &server.owner, None)
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let target = |password: &str| {
+        json!({
+            "name": "NAS",
+            "kind": "rest",
+            "address": format!("https://{address}/household"),
+            "username": "household",
+            "password": password,
+        })
+    };
+    let (status, body) = server
+        .send(
+            "POST",
+            "/api/backups/targets",
+            &server.owner,
+            Some(target("not-the-password")),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("didn't accept the username and password"),
+        "{body}"
+    );
+    let (status, body) = server
+        .send(
+            "POST",
+            "/api/backups/targets",
+            &server.owner,
+            Some(target("rest-password-0123")),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+
+    let (status, _) = server
+        .send("POST", "/api/backups/run", &server.owner, None)
+        .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let body = server.wait_until_idle().await;
+    let target = &body["targets"][0];
+    assert_eq!(target["kind"], "rest");
+    assert_eq!(target["append_only"], true);
+    assert_eq!(
+        target["location"],
+        format!("REST server at https://{address}/household")
+    );
+    assert_eq!(target["last_backup"]["ok"], true, "{target}");
+    // The page never gets the password back.
+    assert!(!body.to_string().contains("rest-password"), "{body}");
+    let _ = rest.kill();
+    let _ = rest.wait();
+}

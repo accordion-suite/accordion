@@ -145,6 +145,7 @@ cargo run                                          # Start the server on http://
 - **A folder on another disk.**
 - **An S3 bucket,** such as at Backblaze B2. Make the bucket private, and give the key access to that bucket only. At Backblaze, set the bucket's lifecycle to **Keep only the last version**, or the data restic deletes keeps taking up space you pay for.
 - **A folder on another computer over SFTP,** such as a NAS. Add the SSH key the page shows to `~/.ssh/authorized_keys` for the user Accordion signs in as.
+- **A REST server on another computer,** such as [rest-server](https://github.com/restic/rest-server) on a NAS or a Raspberry Pi. Run it with HTTPS and `--append-only`, and a server taken over by an attacker can't delete its backups there ([decision 10](docs/decisions/0010-backups-a-compromised-server-cant-delete.md)). To try one locally, run `rclone serve restic --append-only` with a certificate.
 
 Backups run every night at 3 a.m., and **Back up now** runs one right away.
 

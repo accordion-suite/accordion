@@ -202,7 +202,7 @@ $("choose-back").addEventListener("click", () => {
 // their empty, required fields from blocking the form.
 for (const radio of document.querySelectorAll("input[name=restore-kind]")) {
   radio.addEventListener("change", async () => {
-    for (const kind of ["folder", "s3", "sftp"]) {
+    for (const kind of ["folder", "s3", "sftp", "rest"]) {
       const fields = $(`restore-${kind}`);
       fields.hidden = fields.disabled = kind !== radio.value;
     }
@@ -251,6 +251,12 @@ function restorePlace() {
       server: $("restore-server").value,
       username: $("restore-username").value,
       folder: $("restore-remote-folder").value,
+    },
+    rest: {
+      kind,
+      address: $("restore-address").value,
+      username: $("restore-rest-username").value,
+      password: $("restore-rest-password").value,
     },
   }[kind];
 }

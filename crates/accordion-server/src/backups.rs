@@ -8,7 +8,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use accordion_core::backup::{
-    self, Backup, BackupStatus, KeyState, Outcome, Place, S3Bucket, SftpFolder, TargetStatus,
+    self, Backup, BackupStatus, KeyState, Outcome, Place, RestServer, S3Bucket, SftpFolder,
+    TargetKind, TargetStatus,
 };
 use accordion_core::identity::SignedIn;
 use accordion_module::{ApiError, Authenticated};
@@ -92,7 +93,9 @@ fn api_error(err: backup::Error) -> ApiError {
         | E::NoKeys
         | E::BadServer
         | E::BadUsername
-        | E::BadRemoteFolder => StatusCode::BAD_REQUEST,
+        | E::BadRemoteFolder
+        | E::BadRestAddress
+        | E::RestLoginIncomplete => StatusCode::BAD_REQUEST,
         E::KeyMismatch => StatusCode::BAD_REQUEST,
         // Only from restoring, which the setup wizard does.
         E::BadKey
@@ -114,7 +117,12 @@ fn api_error(err: backup::Error) -> ApiError {
         | E::Unreachable { .. }
         | E::NoSsh
         | E::SshKeyRefused { .. }
-        | E::HostKeyChanged(_) => StatusCode::UNPROCESSABLE_ENTITY,
+        | E::HostKeyChanged(_)
+        | E::RestLoginRefused(_)
+        | E::CertificateWrongName(_)
+        | E::CertificateExpired(_)
+        | E::NotHttps(_)
+        | E::CertificateChanged(_) => StatusCode::UNPROCESSABLE_ENTITY,
     };
     ApiError::new(status, err.to_string())
 }
@@ -131,8 +139,16 @@ struct StatusView {
 struct TargetView {
     id: BackupTargetId,
     name: String,
+    /// `folder`, `s3`, `sftp`, or `rest`.
+    kind: &'static str,
     /// A folder's path, or which bucket at which provider.
     location: String,
+    /// The target refuses deletes, so a compromised server can't delete the
+    /// backups there.
+    append_only: bool,
+    /// For an append-only target, as of the last weekly upkeep.
+    stored_bytes: Option<u64>,
+    oldest_backup: Option<u64>,
     last_backup: Option<OutcomeView>,
     /// Milliseconds since 1970, for the page to show in local time.
     last_good_backup: Option<u64>,
@@ -168,11 +184,25 @@ impl From<&TargetStatus> for TargetView {
         Self {
             id: status.target.id,
             name: status.target.name.clone(),
-            location: match (status.target.bucket(), status.target.sftp()) {
-                (Some((host, bucket)), _) => format!("Bucket {bucket} at {host}"),
-                (_, Some((_, host, folder))) => format!("Folder {folder} on {host}"),
+            kind: match status.target.kind {
+                TargetKind::Folder => "folder",
+                TargetKind::S3 => "s3",
+                TargetKind::Sftp => "sftp",
+                TargetKind::Rest => "rest",
+            },
+            location: match (
+                status.target.bucket(),
+                status.target.sftp(),
+                status.target.rest(),
+            ) {
+                (Some((host, bucket)), _, _) => format!("Bucket {bucket} at {host}"),
+                (_, Some((_, host, folder)), _) => format!("Folder {folder} on {host}"),
+                (_, _, Some(address)) => format!("REST server at {address}"),
                 _ => status.target.location.clone(),
             },
+            append_only: status.target.append_only,
+            stored_bytes: status.stored_bytes,
+            oldest_backup: status.oldest_backup.map(millis),
             last_backup: status.last_backup.as_ref().map(Into::into),
             last_good_backup: status.last_good_backup.map(millis),
             last_check: status.last_check.as_ref().map(Into::into),
@@ -299,6 +329,13 @@ pub(crate) enum PlaceRequest {
         username: String,
         folder: String,
     },
+    Rest {
+        address: String,
+        #[serde(default)]
+        username: String,
+        #[serde(default)]
+        password: String,
+    },
 }
 
 impl From<PlaceRequest> for Place {
@@ -324,6 +361,15 @@ impl From<PlaceRequest> for Place {
                 server,
                 username,
                 folder,
+            }),
+            PlaceRequest::Rest {
+                address,
+                username,
+                password,
+            } => Place::Rest(RestServer {
+                address,
+                username,
+                password,
             }),
         }
     }
@@ -353,8 +399,8 @@ struct NewTarget {
     place: PlaceRequest,
 }
 
-/// `POST /api/backups/targets`: adds a folder, bucket, or folder over SFTP
-/// for backups to go to.
+/// `POST /api/backups/targets`: adds a folder, bucket, folder over SFTP, or
+/// REST server for backups to go to.
 async fn add_target(
     State(state): State<AppState>,
     Authenticated(me): Authenticated,
