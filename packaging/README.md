@@ -68,7 +68,7 @@ To make a release:
    scripts/sign-release.sh v0.1.0
    ```
 
-5. Add release notes to the draft on GitHub, then publish it. The install command always uses the newest published release.
+5. Add release notes to the draft on GitHub, then publish it, either as a pre-release or as the newest release. The install command's `releases/latest` address uses the newest release and skips pre-releases. Testers can install a pre-release from its tag's own address, which the release notes give.
 
 To try the steps without releasing, open the **Release** workflow on the repo's **Actions** tab, and select **Run workflow**. Then give the run's ID, the number at the end of its address, to both scripts in place of the tag. The signed files stay in `target/release-check/ci`, ready for a test install.
 

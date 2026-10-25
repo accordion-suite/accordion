@@ -44,8 +44,13 @@ openssl pkeyutl -verify -pubin -inkey packaging/release-key.pem -rawin \
 if [[ "$release" =~ ^v[0-9] ]]; then
     gh release upload "$release" "$ci/SHA256SUMS.sig" --repo "$REPO" --clobber
     echo "Signed $release and uploaded SHA256SUMS.sig to the draft release."
-    echo "Add release notes on GitHub, then publish the release there or with:"
-    echo "  gh release edit $release --repo $REPO --draft=false"
+    echo "Add release notes on GitHub, then publish the release there, or with one of these:"
+    echo
+    echo "As a pre-release, for testers, which the install command's latest address skips:"
+    echo "  gh release edit $release --repo $REPO --draft=false --prerelease"
+    echo
+    echo "As the newest release, which the install command's latest address installs:"
+    echo "  gh release edit $release --repo $REPO --draft=false --latest"
 else
     folder="$(pwd)/$ci"
     echo "Signed the trial run's files in $folder."

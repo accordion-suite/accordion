@@ -79,12 +79,14 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           (cd release-files && sha256sum --check SHA256SUMS)
-          cat > notes.md <<'EOF'
-          To install Accordion on Debian 12 or later, Ubuntu 24.04 or later, or Raspberry Pi OS (64-bit), run:
-
-          ```sh
-          curl -fsSL https://github.com/accordion-suite/accordion/releases/latest/download/install.sh | sudo sh
-          ```
-          EOF
+          # The tag's own address works whether the release is published as
+          # a pre-release or as the newest release.
+          {
+            echo "To install Accordion ${TAG#v} on Debian 12 or later, Ubuntu 24.04 or later, or Raspberry Pi OS (64-bit), run:"
+            echo
+            echo '```sh'
+            echo "curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/install.sh | sudo sh"
+            echo '```'
+          } > notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
             --title "Accordion ${TAG#v}" --notes-file notes.md release-files/*
