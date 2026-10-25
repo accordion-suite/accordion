@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Builds the release packages, accordion_<version>_amd64.deb and
-# accordion_<version>_arm64.deb, and their SHA256SUMS.
+# accordion_<version>_arm64.deb, the install command's install.sh, and their
+# SHA256SUMS.
 #
 # Usage: scripts/build-packages.sh [output folder]
 #
-# The output folder defaults to target/packages. CI runs this for each
+# The output folder defaults to target/packages. install.sh holds the public
+# release key from packaging/release-key.pem. To test with another key, set
+# ACCORDION_RELEASE_KEY to its PEM file. CI runs this for each
 # release, and the developer runs it again before signing one, so the two
 # builds can be compared (decision 9). For that, the same commit must give
 # the same files on any machine:
@@ -60,6 +63,15 @@ if cargo tree --locked -p accordion-server -e normal --prefix none \
     | grep '^accordion-[a-z-]* v[^ ]* (/' | grep -qv " ($repo/"; then
     die "This checkout builds your local copies of other Accordion repos. Build from a clone outside the workspace instead."
 fi
+
+release_key="${ACCORDION_RELEASE_KEY:-packaging/release-key.pem}"
+[[ -f "$release_key" ]] \
+    || die "There's no release key at $release_key. Create the release key first, or set ACCORDION_RELEASE_KEY to a test key's public PEM file."
+# An Ed25519 public key's PEM file has one line between BEGIN and END, and
+# that line always starts the same way.
+release_key_line="$(grep -v -- '-----' "$release_key")"
+[[ "$release_key_line" =~ ^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$ ]] \
+    || die "$release_key isn't an Ed25519 public key in PEM format."
 
 version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
@@ -125,6 +137,13 @@ EOF
         --build "$root" "$out/accordion_${version}_${arch}.deb"
 done
 
-(cd "$out" && sha256sum "accordion_${version}_amd64.deb" "accordion_${version}_arm64.deb" > SHA256SUMS)
+sed -e "s|@VERSION@|$version|" -e "s|@RELEASE_KEY@|$release_key_line|" \
+    packaging/install.sh > "$out/install.sh"
+chmod 0755 "$out/install.sh"
+if grep -q '@[A-Z_]*@' "$out/install.sh"; then
+    die "install.sh has a placeholder this script doesn't fill in."
+fi
+
+(cd "$out" && sha256sum "accordion_${version}_amd64.deb" "accordion_${version}_arm64.deb" install.sh > SHA256SUMS)
 echo "Built in $out:"
 cat "$out/SHA256SUMS"

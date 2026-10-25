@@ -8,6 +8,7 @@ Files for installing Accordion on a Linux machine as a system service, and the D
 | `systemd/accordion.sysusers` | `/usr/lib/sysusers.d/accordion.conf` | Creates the `accordion` user that Accordion runs as |
 | `debian/postinst`, `prerm`, `postrm` | Package scripts | Create the user, and turn the service on when installed and off when removed |
 | `debian/copyright` | `/usr/share/doc/accordion/copyright` | Accordion's and restic's licenses |
+| `install.sh` | Not installed | The install command's script, which downloads, checks, and installs the package for the machine |
 | `third-party-licenses.py` | `/usr/share/doc/accordion/third-party-licenses.txt` | Collects the licenses of the Rust libraries built into Accordion |
 
 The package also includes [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)), as `/usr/lib/accordion/restic`. It's kept apart from any restic your distribution installs, so Accordion always runs the version it was tested with. Backups to another computer over SFTP also need OpenSSH's client, which the package recommends.
@@ -23,10 +24,11 @@ The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi 
 
 ## Building the packages
 
-`scripts/build-packages.sh` builds `accordion_<version>_amd64.deb` and `accordion_<version>_arm64.deb` in `target/packages`, with their `SHA256SUMS`. The same commit gives the same files on any machine, which lets the developer check CI's release packages before signing them. For that, it needs:
+`scripts/build-packages.sh` builds `accordion_<version>_amd64.deb` and `accordion_<version>_arm64.deb` in `target/packages`, with `install.sh` and the `SHA256SUMS` of all three. The same commit gives the same files on any machine, which lets the developer check CI's release packages before signing them. For that, it needs:
 
 - **The Rust version in `rust-toolchain.toml`.** rustup installs it.
 - **zig 0.14.1 and cargo-zigbuild 0.23.4,** which build both architectures from one machine. Install cargo-zigbuild with `cargo install --locked cargo-zigbuild --version 0.23.4`.
+- **The release key's public half** in `packaging/release-key.pem`, which goes into `install.sh`. To test with another key, set `ACCORDION_RELEASE_KEY` to its public PEM file.
 - **A clone outside the workspace,** with no changes that aren't committed. In the workspace, Cargo builds your checkouts of the other repos instead of the versions in `Cargo.lock`.
 
 ```sh

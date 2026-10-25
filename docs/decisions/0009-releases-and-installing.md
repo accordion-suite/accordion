@@ -123,9 +123,9 @@ Each release is a Git tag on the `accordion` repo, such as `v0.1.0`. The release
 |---|---|
 | `accordion_0.1.0_amd64.deb` | The package for x86_64 machines |
 | `accordion_0.1.0_arm64.deb` | The package for ARM64 machines, such as a Raspberry Pi 5 |
-| `SHA256SUMS` | The checksum of each package |
+| `SHA256SUMS` | The checksum of each package and of `install.sh` |
 | `SHA256SUMS.sig` | The release signature over `SHA256SUMS` |
-| `install.sh` | The install command's script |
+| `install.sh` | The install command's script, with this release's version and the release key in it |
 
 Each package installs:
 
@@ -167,7 +167,7 @@ Releases are signed with an Ed25519 key, the release key. Its public half is in 
 
 The private half stays offline, on the developer's computer, protected by a passphrase. It is never stored in GitHub. Publishing a release takes these steps:
 
-1. Pushing a version tag starts a CI workflow that builds both packages and creates a draft release with `SHA256SUMS`.
+1. Pushing a version tag starts a CI workflow that builds both packages and `install.sh`, and creates a draft release with `SHA256SUMS`.
 2. The developer builds the same version locally and checks that the checksums match CI's. A match shows that the packages were built from the tagged code and nothing else.
 3. The developer signs `SHA256SUMS` with the release key, uploads `SHA256SUMS.sig`, and publishes the release.
 
