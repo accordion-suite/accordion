@@ -4,19 +4,19 @@ set -e
 
 if [ "$1" = configure ]; then
     systemd-sysusers accordion.conf
+    # A first install, or one after a purge: start every time the machine
+    # starts. After a remove without a purge, dpkg passes the old version,
+    # and the service is still turned on from before.
+    if [ -z "$2" ]; then
+        systemctl enable accordion.service
+    fi
     # Without a running systemd, such as while an image is being built, the
-    # service is turned on for the next start instead.
+    # service starts on the next boot instead. Otherwise start it now, or
+    # restart into the new version, unless the admin turned it off.
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload
-        if [ -z "$2" ]; then
-            # A first install: start now, and every time the machine starts.
-            systemctl enable --now accordion.service
-        else
-            # An upgrade: restart into the new version, unless the admin
-            # stopped the service.
-            systemctl try-restart accordion.service
+        if systemctl is-enabled --quiet accordion.service; then
+            systemctl restart accordion.service
         fi
-    elif [ -z "$2" ]; then
-        systemctl enable accordion.service
     fi
 fi

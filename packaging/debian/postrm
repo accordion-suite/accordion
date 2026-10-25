@@ -1,8 +1,14 @@
 #!/bin/sh
-# Runs after the package is removed. The data folder always stays, even on
-# purge, because it holds the household's files and nobody can get them back
-# once it's gone.
+# Runs after the package is removed or purged. The data folder always stays,
+# even on purge, because it holds the household's files and nobody can get
+# them back once it's gone.
 set -e
+
+# The service file is gone by now, so systemctl can't turn the service off.
+# Remove the link that turned it on instead.
+if [ "$1" = purge ]; then
+    rm -f /etc/systemd/system/multi-user.target.wants/accordion.service
+fi
 
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true

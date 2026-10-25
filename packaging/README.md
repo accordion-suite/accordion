@@ -6,7 +6,7 @@ Files for installing Accordion on a Linux machine as a system service, and the D
 |---|---|---|
 | `systemd/accordion.service` | `/usr/lib/systemd/system/accordion.service` | Starts Accordion when the machine starts, and restarts it if it stops unexpectedly |
 | `systemd/accordion.sysusers` | `/usr/lib/sysusers.d/accordion.conf` | Creates the `accordion` user that Accordion runs as |
-| `debian/postinst`, `prerm`, `postrm` | Package scripts | Create the user, and turn the service on when installed and off when removed |
+| `debian/postinst`, `prerm`, `postrm` | Package scripts | Create the user, start the service when installed, stop it when removed, and turn it off when purged |
 | `debian/copyright` | `/usr/share/doc/accordion/copyright` | Accordion's and restic's licenses |
 | `install.sh` | Not installed | The install command's script, which downloads, checks, and installs the package for the machine |
 | `third-party-licenses.py` | `/usr/share/doc/accordion/third-party-licenses.txt` | Collects the licenses of the Rust libraries built into Accordion |

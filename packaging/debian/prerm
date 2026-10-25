@@ -3,10 +3,8 @@
 # service running, and the new version's postinst restarts it.
 set -e
 
-if [ "$1" = remove ]; then
-    if [ -d /run/systemd/system ]; then
-        systemctl disable --now accordion.service || true
-    else
-        systemctl disable accordion.service || true
-    fi
+# Removing stops the service but leaves it turned on, so installing again
+# starts it again. Purging turns it off, in postrm.
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+    systemctl stop accordion.service || true
 fi

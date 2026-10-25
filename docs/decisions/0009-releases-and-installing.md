@@ -159,7 +159,7 @@ The script:
 
 For people who'd rather not pipe a script into `sudo`, the install guide also gives the same steps as separate commands.
 
-When the package is installed for the first time, it creates the `accordion` user, then turns on the service and starts it. On an upgrade, it restarts the service. Removing the package stops the service and turns it off. **Removing it, even with `apt purge`, never deletes `/var/lib/accordion`.** That folder holds the family's data, so deleting it is a separate, deliberate step that the guide explains.
+When the package is installed for the first time, it creates the `accordion` user, then turns on the service and starts it. On an upgrade, it restarts the service, unless the admin turned it off. Removing the package stops the service, and installing it again starts it again. Purging the package turns the service off. **Removing it, even with `apt purge`, never deletes `/var/lib/accordion`.** That folder holds the family's data, so deleting it is a separate, deliberate step that the guide explains.
 
 ### Signing
 
