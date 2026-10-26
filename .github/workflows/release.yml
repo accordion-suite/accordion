@@ -82,6 +82,9 @@ jobs:
           # The tag's own address works whether the release is published as
           # a pre-release or as the newest release.
           {
+            python3 -I -c 'import json, sys; print(json.load(sys.stdin)["notes"])' \
+              < release-files/update.json
+            echo
             echo "To install Accordion ${TAG#v} on Debian 12 or later, Ubuntu 24.04 or later, or Raspberry Pi OS (64-bit), run:"
             echo
             echo '```sh'

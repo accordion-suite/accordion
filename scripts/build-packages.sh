@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the release packages, accordion_<version>_amd64.deb and
-# accordion_<version>_arm64.deb, the install command's install.sh, and their
+# accordion_<version>_arm64.deb, the install command's install.sh, the
+# update.json that servers read to find out what's in the release, and their
 # SHA256SUMS.
 #
 # Usage: scripts/build-packages.sh [output folder]
@@ -76,6 +77,9 @@ release_key_line="$(grep -v -- '-----' "$release_key")"
 version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
 export SOURCE_DATE_EPOCH
+# Before the long build, so missing release notes stop it early.
+update_json="$(python3 -I packaging/update-json.py "$version" "$SOURCE_DATE_EPOCH" \
+    "packaging/release-notes/$version.md")"
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$repo=/build"
 export CFLAGS="-ffile-prefix-map=$cargo_home=/cargo -ffile-prefix-map=$repo=/build"
@@ -144,6 +148,9 @@ if grep -q '@[A-Z_]*@' "$out/install.sh"; then
     die "install.sh has a placeholder this script doesn't fill in."
 fi
 
-(cd "$out" && sha256sum "accordion_${version}_amd64.deb" "accordion_${version}_arm64.deb" install.sh > SHA256SUMS)
+printf '%s\n' "$update_json" > "$out/update.json"
+
+(cd "$out" && sha256sum "accordion_${version}_amd64.deb" "accordion_${version}_arm64.deb" install.sh \
+    update.json > SHA256SUMS)
 echo "Built in $out:"
 cat "$out/SHA256SUMS"
