@@ -99,6 +99,7 @@ These are allowed:
 
 - This machine: `127.0.0.0/8`, `::1`, and local sockets
 - The DNS servers in `/etc/resolv.conf`, since tests look up names. A program that phones home still gets caught when it connects to the address it looked up.
+- Multicast that routers never forward (`224.0.0.0/24` and `ff02::/16`), which stays on the home network, such as the mDNS announcements that let devices find the server
 - The ranges reserved for documentation (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, and `2001:db8::/32`), which tests use to stand for a computer that doesn't answer. Nothing on the internet uses them.
 
 The tests already use stand-ins on this machine for every outside service, such as a local S3 server and a local certificate authority. So a connection anywhere else means code reached out on its own, such as a library that phones home.

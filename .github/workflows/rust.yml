@@ -84,7 +84,27 @@ jobs:
           sudo install -m 0755 "${name}/rclone" /usr/local/bin/rclone
           rm -r "${name}" "${name}.zip"
           rclone version
-      - run: cargo test --workspace --all-features --locked
+      # Decision 11: the tests run under strace, and the build fails if
+      # anything connects to another machine. The script lives in the
+      # accordion repo, so other repos fetch it here. Building first keeps
+      # cargo's own downloads out of the check.
+      - name: Install strace
+        run: |
+          if ! command -v strace > /dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q strace
+          fi
+          strace -V | head -n 1
+      - name: Get the connection check
+        uses: actions/checkout@v7
+        with:
+          repository: accordion-suite/accordion
+          path: .accordion-ci
+          sparse-checkout: scripts/check-connections.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - run: cargo test --workspace --all-features --locked --no-run
+      - run: python3 .accordion-ci/scripts/check-connections.py cargo test --workspace --all-features --locked --offline
 
   deny:
     name: Licenses, advisories, and sources
