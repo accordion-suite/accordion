@@ -33,7 +33,7 @@ Every module ships with the suite. The admin turns modules on or off, and users 
 ## Principles
 
 - **Local-first.** Your data lives on your box. Apps keep an offline copy and sync when they can reach it.
-- **Zero telemetry.** No analytics, crash reporting, update pings, or third-party fonts and CDNs. Every outbound connection is listed in the admin panel, and you can turn each one off.
+- **Zero telemetry.** No analytics, crash reporting, update pings, or third-party fonts and CDNs. Accordion only connects to places you choose, such as your DNS provider and backup locations. An admin **Network** page that lists every connection and turns them off is planned.
 - **Open formats.** Files stay as files, mail is Maildir, notes are Markdown, and contacts and calendars are vCard and iCal. Leaving Accordion should be as easy as joining.
 - **Standards over lock-in.** Accordion speaks WebDAV, IMAP, SMTP, JMAP, CalDAV, and CardDAV, so the apps you already use, such as Thunderbird, iOS Mail, and DAVx5, keep working.
 - **Boring to run.** Automatic updates on a schedule you choose, automatic encrypted backups, and a health page anyone can read.

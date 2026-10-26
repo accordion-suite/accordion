@@ -14,5 +14,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [8](0008-backups.md) | How backups work | Accepted |
 | [9](0009-releases-and-installing.md) | How Accordion is released and installed | Accepted |
 | [10](0010-backups-a-compromised-server-cant-delete.md) | Backups a compromised server can't delete | Accepted |
+| [11](0011-the-network-page.md) | The Network page | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
