@@ -259,6 +259,7 @@ async fn the_owner_step_creates_one_owner_and_signs_them_in() {
             modules: Default::default(),
             backup: None,
             storage: None,
+            updates: None,
         },
         &site,
     )

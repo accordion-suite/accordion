@@ -1,0 +1,17 @@
+[package]
+name = "accordion-update"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# Checks release files against the release key (decision 12). The server uses
+# it to check for updates, and the update helper, which runs as root, uses it
+# again before installing one, so it stays small.
+[dependencies]
+ring = "0.17.14"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+base64ct = { version = "1.8.3", features = ["alloc"] }

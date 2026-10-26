@@ -1,9 +1,9 @@
 //! The health page: how the server's certificate, its name's address record,
-//! `accordion.local`, stored files, and backups are doing, for the household
-//! admin.
+//! `accordion.local`, stored files, backups, and updates are doing, for the
+//! household admin.
 //!
 //! The spec's health page also covers disk space, SMART status, encryption,
-//! mail, and updates. Each will add a check here once it exists.
+//! and mail. Each will add a check here once it exists.
 
 use std::fmt::Write as _;
 use std::time::{Duration, SystemTime};
@@ -25,6 +25,7 @@ use tokio::sync::watch;
 
 use crate::AppState;
 use crate::setup::asset;
+use crate::updates::UpdateStatus;
 use accordion_module::ApiError;
 use accordion_module::Authenticated;
 
@@ -47,6 +48,8 @@ pub struct Health {
     pub storage: Option<watch::Receiver<StorageStatus>>,
     /// Set once the backup schedule is running.
     pub backup: Option<watch::Receiver<BackupStatus>>,
+    /// Set once update checks are running.
+    pub updates: Option<watch::Receiver<UpdateStatus>>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -117,6 +120,9 @@ impl Health {
         }
         if let Some(backup) = &self.backup {
             checks.push(backup_check(&backup.borrow(), now));
+        }
+        if let Some(updates) = &self.updates {
+            checks.push(updates_check(&updates.borrow()));
         }
         checks
     }
@@ -412,6 +418,82 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
 }
 
 /// Such as "3 a.m." or "midnight".
+fn updates_check(status: &UpdateStatus) -> Check {
+    let check = |state, summary: String| Check {
+        id: "updates",
+        title: "Updates",
+        state,
+        summary,
+    };
+    let installed = &status.installed;
+    if let Some(release) = status.waiting() {
+        let (state, urgency) = if release.security {
+            (
+                Level::Warning,
+                " It fixes a security problem, so install it soon.",
+            )
+        } else {
+            (Level::Ok, "")
+        };
+        return check(
+            state,
+            format!(
+                "Accordion {} is available, released {}. This server runs {installed}.{urgency} \
+                 The Updates page says how to install it.",
+                release.version,
+                long_date(&release.published),
+            ),
+        );
+    }
+    match &status.last_check {
+        None => check(
+            Level::Ok,
+            format!(
+                "This server runs Accordion {installed}. Accordion checks for updates once a \
+                 day, and hasn't checked yet."
+            ),
+        ),
+        Some(last) => match &last.problem {
+            Some(problem) => check(
+                Level::Warning,
+                format!(
+                    "This server runs Accordion {installed}. The last check for updates didn't \
+                     work. {problem}. Accordion tries again in a few hours."
+                ),
+            ),
+            None => check(
+                Level::Ok,
+                format!("This server runs Accordion {installed}, which is up to date."),
+            ),
+        },
+    }
+}
+
+/// A date such as `2026-11-02`, as "November 2, 2026".
+fn long_date(date: &str) -> String {
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    let mut parts = date.split('-').map(str::parse::<usize>);
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(Ok(year)), Some(Ok(month @ 1..=12)), Some(Ok(day))) => {
+            format!("{} {day}, {year}", MONTHS[month - 1])
+        }
+        _ => date.to_owned(),
+    }
+}
+
 fn hour_label(hour: u8) -> String {
     match hour {
         0 => "midnight".to_owned(),
@@ -518,6 +600,7 @@ mod tests {
             local_name: None,
             storage: None,
             backup: None,
+            updates: None,
         }
     }
 

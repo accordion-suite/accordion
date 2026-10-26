@@ -21,6 +21,7 @@ use accordion_module::{Services, Stopping};
 use accordion_server::health::{Health, NameHealth};
 use accordion_server::network::AdminAccess;
 use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
+use accordion_server::updates::{UpdateSource, Updates};
 use accordion_server::{AppState, Site, modules, router};
 use accordion_types::Role;
 use tokio::net::TcpListener;
@@ -138,6 +139,12 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     let identity = Identity::new(db.clone()).await?;
     let storage = Storage::open(db.clone(), identity.clone(), &data_dir.join("storage")).await?;
     let backup = Backup::open(db.clone(), storage.clone(), &data_dir, restic_program()?).await?;
+    let updates = Updates::open(
+        db.clone(),
+        UpdateSource::github(),
+        env!("CARGO_PKG_VERSION").parse()?,
+    )
+    .await?;
     let gateway_dir = gateway_dir(&data_dir);
     let has_owner = identity.has_owner().await?;
     let settings = Settings::load(&gateway_dir)?;
@@ -161,11 +168,13 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     let health = Health {
         storage: Some(storage.status()),
         backup: Some(backup.status()),
+        updates: Some(updates.status()),
         ..Health::default()
     };
     let mut background = JoinSet::new();
     background.spawn(storage.clone().maintain(until_stopped()));
     background.spawn(backup.clone().maintain(until_stopped()));
+    background.spawn(updates.clone().run(until_stopped()));
     let modules = modules::start(
         modules::all(),
         &Services {
@@ -188,6 +197,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 modules,
                 backup: Some(backup),
                 storage: Some(storage),
+                updates: Some(updates),
             },
             until_stopped(),
         )
@@ -223,6 +233,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         modules,
         backup: Some(backup),
         storage: Some(storage),
+        updates: Some(updates),
     };
 
     let local_name = if local_name_on {

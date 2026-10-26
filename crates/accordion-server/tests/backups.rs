@@ -85,6 +85,7 @@ async fn start(client: &str) -> Server {
             modules: Default::default(),
             backup: Some(backup),
             storage: None,
+            updates: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

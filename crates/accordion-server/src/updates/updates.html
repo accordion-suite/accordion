@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Updates</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/updates.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Updates</h1>
+
+  <form id="sign-in" hidden>
+    <p>Sign in with an admin account to manage updates.</p>
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+
+  <div id="manage" hidden>
+    <section>
+      <p id="installed"></p>
+      <p id="summary"></p>
+    </section>
+
+    <section id="waiting" hidden>
+      <h2 id="waiting-title"></h2>
+      <p id="waiting-published" class="hint"></p>
+      <p id="waiting-security" hidden><strong>This release fixes a security problem.</strong> Install it soon.</p>
+      <p id="waiting-notes"></p>
+      <p><a id="waiting-link" rel="noreferrer">Read the full release notes</a></p>
+      <p>To install it, run this command on the server. It keeps everything on the server, and restarts Accordion in the new version:</p>
+      <pre><code>curl -fsSL https://github.com/accordion-suite/accordion/releases/latest/download/install.sh | sudo sh</code></pre>
+    </section>
+
+    <section>
+      <p id="last-check"></p>
+      <button id="check" type="button" class="secondary">Check now</button>
+      <p id="check-progress" class="hint" role="status" hidden>Checking for updates.</p>
+    </section>
+  </div>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

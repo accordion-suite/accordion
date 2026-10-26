@@ -13,6 +13,7 @@ mod people;
 mod requests;
 mod session;
 pub mod setup;
+pub mod updates;
 mod welcome;
 
 use std::sync::Arc;
@@ -43,6 +44,8 @@ pub struct AppState {
     pub backup: Option<Backup>,
     /// Everyone's files, for the People page when it deletes an account.
     pub storage: Option<Storage>,
+    /// Checks for newer releases, once the server is running.
+    pub updates: Option<updates::Updates>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -100,6 +103,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(health::routes())
                 .merge(backups::routes())
                 .merge(people::routes())
+                .merge(updates::routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,

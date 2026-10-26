@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#8c1badb30f9f506bba7fa9ed06612ecace8f0fd1"
+source = "git+https://github.com/accordion-suite/accordion-core#48032e0127e886a6fbbd86d361488169a7bee87d"
 dependencies = [
  "accordion-types",
  "argon2",
@@ -45,7 +45,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#140e64f8e192159a8ca43be889ab050cfc173424"
+source = "git+https://github.com/accordion-suite/accordion-gateway#455bcda39931c55158cc5c8d6e5cc222908f40a8"
 dependencies = [
  "axum",
  "hickory-resolver",
@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#8c1badb30f9f506bba7fa9ed06612ecace8f0fd1"
+source = "git+https://github.com/accordion-suite/accordion-core#48032e0127e886a6fbbd86d361488169a7bee87d"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -90,14 +90,21 @@ dependencies = [
  "accordion-gateway",
  "accordion-module",
  "accordion-types",
+ "accordion-update",
  "axum",
  "base64ct",
  "getrandom 0.4.3",
  "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
  "rcgen",
+ "ring",
+ "rustls",
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror",
  "tokio",
  "tower",
  "tracing",
@@ -107,10 +114,19 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#8c1badb30f9f506bba7fa9ed06612ecace8f0fd1"
+source = "git+https://github.com/accordion-suite/accordion-core#48032e0127e886a6fbbd86d361488169a7bee87d"
 dependencies = [
  "serde",
  "uuid",
+]
+
+[[package]]
+name = "accordion-update"
+version = "0.1.0"
+dependencies = [
+ "base64ct",
+ "ring",
+ "thiserror",
 ]
 
 [[package]]

@@ -16,17 +16,26 @@ accordion-drive = { git = "https://github.com/accordion-suite/accordion-drive", 
 accordion-gateway = { git = "https://github.com/accordion-suite/accordion-gateway", version = "0.1.0" }
 accordion-module = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 accordion-types = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
+accordion-update = { version = "0.1.0", path = "../accordion-update" }
 axum = "0.8.9"
 base64ct = { version = "1.8.3", features = ["alloc"] }
 getrandom = "0.4.3"
+http-body-util = "0.1.5"
+# For checking for updates. The same versions and features as the gateway's
+# client, so the server builds one copy.
+hyper = "1.12.0"
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "http2", "ring", "rustls-platform-verifier"] }
+hyper-util = { version = "0.1.21", features = ["client-legacy", "http1", "http2", "tokio"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+thiserror = "2.0.21"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
-http-body-util = "0.1.5"
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
+ring = "0.17.14"
 tempfile = "3.27.0"
 tower = { version = "0.5.3", features = ["util"] }

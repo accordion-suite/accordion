@@ -85,6 +85,15 @@ button {
 button:disabled { opacity: 0.6; cursor: default; }
 a { color: var(--accent); }
 code { font-size: 0.95em; }
+/* A command to copy, such as the install command. It wraps, so it fits a
+   phone's screen. */
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--page);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
 .error { color: var(--error); font-weight: 600; margin-top: 16px; }
 [hidden] { display: none !important; }
 

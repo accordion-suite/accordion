@@ -67,6 +67,7 @@ async fn start() -> Server {
             modules,
             backup: None,
             storage: None,
+            updates: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )
