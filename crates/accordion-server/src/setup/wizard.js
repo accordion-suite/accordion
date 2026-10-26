@@ -266,6 +266,14 @@ $("restore").addEventListener("submit", async (event) => {
   showError("");
   const button = event.submitter;
   button.disabled = true;
+  // A location that doesn't answer fails after 10 seconds, so a search
+  // that runs longer is reading a large or slow backup.
+  const line = $("find-progress");
+  line.textContent = "Looking for backups. This usually takes a few seconds.";
+  line.hidden = false;
+  const later = setTimeout(() => {
+    line.textContent = "Still looking. Over a slow connection, this can take a minute or two.";
+  }, 15 * 1000);
   try {
     const { snapshots } = await api("POST", "/api/setup/restore/find", {
       ...restorePlace(),
@@ -276,6 +284,8 @@ $("restore").addEventListener("submit", async (event) => {
     forgetExpired(error);
     showError(error.message);
   } finally {
+    clearTimeout(later);
+    line.hidden = true;
     button.disabled = false;
   }
 });

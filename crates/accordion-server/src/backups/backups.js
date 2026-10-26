@@ -7,6 +7,10 @@ const PROBLEM = "Accordion ran into a problem. Try again in a moment.";
 // How often the page checks again while a backup or test runs.
 const RUNNING_MS = 3 * 1000;
 
+// When adding a location gets a second, longer note. A location that
+// doesn't answer has already failed by then, after 10 seconds.
+const STILL_WORKING_MS = 15 * 1000;
+
 let status = null;
 // What to do once the admin confirms their password.
 let afterConfirm = null;
@@ -210,6 +214,22 @@ async function removeTarget(target, button) {
   if (sure) await act(button, "DELETE", `/api/backups/targets/${target.id}`);
 }
 
+// Shows what's happening in the line `id` while a slow request runs, and
+// switches to `later` if it takes a while. Returns a function that hides it.
+function whileWaiting(id, first, later) {
+  const line = $(id);
+  line.textContent = first;
+  line.hidden = false;
+  const timer = setTimeout(() => {
+    line.textContent = later;
+  }, STILL_WORKING_MS);
+  return () => {
+    clearTimeout(timer);
+    line.hidden = true;
+    line.textContent = "";
+  };
+}
+
 function onSubmit(id, action) {
   $(id).addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -316,10 +336,23 @@ onSubmit("add-target", async () => {
       password: $("target-rest-password").value,
     },
   }[kind];
-  const { status: code, data } = await api("POST", "/api/backups/targets", {
-    name: $("target-name").value,
-    ...place,
-  });
+  const done = whileWaiting(
+    "add-progress",
+    kind === "folder"
+      ? "Setting up the folder for backups."
+      : "Connecting to the location and setting it up for backups. This usually takes a few seconds.",
+    "Still setting it up. Over a slow connection, this can take a minute or two.",
+  );
+  let response;
+  try {
+    response = await api("POST", "/api/backups/targets", {
+      name: $("target-name").value,
+      ...place,
+    });
+  } finally {
+    done();
+  }
+  const { status: code, data } = response;
   if (code !== 201) throw new Error(data.error || PROBLEM);
   for (const id of [
     "target-name",
