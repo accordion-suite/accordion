@@ -118,7 +118,9 @@ function render() {
   }
 
   const check = status.last_check;
-  if (!check) {
+  if (!status.check_on) {
+    $("last-check").textContent = "The update check is turned off on the network page, so Accordion only checks when you select Check now.";
+  } else if (!check) {
     $("last-check").textContent = "Accordion checks for updates once a day. It hasn't checked yet.";
   } else if (check.problem) {
     $("last-check").textContent = `The last check for updates, ${when(check.at)}, didn't work. ${check.problem}. Accordion tries again in a few hours.`;

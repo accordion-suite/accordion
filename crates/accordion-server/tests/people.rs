@@ -56,6 +56,7 @@ async fn start() -> Server {
             backup: None,
             storage: Some(storage.clone()),
             updates: None,
+            switches: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     );

@@ -84,6 +84,9 @@ struct StatusView {
     /// Whether `newest` is newer than this server.
     waiting: bool,
     automatic: bool,
+    /// Accordion checks for updates on its own. The Network page turns it
+    /// off.
+    check_on: bool,
     /// Whether this page can install the waiting release, rather than the
     /// install command.
     can_install: bool,
@@ -174,6 +177,7 @@ impl From<&UpdateStatus> for StatusView {
             }),
             waiting: status.waiting().is_some(),
             automatic: status.automatic,
+            check_on: status.check_on,
             can_install: status.installable().is_some(),
             installs_from: status.installs_from().map(millis),
             installing: status.installing.as_ref().map(|installing| InstallingView {

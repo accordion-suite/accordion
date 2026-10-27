@@ -282,6 +282,22 @@ impl Updates {
             .send_modify(|status| status.automatic = automatic);
         Ok(())
     }
+
+    /// Whether Accordion checks for and downloads updates on its own.
+    /// Turned off, it waits for an admin to select **Check now** or
+    /// **Install now**.
+    pub async fn set_check_on(&self, on: bool) -> Result<(), Error> {
+        self.inner
+            .db
+            .write(move |tx| {
+                tx.execute("UPDATE update_state SET check_on = ?1 WHERE id = 1", [on])
+                    .map_err(Error::from)
+            })
+            .await?;
+        self.inner.status.send_modify(|status| status.check_on = on);
+        self.inner.wake.notify_one();
+        Ok(())
+    }
 }
 
 async fn remove(path: &std::path::Path) -> io::Result<()> {

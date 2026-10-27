@@ -58,6 +58,7 @@ async fn start_server(site: &Site) -> (tempfile::TempDir, Router) {
                 backup: None,
                 storage: None,
                 updates: None,
+                switches: None,
             },
             site,
         ),

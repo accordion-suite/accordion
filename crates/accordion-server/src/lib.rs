@@ -3,6 +3,7 @@
 
 mod account;
 mod backups;
+pub mod connections;
 mod device;
 pub mod health;
 mod home;
@@ -46,6 +47,8 @@ pub struct AppState {
     pub storage: Option<Storage>,
     /// Checks for newer releases, once the server is running.
     pub updates: Option<updates::Updates>,
+    /// The Network page's switches, once the server is running.
+    pub switches: Option<connections::Switches>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -104,6 +107,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(backups::routes())
                 .merge(people::routes())
                 .merge(updates::routes())
+                .merge(connections::routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,

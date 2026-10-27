@@ -99,6 +99,16 @@ const MIGRATIONS: &[Migration] = &[
         );
         ",
     },
+    Migration {
+        version: 3,
+        name: "turning off the update check",
+        sql: "
+        -- 1 checks for and downloads updates on its own, 0 only when an
+        -- admin selects Check now or Install now (decision 11).
+        ALTER TABLE update_state ADD COLUMN check_on INTEGER NOT NULL DEFAULT 1
+            CHECK (check_on IN (0, 1));
+        ",
+    },
 ];
 
 /// Where to look for releases, and the key they must be signed with.
@@ -183,6 +193,9 @@ pub struct UpdateStatus {
     /// Updates install after the nightly backup, rather than waiting for an
     /// admin.
     pub automatic: bool,
+    /// Accordion checks for and downloads updates on its own. Turned off on
+    /// the Network page, it connects only when an admin asks it to.
+    pub check_on: bool,
     /// The update helper is installed, so this server can install updates
     /// itself.
     pub can_install: bool,
@@ -223,7 +236,7 @@ impl UpdateStatus {
     /// When the waiting release installs on its own, at the earliest, if it
     /// will: after the nightly backup on or after this time.
     pub fn installs_from(&self) -> Option<SystemTime> {
-        if !self.automatic {
+        if !self.automatic || !self.check_on {
             return None;
         }
         let release = self.installable()?;
@@ -353,6 +366,7 @@ struct Stored {
     last_check: Option<CheckResult>,
     newest: Option<(Vec<u8>, i64)>,
     automatic: bool,
+    check_on: bool,
     installing: Option<Installing>,
 }
 
@@ -409,7 +423,8 @@ impl Updates {
                 )?;
                 let state = tx.query_row(
                     "SELECT check_minute, last_check_at, last_check_problem, newest_manifest,
-                            newest_first_seen, automatic, requested_version, requested_at
+                            newest_first_seen, automatic, requested_version, requested_at,
+                            check_on
                      FROM update_state WHERE id = 1",
                     [],
                     |row| {
@@ -428,6 +443,7 @@ impl Updates {
                             last_check,
                             newest: manifest.zip(first_seen),
                             automatic: row.get(5)?,
+                            check_on: row.get(8)?,
                             installing: requested.zip(requested_at).map(|(version, at)| {
                                 Installing {
                                     version,
@@ -456,6 +472,7 @@ impl Updates {
             last_check: state.last_check,
             checking: false,
             automatic: state.automatic,
+            check_on: state.check_on,
             can_install,
             installing: state.installing,
             install_problem: None,
@@ -482,6 +499,16 @@ impl Updates {
         self.inner.status.subscribe()
     }
 
+    /// The host releases come from, such as `github.com`, for the Network
+    /// page.
+    pub fn source_host(&self) -> String {
+        let base = &self.inner.source.base;
+        base.parse::<Uri>()
+            .ok()
+            .and_then(|uri| uri.host().map(str::to_owned))
+            .unwrap_or_else(|| base.clone())
+    }
+
     /// Checks on schedule, installs updates after the nightly backup, and
     /// collects the helper's results, until `stopped` completes. `backup` is
     /// the backup status, where nightly backups show up.
@@ -506,7 +533,13 @@ impl Updates {
                 .map(|night| night.finished_at)
         });
         loop {
-            let wait = self.until_next_check(SystemTime::now());
+            // Turning the check on or off wakes this loop to look again.
+            let wait = self
+                .inner
+                .status
+                .borrow()
+                .check_on
+                .then(|| self.until_next_check(SystemTime::now()));
             let collect = if self.inner.status.borrow().installing.is_some() {
                 RESULT_POLL
             } else {
@@ -514,7 +547,12 @@ impl Updates {
             };
             let event = tokio::select! {
                 () = &mut stopped => Event::Stop,
-                () = tokio::time::sleep(wait) => Event::Check,
+                () = async {
+                    match wait {
+                        Some(wait) => tokio::time::sleep(wait).await,
+                        None => std::future::pending().await,
+                    }
+                } => Event::Check,
                 () = tokio::time::sleep(collect) => Event::Collect,
                 () = self.inner.wake.notified() => Event::Wake,
                 changed = async {

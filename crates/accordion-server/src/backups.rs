@@ -108,6 +108,8 @@ fn api_error(err: backup::Error) -> ApiError {
         E::NoRecoveryKey
         | E::KeyExists
         | E::NoTargets
+        | E::AllPaused
+        | E::Paused(_)
         | E::Busy
         | E::WrongKey(_)
         | E::TargetExists => StatusCode::CONFLICT,
@@ -146,6 +148,8 @@ struct TargetView {
     /// The target refuses deletes, so a compromised server can't delete the
     /// backups there.
     append_only: bool,
+    /// Turned off on the Network page, so nothing connects to it.
+    paused: bool,
     /// For an append-only target, as of the last weekly upkeep.
     stored_bytes: Option<u64>,
     oldest_backup: Option<u64>,
@@ -201,6 +205,7 @@ impl From<&TargetStatus> for TargetView {
                 _ => status.target.location.clone(),
             },
             append_only: status.target.append_only,
+            paused: status.target.paused,
             stored_bytes: status.stored_bytes,
             oldest_backup: status.oldest_backup.map(millis),
             last_backup: status.last_backup.as_ref().map(Into::into),
@@ -435,8 +440,16 @@ async fn run_now(
     Authenticated(me): Authenticated,
 ) -> Result<StatusCode, ApiError> {
     let backup = service(&state, &me)?;
-    if backup.status().borrow().targets.is_empty() {
-        return Err(api_error(backup::Error::NoTargets));
+    let paused = {
+        let status = backup.status();
+        let targets = &status.borrow().targets;
+        if targets.is_empty() {
+            return Err(api_error(backup::Error::NoTargets));
+        }
+        targets.iter().all(|target| target.target.paused)
+    };
+    if paused {
+        return Err(api_error(backup::Error::AllPaused));
     }
     // It shows as running before this answers, so the page that's waiting
     // for it doesn't see it idle and stop.

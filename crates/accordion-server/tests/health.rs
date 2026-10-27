@@ -5,6 +5,7 @@ use accordion_core::identity::{AuthMethod, Client, Identity, NewUser};
 use accordion_core::storage::StorageStatus;
 use accordion_gateway::Peer;
 use accordion_gateway::certificates::{Authority, CertificateStatus};
+use accordion_gateway::dns::ProviderKind;
 use accordion_server::health::{Health, NameHealth};
 use accordion_server::network::AdminAccess;
 use accordion_server::{AppState, Site, router};
@@ -56,6 +57,7 @@ async fn start_with(
         name: Some(NameHealth {
             name: HOST.parse().unwrap(),
             authority: Authority::LetsEncryptStaging,
+            provider: ProviderKind::Desec,
             certificate: watch::channel(CertificateStatus::default()).1,
             address: None,
         }),
@@ -74,6 +76,7 @@ async fn start_with(
             backup: None,
             storage: None,
             updates: None,
+            switches: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

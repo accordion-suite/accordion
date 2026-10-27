@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network</title>
+<link rel="stylesheet" href="/setup.css">
+<script src="/network.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Network</h1>
+
+  <form id="sign-in" hidden>
+    <p>Sign in with an admin account to see the server's connections.</p>
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+
+  <div id="manage" hidden>
+    <p>These are all the connections Accordion makes to other computers, and why. None of them report how you use Accordion.</p>
+
+    <div id="connections"></div>
+
+    <section>
+      <h2>What this page doesn't cover</h2>
+      <ul>
+        <li>Connections the server's operating system makes on its own, such as system updates and setting the clock.</li>
+        <li>Looking up names, such as <code>github.com</code>. Those go through your network's DNS server, which is usually your router.</li>
+        <li>Backups to a USB disk or another folder on this server, which don't use the network.</li>
+      </ul>
+    </section>
+  </div>
+
+  <p id="error" class="error" role="alert" hidden></p>
+</main>
+</body>
+</html>

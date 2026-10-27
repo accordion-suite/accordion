@@ -14,6 +14,7 @@ use accordion_core::storage::StorageStatus;
 use accordion_gateway::ServerName;
 use accordion_gateway::address::AddressStatus;
 use accordion_gateway::certificates::{Authority, CertificateStatus};
+use accordion_gateway::dns::ProviderKind;
 use accordion_gateway::local_name::{LOCAL_NAME, LocalNameStatus};
 use accordion_types::Role;
 use axum::extract::State;
@@ -58,6 +59,8 @@ pub struct Health {
 pub struct NameHealth {
     pub name: ServerName,
     pub authority: Authority,
+    /// The DNS provider that holds the name's records.
+    pub provider: ProviderKind,
     pub certificate: watch::Receiver<CertificateStatus>,
     /// `None` when Accordion leaves the name's address record alone.
     pub address: Option<watch::Receiver<AddressStatus>>,
@@ -346,10 +349,23 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
         );
     }
 
+    if status.targets.iter().all(|target| target.target.paused) {
+        return check(
+            Level::Warning,
+            "Backups are paused for every location, so nothing is being backed up. Turn one \
+             back on from the Network page."
+                .to_owned(),
+        );
+    }
+
     let mut state = Level::Ok;
     let mut notes = Vec::new();
     for target in &status.targets {
         let name = &target.target.name;
+        if target.target.paused {
+            notes.push(format!("Backups to {name} are paused on the Network page."));
+            continue;
+        }
         let problem =
             |outcome: &accordion_core::backup::Outcome| outcome.problem.clone().unwrap_or_default();
         let age = target
@@ -441,6 +457,15 @@ fn updates_check(status: &UpdateStatus, now: SystemTime) -> Check {
         return check(Level::Warning, problem.clone());
     }
     let Some(release) = status.waiting() else {
+        if !status.check_on {
+            return check(
+                Level::Ok,
+                format!(
+                    "This server runs Accordion {installed}. Accordion doesn't check for updates \
+                     on its own, because the update check is turned off on the Network page."
+                ),
+            );
+        }
         return match &status.last_check {
             None => check(
                 Level::Ok,
@@ -644,6 +669,7 @@ mod tests {
             name: Some(NameHealth {
                 name: "accordion.example.com".parse().unwrap(),
                 authority,
+                provider: ProviderKind::Desec,
                 certificate: watch::channel(certificate).1,
                 address: address.map(|address| watch::channel(address).1),
             }),
@@ -864,6 +890,7 @@ mod tests {
                 location: "/media/usb/backups".into(),
                 created_at: "2026-10-22T00:00:00.000Z".into(),
                 append_only: false,
+                paused: false,
             },
             last_backup,
             last_good_backup: last_good.map(|ago| now() - ago),

@@ -63,8 +63,15 @@ function show(id) {
 
 function describeTarget(target) {
   const lines = [];
+  if (target.paused) {
+    lines.push(
+      "Paused. Accordion doesn't back up to this location, check it, or test restoring from it until you turn it back on from the Network page.",
+    );
+  }
   const backup = target.last_backup;
-  if (!backup) {
+  if (!backup && target.paused) {
+    lines.push("No backups yet.");
+  } else if (!backup) {
     lines.push(`No backups yet. The first one starts at ${hourLabel(status.hour)}.`);
   } else if (backup.ok) {
     lines.push(`Last backed up ${when(backup.finished_at)}.`);
@@ -124,7 +131,7 @@ function renderTargets() {
     test.type = "button";
     test.className = "secondary";
     test.textContent = "Test restore";
-    test.disabled = status.running || !target.last_good_backup;
+    test.disabled = status.running || target.paused || !target.last_good_backup;
     test.addEventListener("click", () => act(test, "POST", `/api/backups/targets/${target.id}/test`));
     const remove = document.createElement("button");
     remove.type = "button";

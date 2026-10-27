@@ -18,6 +18,7 @@ use accordion_gateway::redirect::redirect_to_https;
 use accordion_gateway::tls::{self, CertStore};
 use accordion_gateway::{Peer, ServerName};
 use accordion_module::{Services, Stopping};
+use accordion_server::connections::Switches;
 use accordion_server::health::{Health, NameHealth};
 use accordion_server::network::AdminAccess;
 use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
@@ -149,6 +150,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         &data_dir,
     )
     .await?;
+    let switches = Switches::open(db.clone()).await?;
     let gateway_dir = gateway_dir(&data_dir);
     let has_owner = identity.has_owner().await?;
     let settings = Settings::load(&gateway_dir)?;
@@ -202,6 +204,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 backup: Some(backup),
                 storage: Some(storage),
                 updates: Some(updates),
+                switches: Some(switches),
             },
             until_stopped(),
         )
@@ -239,6 +242,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         backup: Some(backup),
         storage: Some(storage),
         updates: Some(updates),
+        switches: Some(switches),
     };
 
     let local_name = if local_name_on {
@@ -449,12 +453,19 @@ where
     let certs = CertStore::new();
     let renewer = Renewer::from_settings(gateway_dir, &settings, certs.clone())?;
     let publisher = match address {
-        Some(source) => Some(AddressPublisher::from_settings(&settings, source)?),
+        Some(source) => {
+            let publisher = AddressPublisher::from_settings(&settings, source)?;
+            Some(match &state.switches {
+                Some(switches) => publisher.with_switch(switches.address()),
+                None => publisher,
+            })
+        }
         None => None,
     };
     state.health.name = Some(NameHealth {
         name: settings.name.clone(),
         authority: settings.authority,
+        provider: settings.provider,
         certificate: renewer.status(),
         address: publisher.as_ref().map(AddressPublisher::status),
     });
