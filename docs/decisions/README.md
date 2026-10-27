@@ -16,5 +16,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [10](0010-backups-a-compromised-server-cant-delete.md) | Backups a compromised server can't delete | Accepted |
 | [11](0011-the-network-page.md) | The Network page | Accepted |
 | [12](0012-updates.md) | How Accordion updates itself | Accepted |
+| [13](0013-the-web-app.md) | How the web app is built | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
