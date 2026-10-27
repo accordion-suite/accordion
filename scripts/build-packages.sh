@@ -9,7 +9,9 @@
 # The output folder defaults to target/packages. install.sh, the server, and
 # the update helper hold the public release key from
 # packaging/release-key.pem. To test with another key, set
-# ACCORDION_RELEASE_KEY to its PEM file. CI runs this for each
+# ACCORDION_RELEASE_KEY to its PEM file. To build only one architecture's
+# package, such as for a test, set ACCORDION_ARCHES to amd64 or arm64. CI runs
+# this for each
 # release, and the developer runs it again before signing one, so the two
 # builds can be compared (decision 9). For that, the same commit must give
 # the same files on any machine:
@@ -47,6 +49,12 @@ die() {
     exit 1
 }
 
+arches=(${ACCORDION_ARCHES:-amd64 arm64})
+for arch in "${arches[@]}"; do
+    [[ -n "${RUST_TARGET[$arch]:-}" ]] \
+        || die "ACCORDION_ARCHES is \"${ACCORDION_ARCHES}\". Set it to amd64, arm64, or both."
+done
+
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo"
 out="$(mkdir -p "${1:-target/packages}" && cd "${1:-target/packages}" && pwd)"
@@ -59,7 +67,11 @@ umask 022
 [[ -z "$(git status --porcelain)" ]] \
     || die "This checkout has changes that aren't committed. Packages are built from a commit, so commit or stash them first."
 rustup toolchain install --no-self-update >/dev/null
-rustup target add "${RUST_TARGET[@]}" >/dev/null
+rust_targets=()
+for arch in "${arches[@]}"; do
+    rust_targets+=("${RUST_TARGET[$arch]}")
+done
+rustup target add "${rust_targets[@]}" >/dev/null
 # Crates from other repos should come from GitHub, not from a local path.
 if cargo tree --locked -p accordion-server -e normal --prefix none \
     | grep '^accordion-[a-z-]* v[^ ]* (/' | grep -qv " ($repo/"; then
@@ -92,14 +104,15 @@ export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$re
 export CFLAGS="-ffile-prefix-map=$cargo_home=/cargo -ffile-prefix-map=$repo=/build"
 
 targets=()
-for target in "${RUST_TARGET[@]}"; do
+for target in "${rust_targets[@]}"; do
     targets+=(--target "$target")
 done
 cargo zigbuild --locked --release -p accordion-server -p accordion-update "${targets[@]}"
 
-python3 -I packaging/third-party-licenses.py "${RUST_TARGET[@]}" > target/third-party-licenses.txt
+python3 -I packaging/third-party-licenses.py "${rust_targets[@]}" > target/third-party-licenses.txt
 
-for arch in amd64 arm64; do
+debs=()
+for arch in "${arches[@]}"; do
     restic="restic_${RESTIC_VERSION}_linux_${arch}.bz2"
     mkdir -p target/restic
     if [[ ! -f "target/restic/$restic" ]]; then
@@ -150,6 +163,7 @@ EOF
     # more, and machines have different numbers of cores.
     dpkg-deb --root-owner-group --threads-max=1 -Zxz \
         --build "$root" "$out/accordion_${version}_${arch}.deb"
+    debs+=("accordion_${version}_${arch}.deb")
 done
 
 sed -e "s|@VERSION@|$version|" -e "s|@RELEASE_KEY@|$release_key_line|" \
@@ -161,7 +175,6 @@ fi
 
 printf '%s\n' "$update_json" > "$out/update.json"
 
-(cd "$out" && sha256sum "accordion_${version}_amd64.deb" "accordion_${version}_arm64.deb" install.sh \
-    update.json > SHA256SUMS)
+(cd "$out" && sha256sum "${debs[@]}" install.sh update.json > SHA256SUMS)
 echo "Built in $out:"
 cat "$out/SHA256SUMS"

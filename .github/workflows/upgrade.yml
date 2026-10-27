@@ -1,0 +1,57 @@
+# Tests that a server's data survives updates (decision 12), with
+# scripts/upgrade-test.sh. It installs the newest published release, updates
+# by hand and through the update helper, and checks that a release that
+# doesn't start rolls back.
+#
+# It takes about 30 minutes, mostly the helper's wait to see that a new
+# version stays up, so it runs on pushes to main and release tags rather than
+# on pull requests. A release is signed only once this passes for its tag.
+
+name: Upgrade test
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to main replaces a test that's still running.
+concurrency:
+  group: upgrade-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upgrade:
+    name: Upgrade (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          # The Raspberry Pi's architecture.
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The test starts from the newest release tag.
+          fetch-depth: 0
+          persist-credentials: false
+      # The test releases are built the way real ones are.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      - name: Install cargo-zigbuild
+        run: cargo install --locked cargo-zigbuild --version 0.23.4
+      - name: Build the test releases
+        run: scripts/upgrade-test.sh build "$RUNNER_TEMP/upgrade-test"
+      # The runner is a throwaway machine with systemd, so the test can
+      # install Accordion for the whole machine.
+      - name: Run the test
+        run: sudo scripts/upgrade-test.sh run "$RUNNER_TEMP/upgrade-test"

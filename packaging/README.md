@@ -55,7 +55,7 @@ To make a release:
    git push origin v0.1.0
    ```
 
-   The release workflow builds the release files and creates a draft release. Only people who can push to the repo see drafts.
+   The release workflow builds the release files and creates a draft release. Only people who can push to the repo see drafts. The **Upgrade test** workflow runs on the tag too. Wait for it to pass before you sign, because once servers install a release that loses data, it can't be taken back.
 3. In the release clone, check CI's files against a build of your own. The script checks out the tag, builds it, and compares:
 
    ```sh
@@ -71,6 +71,19 @@ To make a release:
 5. Add anything more to the draft's notes on GitHub, then publish it, either as a pre-release or as the newest release. The install command's `releases/latest` address uses the newest release and skips pre-releases, and so do servers checking for updates. Testers can install a pre-release from its tag's own address, which the release notes give.
 
 To try the steps without releasing, open the **Release** workflow on the repo's **Actions** tab, and select **Run workflow**. Then give the run's ID, the number at the end of its address, to both scripts in place of the tag. The signed files stay in `target/release-check/ci`, ready for a test install.
+
+## Testing updates
+
+[`scripts/upgrade-test.sh`](../scripts/upgrade-test.sh) checks that a server's data survives updates ([decision 12](../docs/decisions/0012-updates.md#testing)). It installs the newest published release, adds an account, files, and a backup, then updates by hand and through the update helper, checking the data after each. Last, it tries a release that doesn't start, and checks that the helper rolls back. CI runs it on each push to `main` and each release tag, on x86_64 and ARM64. It takes about 30 minutes, mostly the helper's wait to see that a new version stays up.
+
+To run it yourself, use a machine without Accordion, such as a throwaway virtual machine, because the test deletes Accordion and its data when it's done. It stops if Accordion is installed. Build the test releases from a release clone, then run them as root:
+
+```sh
+scripts/upgrade-test.sh build ~/upgrade-test
+sudo scripts/upgrade-test.sh run ~/upgrade-test
+```
+
+The test releases are signed with a throwaway key that `build` makes, so they install only on the test machine.
 
 ## Installing a package
 
