@@ -1,0 +1,58 @@
+# Shared CI for every Accordion TypeScript repo (decision 13).
+#
+# Other repos call this workflow instead of keeping their own copy, so a fix
+# here reaches every repo at once. templates/repo-typescript/.github/workflows/ci.yml
+# is the caller that new TypeScript repos start with. Each repo's package.json
+# provides three scripts: check (types), test, and build.
+
+name: TypeScript
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Check, test, and build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      # The lockfile's checksums cover every package, and no package runs
+      # code while it installs.
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+
+  licenses:
+    name: Licenses, advisories, and sources
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The check lives in the accordion repo, so other repos fetch it here.
+      - name: Get the license check
+        uses: actions/checkout@v7
+        with:
+          repository: accordion-suite/accordion
+          path: .accordion-ci
+          sparse-checkout: scripts/check-npm-licenses.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      # The check reads each installed package's license.
+      - run: npm ci --ignore-scripts
+      # The same licenses and sources rules as deny.toml for Rust crates.
+      - run: python3 -I .accordion-ci/scripts/check-npm-licenses.py .
+      # Known vulnerabilities, from the npm registry's advisories.
+      - run: npm audit
