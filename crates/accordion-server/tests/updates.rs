@@ -219,6 +219,7 @@ async fn start(base: &str, key: &Ed25519KeyPair, installed: &str) -> Server {
             storage: None,
             updates: Some(updates.clone()),
             switches: None,
+            web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

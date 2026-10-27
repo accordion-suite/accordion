@@ -15,6 +15,7 @@ mod requests;
 mod session;
 pub mod setup;
 pub mod updates;
+pub mod web;
 mod welcome;
 
 use std::sync::Arc;
@@ -49,6 +50,8 @@ pub struct AppState {
     pub updates: Option<updates::Updates>,
     /// The Network page's switches, once the server is running.
     pub switches: Option<connections::Switches>,
+    /// The web app's files (decision 13), if this server has them.
+    pub web: Option<web::WebApp>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -86,6 +89,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         Site::Unnamed => None,
         Site::Named { origin, .. } => Some(Arc::<str>::from(origin.as_str())),
     };
+    let web_app_pages = state.modules.in_web_app();
     // Module routes sit inside the same host and cross-site checks as the
     // server's own (decision 7).
     let router = state
@@ -101,6 +105,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .merge(home::routes())
         .merge(account::routes())
         .merge(welcome::routes())
+        .merge(web::routes(web_app_pages.into_iter()))
         .merge(
             setup::owner_routes()
                 .merge(health::routes())

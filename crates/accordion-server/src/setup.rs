@@ -653,7 +653,7 @@ pub(crate) const SETUP_CSS: &str = include_str!("setup/setup.css");
 
 /// Scripts and styles come only from the server itself, and no other site
 /// can show these pages in a frame.
-const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'none'; script-src 'self'; \
+pub(crate) const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'none'; script-src 'self'; \
      style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; \
      frame-ancestors 'none'; base-uri 'none'";
 

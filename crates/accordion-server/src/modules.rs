@@ -70,6 +70,16 @@ impl Mounted {
         }
         router
     }
+
+    /// The modules whose pages are in the web app (decision 13), rather
+    /// than routes of their own.
+    pub fn in_web_app(&self) -> Vec<&'static str> {
+        self.0
+            .iter()
+            .filter(|(_, routes)| routes.pages.is_none())
+            .map(|&(id, _)| id)
+            .collect()
+    }
 }
 
 /// IDs name URL paths and database tables, so they're lowercase letters

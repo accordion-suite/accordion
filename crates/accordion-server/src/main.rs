@@ -23,6 +23,7 @@ use accordion_server::health::{Health, NameHealth};
 use accordion_server::network::AdminAccess;
 use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
 use accordion_server::updates::{UpdateSource, Updates};
+use accordion_server::web::WebApp;
 use accordion_server::{AppState, Site, modules, router};
 use accordion_types::Role;
 use tokio::net::TcpListener;
@@ -75,6 +76,9 @@ Settings, from environment variables:
   ACCORDION_UPDATE_URL    Where to look for updates, for trying a test release.
                           Releases still have to be signed with the release
                           key (default: GitHub's newest release)
+  ACCORDION_WEB_DIR       A build of the web app to serve, such as
+                          accordion-web's dist folder during development
+                          (default: /usr/lib/accordion/web)
   RUST_LOG                Log detail, such as info or debug (default: info)";
 
 #[tokio::main]
@@ -151,6 +155,11 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     )
     .await?;
     let switches = Switches::open(db.clone()).await?;
+    let web = WebApp::from_env()?;
+    match &web {
+        Some(web) => tracing::info!("serving the web app from {}", web.dir().display()),
+        None => tracing::info!("this server doesn't have the web app"),
+    }
     let gateway_dir = gateway_dir(&data_dir);
     let has_owner = identity.has_owner().await?;
     let settings = Settings::load(&gateway_dir)?;
@@ -205,6 +214,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 storage: Some(storage),
                 updates: Some(updates),
                 switches: Some(switches),
+                web: web.clone(),
             },
             until_stopped(),
         )
@@ -243,6 +253,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         storage: Some(storage),
         updates: Some(updates),
         switches: Some(switches),
+        web: web.clone(),
     };
 
     let local_name = if local_name_on {

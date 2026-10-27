@@ -113,6 +113,7 @@ async fn start(address: bool) -> Server {
             storage: None,
             updates: Some(updates),
             switches: Some(switches.clone()),
+            web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )
