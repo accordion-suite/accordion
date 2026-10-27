@@ -74,7 +74,7 @@ To try the steps without releasing, open the **Release** workflow on the repo's 
 
 ## Testing updates
 
-[`scripts/upgrade-test.sh`](../scripts/upgrade-test.sh) checks that a server's data survives updates ([decision 12](../docs/decisions/0012-updates.md#testing)). It installs the newest published release, adds an account, files, and a backup, then updates by hand and through the update helper, checking the data after each. Last, it tries a release that doesn't start, and checks that the helper rolls back. CI runs it on each push to `main` and each release tag, on x86_64 and ARM64. It takes about 30 minutes, mostly the helper's wait to see that a new version stays up.
+[`scripts/upgrade-test.sh`](../scripts/upgrade-test.sh) checks that a server's data survives updates ([decision 12](../docs/decisions/0012-updates.md#testing)). It installs the newest published release, adds an account, files, and a backup, then updates by hand and through the update helper, checking the data after each. Last, it tries a release that doesn't start, and checks that the helper rolls back. CI runs it on each push to `main` and each release tag, on x86_64 and ARM64. It takes about 20 minutes, mostly the helper's wait to see that a new version stays up.
 
 To run it yourself, use a machine without Accordion, such as a throwaway virtual machine, because the test deletes Accordion and its data when it's done. It stops if Accordion is installed. Build the test releases from a release clone, then run them as root:
 

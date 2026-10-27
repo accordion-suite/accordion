@@ -3,7 +3,7 @@
 # by hand and through the update helper, and checks that a release that
 # doesn't start rolls back.
 #
-# It takes about 30 minutes, mostly the helper's wait to see that a new
+# It takes about 20 minutes, mostly the helper's wait to see that a new
 # version stays up, so it runs on pushes to main and release tags rather than
 # on pull requests. A release is signed only once this passes for its tag.
 
