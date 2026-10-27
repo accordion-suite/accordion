@@ -1,0 +1,13 @@
+# Starts the update helper when Accordion asks it to install an update
+# (decision 12). The .deb installs it as
+# /usr/lib/systemd/system/accordion-update.path.
+
+[Unit]
+Description=Accordion updates, started when the server asks for one
+Documentation=https://github.com/accordion-suite/accordion
+
+[Path]
+PathExists=/var/lib/accordion/updates/request
+
+[Install]
+WantedBy=multi-user.target

@@ -41,17 +41,36 @@ struct Releases {
 impl Releases {
     /// Publishes a release with `update.json`, signed with `key`.
     fn publish(&self, key: &Ed25519KeyPair, version: &str, security: bool) {
+        self.publish_with(key, version, security, true);
+    }
+
+    /// Publishes a release with `update.json` and a package for this
+    /// machine, signed with `key`.
+    fn publish_with(
+        &self,
+        key: &Ed25519KeyPair,
+        version: &str,
+        security: bool,
+        installs_itself: bool,
+    ) {
         let manifest = json!({
             "version": version,
             "published": "2026-11-02",
             "security": security,
-            "installs_itself": true,
+            "installs_itself": installs_itself,
             "notes": "Drive shows photos in a grid.",
             "link": format!("https://github.com/accordion-suite/accordion/releases/tag/v{version}"),
         })
         .to_string()
         .into_bytes();
-        self.publish_files(key, version, vec![("update.json".into(), manifest)]);
+        self.publish_files(
+            key,
+            version,
+            vec![
+                ("update.json".into(), manifest),
+                (package(version), format!("package {version}").into_bytes()),
+            ],
+        );
     }
 
     fn publish_files(&self, key: &Ed25519KeyPair, version: &str, files: Vec<(String, Vec<u8>)>) {
@@ -116,6 +135,14 @@ impl Releases {
     }
 }
 
+/// The package for this machine.
+fn package(version: &str) -> String {
+    accordion_update::package_name(
+        &version.parse().unwrap(),
+        accordion_update::debian_architecture().unwrap(),
+    )
+}
+
 fn key_pair() -> Ed25519KeyPair {
     let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
     Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap()
@@ -129,6 +156,8 @@ struct Server {
     updates: Updates,
 }
 
+/// Opens the update service. The update helper counts as installed if
+/// `helper` is in the data folder.
 async fn open_updates(
     data: &tempfile::TempDir,
     base: &str,
@@ -142,8 +171,10 @@ async fn open_updates(
             base: base.to_owned(),
             key: PublicKey(key.public_key().as_ref().try_into().unwrap()),
             allow_http: true,
+            helper: data.path().join("helper"),
         },
         installed.parse().unwrap(),
+        data.path(),
     )
     .await
     .unwrap()
@@ -153,6 +184,7 @@ async fn open_updates(
 /// that looks for releases at `base`.
 async fn start(base: &str, key: &Ed25519KeyPair, installed: &str) -> Server {
     let data = tempfile::tempdir().unwrap();
+    std::fs::write(data.path().join("helper"), "").unwrap();
     let db = Database::open(&data.path().join("accordion.db")).unwrap();
     let identity = Identity::new(db).await.unwrap();
     let updates = open_updates(&data, base, key, installed).await;
@@ -206,12 +238,23 @@ async fn start(base: &str, key: &Ed25519KeyPair, installed: &str) -> Server {
 
 impl Server {
     async fn send(&self, method: &str, path: &str, token: &str) -> (StatusCode, Value) {
+        self.send_json(method, path, token, None).await
+    }
+
+    async fn send_json(
+        &self,
+        method: &str,
+        path: &str,
+        token: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
         let request = Request::builder()
             .method(method)
             .uri(path)
             .header(header::HOST, HOST)
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(body.map_or_else(Body::empty, |body| Body::from(body.to_string())))
             .unwrap();
         let response = self.app.clone().oneshot(request).await.unwrap();
         let status = response.status();
@@ -226,6 +269,16 @@ impl Server {
         let (status, body) = self.send("POST", "/api/updates/check", &self.owner).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         body
+    }
+
+    fn inbox(&self) -> std::path::PathBuf {
+        self.data.path().join("updates")
+    }
+
+    /// Leaves a result where the update helper would.
+    async fn helper_says(&self, result: &str) {
+        std::fs::write(self.inbox().join("result"), result).unwrap();
+        self.updates.collect_result().await.unwrap();
     }
 
     async fn health(&self) -> String {
@@ -274,9 +327,11 @@ async fn an_admin_sees_a_newer_release() {
     assert_eq!(
         server.health().await,
         "ok: Accordion 0.2.0 is available, released November 2, 2026. This server runs 0.1.0. \
-         The Updates page says how to install it."
+         It installs on its own after the nightly backup, starting in three days."
     );
 
+    // A security release doesn't wait. With automatic updates off, it's a
+    // warning until someone installs it.
     releases.publish(&key, "0.2.1", true);
     let security = server.check().await;
     assert_eq!(security["newest"]["version"], "0.2.1");
@@ -284,8 +339,14 @@ async fn an_admin_sees_a_newer_release() {
         server
             .health()
             .await
-            .starts_with("warning: Accordion 0.2.1 is available")
-            && server.health().await.contains("fixes a security problem"),
+            .ends_with("It installs on its own after tonight's backup.")
+    );
+    server.updates.set_automatic(false).await.unwrap();
+    let health = server.health().await;
+    assert!(
+        health.starts_with("warning: Accordion 0.2.1 is available")
+            && health.contains("fixes a security problem"),
+        "{health}"
     );
 
     // What it found is kept, and the release keeps the day it was first
@@ -419,4 +480,267 @@ async fn only_admins_manage_updates() {
     }
     let (status, _) = server.send("GET", "/api/updates", "not-a-token").await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn an_admin_installs_an_update_through_the_helper() {
+    let key = key_pair();
+    let releases = Releases::default();
+    let base = releases.clone().serve().await;
+    releases.publish(&key, "0.2.0", false);
+    let server = start(&base, &key, "0.1.0").await;
+    let status = server.check().await;
+    assert_eq!(status["can_install"], true, "{status}");
+    assert_eq!(status["automatic"], true);
+    // A release that isn't a security fix waits three days.
+    let from = status["installs_from"].as_u64().unwrap();
+    let three_days = 3 * 24 * 60 * 60 * 1000;
+    assert!(from > status["last_check"]["at"].as_u64().unwrap() + three_days - 1000);
+    let health = server.health().await;
+    assert!(
+        health.contains("It installs on its own after the nightly backup, starting in three days."),
+        "{health}"
+    );
+
+    let (code, body) = server
+        .send("POST", "/api/updates/install", &server.owner)
+        .await;
+    assert_eq!(code, StatusCode::ACCEPTED, "{body}");
+    let inbox = server.inbox();
+    let package = package("0.2.0");
+    assert_eq!(
+        std::fs::read(inbox.join(&package)).unwrap(),
+        b"package 0.2.0"
+    );
+    for file in ["SHA256SUMS", "SHA256SUMS.sig"] {
+        assert!(inbox.join(file).is_file(), "{file}");
+    }
+    assert_eq!(
+        std::fs::read_to_string(inbox.join("request")).unwrap(),
+        format!("version 0.2.0\npackage {package}\n")
+    );
+    let (_, status) = server.send("GET", "/api/updates", &server.owner).await;
+    assert_eq!(status["installing"]["version"], "0.2.0");
+    assert!(
+        server
+            .health()
+            .await
+            .contains("Accordion is installing 0.2.0.")
+    );
+
+    // One at a time.
+    let (code, body) = server
+        .send("POST", "/api/updates/install", &server.owner)
+        .await;
+    assert_eq!(code, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "Accordion is already installing 0.2.0.");
+
+    // The server starts again in the new version, and reads the result.
+    let reopened = open_updates(&server.data, &base, &key, "0.2.0").await;
+    assert_eq!(
+        reopened
+            .status()
+            .borrow()
+            .installing
+            .as_ref()
+            .unwrap()
+            .version,
+        "0.2.0"
+    );
+    std::fs::write(
+        inbox.join("result"),
+        "version 0.2.0\nfrom 0.1.0\noutcome installed\nfinished 1793035151000\n",
+    )
+    .unwrap();
+    reopened.collect_result().await.unwrap();
+    let status = reopened.status().borrow().clone();
+    assert_eq!(status.installing, None);
+    assert_eq!(status.history.len(), 1);
+    assert_eq!(status.history[0].from, "0.1.0");
+    assert!(!inbox.join("result").exists());
+    assert!(status.waiting().is_none());
+}
+
+#[tokio::test]
+async fn a_rolled_back_update_isnt_tried_again_on_its_own() {
+    let key = key_pair();
+    let releases = Releases::default();
+    let base = releases.clone().serve().await;
+    releases.publish(&key, "0.2.0", true);
+    let server = start(&base, &key, "0.1.0").await;
+    server.check().await;
+    // A security release installs that night.
+    assert!(
+        server
+            .updates
+            .status()
+            .borrow()
+            .due(std::time::SystemTime::now())
+    );
+    let (code, _) = server
+        .send("POST", "/api/updates/install", &server.owner)
+        .await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+    server
+        .helper_says(
+            "version 0.2.0\nfrom 0.1.0\noutcome rolled-back\nfinished 1793035151000\n\
+             reason It stopped with an error while it was starting\n",
+        )
+        .await;
+
+    let (_, status) = server.send("GET", "/api/updates", &server.owner).await;
+    assert_eq!(status["waiting"], true);
+    assert_eq!(status["failed"]["outcome"], "rolled-back");
+    assert_eq!(status["installs_from"], Value::Null);
+    assert!(
+        !server
+            .updates
+            .status()
+            .borrow()
+            .due(std::time::SystemTime::now())
+    );
+    assert_eq!(
+        server.health().await,
+        "warning: Accordion 0.2.0 didn't work, so Accordion went back to 0.1.0. It stopped with \
+         an error while it was starting. Accordion won't install 0.2.0 on its own, but it will \
+         install a newer release."
+    );
+    // An admin can still try it.
+    let (code, _) = server
+        .send("POST", "/api/updates/install", &server.owner)
+        .await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+
+    // A newer release is due again.
+    server
+        .helper_says("version 0.2.0\nfrom 0.1.0\noutcome refused\nfinished 1\n")
+        .await;
+    releases.publish(&key, "0.2.1", true);
+    server.check().await;
+    assert!(
+        server
+            .updates
+            .status()
+            .borrow()
+            .due(std::time::SystemTime::now())
+    );
+}
+
+#[tokio::test]
+async fn a_download_that_doesnt_match_never_reaches_the_helper() {
+    let key = key_pair();
+    let releases = Releases::default();
+    let base = releases.clone().serve().await;
+    releases.publish(&key, "0.2.0", false);
+    let server = start(&base, &key, "0.1.0").await;
+    server.check().await;
+    releases.replace("0.2.0", &package("0.2.0"), b"something else");
+
+    let (code, body) = server
+        .send("POST", "/api/updates/install", &server.owner)
+        .await;
+    assert_eq!(code, StatusCode::BAD_GATEWAY);
+    let error = body["error"].as_str().unwrap();
+    assert!(
+        error.starts_with("Accordion couldn't download the update:"),
+        "{error}"
+    );
+    assert!(error.contains("doesn't match its checksum"), "{error}");
+    let inbox = server.inbox();
+    assert!(!inbox.join("request").exists());
+    assert!(!inbox.join(package("0.2.0")).exists());
+    let (_, status) = server.send("GET", "/api/updates", &server.owner).await;
+    assert_eq!(status["installing"], Value::Null);
+    assert_eq!(status["install_problem"], error);
+}
+
+#[tokio::test]
+async fn some_updates_need_the_install_command() {
+    let key = key_pair();
+    let releases = Releases::default();
+    let base = releases.clone().serve().await;
+
+    // One that needs something new from the system.
+    releases.publish_with(&key, "0.2.0", false, false);
+    let server = start(&base, &key, "0.1.0").await;
+    let status = server.check().await;
+    assert_eq!(status["can_install"], false);
+    assert_eq!(status["installs_from"], Value::Null);
+    let (code, body) = server
+        .send("POST", "/api/updates/install", &server.owner)
+        .await;
+    assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(body["error"].as_str().unwrap().contains("install command"));
+
+    // A server installed some other way has no helper.
+    releases.publish(&key, "0.2.1", false);
+    std::fs::remove_file(server.data.path().join("helper")).unwrap();
+    let without = open_updates(&server.data, &base, &key, "0.1.0").await;
+    without.check().await.unwrap();
+    assert!(!without.status().borrow().can_install);
+    assert!(matches!(
+        without.install().await,
+        Err(accordion_server::updates::Error::NoHelper)
+    ));
+}
+
+#[tokio::test]
+async fn updates_install_after_the_nightly_backup_when_theyre_due() {
+    use accordion_core::backup::{BackupStatus, NightlyBackup, NightlyRun};
+    use std::time::{Duration, SystemTime};
+
+    let key = key_pair();
+    let releases = Releases::default();
+    let base = releases.clone().serve().await;
+    releases.publish(&key, "0.2.0", true);
+    let server = start(&base, &key, "0.1.0").await;
+    server.check().await;
+    let request = server.inbox().join("request");
+
+    let (backup, backup_status) = tokio::sync::watch::channel(BackupStatus::default());
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let running = tokio::spawn(server.updates.clone().run(Some(backup_status), async {
+        let _ = stopped.await;
+    }));
+    let night = |outcome| {
+        backup.send_modify(|status| {
+            status.last_nightly = Some(NightlyRun {
+                finished_at: SystemTime::now(),
+                backup: outcome,
+            });
+        });
+    };
+    let requested = || async {
+        for _ in 0..50 {
+            if request.exists() {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        false
+    };
+
+    // Not after a night whose backup failed, or with automatic updates off.
+    night(NightlyBackup::Failed);
+    assert!(!requested().await);
+    let (code, _) = server
+        .send_json(
+            "PUT",
+            "/api/updates/settings",
+            &server.owner,
+            Some(json!({"automatic": false})),
+        )
+        .await;
+    assert_eq!(code, StatusCode::NO_CONTENT);
+    night(NightlyBackup::Worked);
+    assert!(!requested().await);
+
+    // A security release installs after the next night that works, even
+    // with backups off.
+    server.updates.set_automatic(true).await.unwrap();
+    night(NightlyBackup::Off);
+    assert!(requested().await);
+
+    let _ = stop.send(());
+    running.await.unwrap();
 }

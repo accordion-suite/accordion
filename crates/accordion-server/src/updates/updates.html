@@ -26,20 +26,46 @@
       <p id="summary"></p>
     </section>
 
+    <section id="installing" hidden>
+      <h2 id="installing-title"></h2>
+      <p role="status">Accordion stops for a few minutes while it updates, so this page may stop answering. It shows the result when it's done. If the new version doesn't start, Accordion goes back to this one on its own, with your data as it was.</p>
+    </section>
+
     <section id="waiting" hidden>
       <h2 id="waiting-title"></h2>
       <p id="waiting-published" class="hint"></p>
       <p id="waiting-security" hidden><strong>This release fixes a security problem.</strong> Install it soon.</p>
       <p id="waiting-notes"></p>
       <p><a id="waiting-link" rel="noreferrer">Read the full release notes</a></p>
-      <p>To install it, run this command on the server. It keeps everything on the server, and restarts Accordion in the new version:</p>
-      <pre><code>curl -fsSL https://github.com/accordion-suite/accordion/releases/latest/download/install.sh | sudo sh</code></pre>
+      <p id="waiting-failed" class="error" hidden></p>
+      <div id="waiting-here" hidden>
+        <p id="waiting-when"></p>
+        <button id="install" type="button">Install now</button>
+        <p class="hint">Accordion stops for a few minutes while it updates. If the new version doesn't start, Accordion goes back to this one on its own, with your data as it was.</p>
+      </div>
+      <div id="waiting-command" hidden>
+        <p>To install it, run this command on the server. It keeps everything on the server, and restarts Accordion in the new version:</p>
+        <pre><code>curl -fsSL https://github.com/accordion-suite/accordion/releases/latest/download/install.sh | sudo sh</code></pre>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="schedule-title">When updates install</h2>
+      <fieldset id="schedule" aria-labelledby="schedule-title">
+        <label class="choice"><input type="radio" name="automatic" value="on"> <span><strong>Automatically,</strong> right after the nightly backup at the hour set on the <a href="/backups">backups page</a>, so there's always a backup from right before. Updates wait three days after they're released, so a release with a problem can be replaced first. Security fixes don't wait.</span></label>
+        <label class="choice"><input type="radio" name="automatic" value="off"> <span><strong>When I select Install now.</strong> This page and the health page show when an update is waiting.</span></label>
+      </fieldset>
     </section>
 
     <section>
       <p id="last-check"></p>
       <button id="check" type="button" class="secondary">Check now</button>
       <p id="check-progress" class="hint" role="status" hidden>Checking for updates.</p>
+    </section>
+
+    <section id="history-section" hidden>
+      <h2>Past updates</h2>
+      <ul id="history"></ul>
     </section>
   </div>
 

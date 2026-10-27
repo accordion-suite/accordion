@@ -6,8 +6,12 @@
 //! signature, then each file's checksum, shows that a file is what the
 //! developer released, wherever it was downloaded from.
 
+pub mod install;
+pub mod protocol;
+
 use std::cmp::Ordering;
 use std::fmt;
+use std::io::{self, Read, Write};
 use std::str::FromStr;
 
 use ring::signature::{ED25519, UnparsedPublicKey};
@@ -17,6 +21,91 @@ pub const RELEASE_KEY: PublicKey = PublicKey([
     0x60, 0x64, 0xfe, 0x87, 0xbf, 0x82, 0x0d, 0xc4, 0xeb, 0x74, 0x61, 0xea, 0xfd, 0x70, 0xfb, 0xe9,
     0x51, 0x41, 0x81, 0x41, 0xa3, 0xa9, 0x7d, 0xf6, 0xa8, 0xd6, 0xa4, 0xf3, 0x19, 0xab, 0x1a, 0xde,
 ]);
+
+/// The key this build trusts: [`RELEASE_KEY`], unless the build was made
+/// for testing with another key.
+///
+/// `scripts/build-packages.sh` sets `ACCORDION_RELEASE_KEY_HEX` when it's
+/// given a test key, so a test release can be signed without the real key.
+/// Release builds never set it, and the release check compares CI's build
+/// with the developer's, so a build that trusts another key wouldn't match.
+pub fn release_key() -> PublicKey {
+    match option_env!("ACCORDION_RELEASE_KEY_HEX") {
+        Some(hex) => {
+            PublicKey(from_hex(hex).expect("ACCORDION_RELEASE_KEY_HEX is 64 hex characters"))
+        }
+        None => RELEASE_KEY,
+    }
+}
+
+/// The package's name for `version` on `architecture`, as Debian names
+/// them, such as `accordion_0.2.0_arm64.deb`.
+pub fn package_name(version: &Version, architecture: &str) -> String {
+    format!("accordion_{version}_{architecture}.deb")
+}
+
+/// This machine's architecture, as Debian names it, if Accordion has a
+/// package for it.
+pub fn debian_architecture() -> Option<&'static str> {
+    match std::env::consts::ARCH {
+        "x86_64" => Some("amd64"),
+        "aarch64" => Some("arm64"),
+        _ => None,
+    }
+}
+
+/// A SHA-256 of data that arrives in parts, such as a download.
+pub struct Sha256(ring::digest::Context);
+
+impl Default for Sha256 {
+    fn default() -> Self {
+        Self(ring::digest::Context::new(&ring::digest::SHA256))
+    }
+}
+
+impl Sha256 {
+    pub fn update(&mut self, bytes: &[u8]) {
+        self.0.update(bytes);
+    }
+
+    pub fn finish(self) -> [u8; 32] {
+        self.0
+            .finish()
+            .as_ref()
+            .try_into()
+            .expect("SHA-256 is 32 bytes")
+    }
+}
+
+/// Copies up to `limit` bytes from `from` to `to`, and returns their
+/// SHA-256. Fails if there's more.
+pub fn copy_hashing(from: &mut impl Read, to: &mut impl Write, limit: u64) -> io::Result<[u8; 32]> {
+    let mut context = ring::digest::Context::new(&ring::digest::SHA256);
+    let mut buffer = vec![0; 64 * 1024];
+    let mut copied = 0;
+    loop {
+        let read = match from.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => read,
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        };
+        copied += read as u64;
+        if copied > limit {
+            return Err(io::Error::other(format!(
+                "the file is larger than {} MB",
+                limit / 1_000_000
+            )));
+        }
+        context.update(&buffer[..read]);
+        to.write_all(&buffer[..read])?;
+    }
+    Ok(context
+        .finish()
+        .as_ref()
+        .try_into()
+        .expect("SHA-256 is 32 bytes"))
+}
 
 /// The release's list of checksums.
 pub const SUMS_FILE: &str = "SHA256SUMS";

@@ -3,20 +3,27 @@
 //! Requests carry no cookies and a user agent with no version, so they say
 //! nothing about the server (decision 12).
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use accordion_update::Sha256;
+
 use http_body_util::{BodyExt, Empty, Limited};
-use hyper::body::Bytes;
+use hyper::body::{Bytes, Incoming};
 use hyper::header::{LOCATION, USER_AGENT};
-use hyper::{Request, StatusCode, Uri};
+use hyper::{Request, Response, StatusCode, Uri};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
+use tokio::io::AsyncWriteExt;
 
-/// A download that takes longer than this has stalled.
+/// A download of release information that takes longer than this has
+/// stalled.
 const TIMEOUT: Duration = Duration::from_secs(60);
+/// Packages are bigger, and some connections are slow.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// GitHub sends a download through two redirects.
 const MAX_REDIRECTS: usize = 5;
@@ -55,24 +62,96 @@ impl Fetcher {
 
     /// Downloads `url`, up to `limit` bytes.
     pub(crate) async fn get(&self, url: &str, limit: usize) -> Result<Fetched, String> {
-        let uri: Uri = url
-            .parse()
-            .map_err(|_| format!("{url} isn't a web address"))?;
-        let host = uri.host().unwrap_or("the update server").to_owned();
-        tokio::time::timeout(TIMEOUT, self.follow(uri, limit))
+        let uri = parse(url)?;
+        let host = host(&uri);
+        let fetch = async {
+            let Some((response, first_redirect)) = self.follow(uri).await? else {
+                return Ok(Fetched::NotFound);
+            };
+            let body = Limited::new(response.into_body(), limit)
+                .collect()
+                .await
+                .map_err(|err| {
+                    if err.is::<http_body_util::LengthLimitError>() {
+                        format!("{host} sent more update information than expected")
+                    } else {
+                        format!("the download from {host} stopped partway ({err})")
+                    }
+                })?
+                .to_bytes();
+            Ok(Fetched::Found {
+                body,
+                first_redirect,
+            })
+        };
+        tokio::time::timeout(TIMEOUT, fetch).await.map_err(|_| {
+            format!(
+                "{host} didn't finish sending the update information within {} seconds",
+                TIMEOUT.as_secs()
+            )
+        })?
+    }
+
+    /// Downloads `url` into the file at `to`, up to `limit` bytes, and
+    /// returns its SHA-256.
+    pub(crate) async fn download(
+        &self,
+        url: &str,
+        to: &Path,
+        limit: u64,
+    ) -> Result<[u8; 32], String> {
+        let uri = parse(url)?;
+        let host = host(&uri);
+        let download = async {
+            let (response, _) = self
+                .follow(uri)
+                .await?
+                .ok_or_else(|| format!("{host} doesn't have the package for this release"))?;
+            let mut file = tokio::fs::File::create(to)
+                .await
+                .map_err(|err| format!("Accordion couldn't save the download ({err})"))?;
+            let mut body = response.into_body();
+            let mut sum = Sha256::default();
+            let mut length = 0;
+            while let Some(frame) = body.frame().await {
+                let frame = frame
+                    .map_err(|err| format!("the download from {host} stopped partway ({err})"))?;
+                let Ok(data) = frame.into_data() else {
+                    continue;
+                };
+                length += data.len() as u64;
+                if length > limit {
+                    return Err(format!("{host} sent a bigger package than expected"));
+                }
+                sum.update(&data);
+                file.write_all(&data)
+                    .await
+                    .map_err(|err| format!("Accordion couldn't save the download ({err})"))?;
+            }
+            file.sync_all()
+                .await
+                .map_err(|err| format!("Accordion couldn't save the download ({err})"))?;
+            Ok(sum.finish())
+        };
+        tokio::time::timeout(DOWNLOAD_TIMEOUT, download)
             .await
             .map_err(|_| {
                 format!(
-                    "{host} didn't finish sending the update information within {} seconds",
-                    TIMEOUT.as_secs()
+                    "the download from {host} didn't finish within {} minutes",
+                    DOWNLOAD_TIMEOUT.as_secs() / 60
                 )
             })?
     }
 
-    async fn follow(&self, mut uri: Uri, limit: usize) -> Result<Fetched, String> {
+    /// Follows redirects to the file. `None` means it isn't there, and the
+    /// second part is where the first redirect pointed, if there was one.
+    async fn follow(
+        &self,
+        mut uri: Uri,
+    ) -> Result<Option<(Response<Incoming>, Option<Uri>)>, String> {
         let mut first_redirect = None;
         for _ in 0..=MAX_REDIRECTS {
-            let host = uri.host().unwrap_or("the update server").to_owned();
+            let host = host(&uri);
             let request = Request::get(uri.clone())
                 .header(USER_AGENT, "Accordion")
                 .body(Empty::new())
@@ -94,31 +173,26 @@ impl Fetcher {
                 continue;
             }
             if status == StatusCode::NOT_FOUND {
-                return Ok(Fetched::NotFound);
+                return Ok(None);
             }
             if !status.is_success() {
                 return Err(format!("{host} answered with an error ({status})"));
             }
-            let body = Limited::new(response.into_body(), limit)
-                .collect()
-                .await
-                .map_err(|err| {
-                    if err.is::<http_body_util::LengthLimitError>() {
-                        format!("{host} sent more update information than expected")
-                    } else {
-                        format!("the download from {host} stopped partway ({err})")
-                    }
-                })?
-                .to_bytes();
-            return Ok(Fetched::Found {
-                body,
-                first_redirect,
-            });
+            return Ok(Some((response, first_redirect)));
         }
         Err(format!(
             "the download redirected more than {MAX_REDIRECTS} times"
         ))
     }
+}
+
+fn parse(url: &str) -> Result<Uri, String> {
+    url.parse()
+        .map_err(|_| format!("{url} isn't a web address"))
+}
+
+fn host(uri: &Uri) -> String {
+    uri.host().unwrap_or("the update server").to_owned()
 }
 
 /// A `Location` header's address, which can be relative to `base`.

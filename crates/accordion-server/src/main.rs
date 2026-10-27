@@ -71,6 +71,9 @@ Settings, from environment variables:
   ACCORDION_RESTIC        The full path to restic, the program that makes
                           backups (default: restic next to accordion, or on
                           PATH)
+  ACCORDION_UPDATE_URL    Where to look for updates, for trying a test release.
+                          Releases still have to be signed with the release
+                          key (default: GitHub's newest release)
   RUST_LOG                Log detail, such as info or debug (default: info)";
 
 #[tokio::main]
@@ -141,8 +144,9 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     let backup = Backup::open(db.clone(), storage.clone(), &data_dir, restic_program()?).await?;
     let updates = Updates::open(
         db.clone(),
-        UpdateSource::github(),
+        UpdateSource::from_env()?,
         env!("CARGO_PKG_VERSION").parse()?,
+        &data_dir,
     )
     .await?;
     let gateway_dir = gateway_dir(&data_dir);
@@ -174,7 +178,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     let mut background = JoinSet::new();
     background.spawn(storage.clone().maintain(until_stopped()));
     background.spawn(backup.clone().maintain(until_stopped()));
-    background.spawn(updates.clone().run(until_stopped()));
+    background.spawn(updates.clone().run(Some(backup.status()), until_stopped()));
     let modules = modules::start(
         modules::all(),
         &Services {
@@ -209,6 +213,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
 
     let https = listen("ACCORDION_HTTPS_LISTEN", 443).await?;
     let http = listen("ACCORDION_HTTP_LISTEN", 80).await?;
+    notify_ready();
     let https_port = https.local_addr()?.port();
     let address = address_source()?;
     let setup = if has_owner {
@@ -412,6 +417,7 @@ async fn serve_http(
 ) -> Result<(), Box<dyn Error>> {
     let listen = std::env::var("ACCORDION_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let listener = bind(&listen, "ACCORDION_LISTEN").await?;
+    notify_ready();
     tracing::info!(
         "no server name is set, so serving plain HTTP on http://{}",
         listener.local_addr()?
@@ -830,6 +836,29 @@ async fn bind(address: &str, variable: &str) -> Result<TcpListener, String> {
         };
         format!("Accordion couldn't listen on {address}: {err}.{next}")
     })
+}
+
+/// Tells systemd the server is ready: its database is up to date and it's
+/// listening. The update helper waits for this before it trusts a new
+/// version (decision 12). Outside systemd, there's no one to tell.
+fn notify_ready() {
+    use std::os::linux::net::SocketAddrExt;
+    use std::os::unix::net::{SocketAddr, UnixDatagram};
+
+    let Some(path) = std::env::var_os("NOTIFY_SOCKET") else {
+        return;
+    };
+    let path = path.to_string_lossy().into_owned();
+    // A name that starts with @ is in the abstract namespace, not a file.
+    let address = match path.strip_prefix('@') {
+        Some(name) => SocketAddr::from_abstract_name(name.as_bytes()),
+        None => SocketAddr::from_pathname(&path),
+    };
+    let sent =
+        address.and_then(|address| UnixDatagram::unbound()?.send_to_addr(b"READY=1", &address));
+    if let Err(err) = sent {
+        tracing::warn!(%err, "couldn't tell systemd that Accordion is ready");
+    }
 }
 
 /// Waits for Ctrl+C, or for SIGTERM from systemd or Docker.

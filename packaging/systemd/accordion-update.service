@@ -1,0 +1,23 @@
+# Installs an update that Accordion downloaded, and rolls it back if the new
+# version doesn't start (decision 12). accordion-update.path starts it. The
+# .deb installs it as /usr/lib/systemd/system/accordion-update.service.
+
+[Unit]
+Description=Install an Accordion update
+Documentation=https://github.com/accordion-suite/accordion
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/accordion/accordion-update
+Environment=ACCORDION_DATA_DIR=/var/lib/accordion
+# Only root can open the helper's folder. It holds the installed package, to
+# go back to, and the copy of the data from before the update.
+StateDirectory=accordion-update
+StateDirectoryMode=0700
+# The helper installs packages and starts services as root, so the sandbox
+# accordion.service has would stop it working. It does need no network: it
+# only checks and installs what the server already downloaded.
+PrivateNetwork=yes
+# Installing, up to 10 minutes for Accordion to start, five more to see that
+# it stays up, and the same again if it has to go back.
+TimeoutStartSec=45min

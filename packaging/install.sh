@@ -142,6 +142,11 @@ main() {
     say "Installing the package."
     DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$dir/$deb" \
         || fail "apt couldn't install Accordion. Its messages above say why."
+    # Accordion's update helper goes back to this package if an update to a
+    # later version doesn't start.
+    install -d -m 0700 /var/lib/accordion-update
+    rm -rf /var/lib/accordion-update/installed
+    install -D -m 0600 "$dir/$deb" "/var/lib/accordion-update/installed/$deb"
 
     case "$previous" in
         "") show_wizard "$since" ;;

@@ -15,3 +15,4 @@ thiserror = "2.0.21"
 
 [dev-dependencies]
 base64ct = { version = "1.8.3", features = ["alloc"] }
+tempfile = "3.27.0"

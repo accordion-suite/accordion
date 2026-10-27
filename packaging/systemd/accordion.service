@@ -10,7 +10,12 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-Type=exec
+# Accordion tells systemd when it's ready: after its database is up to date
+# and it's listening. The update helper waits for that before it trusts a new
+# version (decision 12).
+Type=notify
+# Long enough for a big database's migrations on a Raspberry Pi.
+TimeoutStartSec=10min
 ExecStart=/usr/bin/accordion
 User=accordion
 Group=accordion

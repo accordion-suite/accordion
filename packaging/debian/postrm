@@ -8,6 +8,7 @@ set -e
 # Remove the link that turned it on instead.
 if [ "$1" = purge ]; then
     rm -f /etc/systemd/system/multi-user.target.wants/accordion.service
+    rm -f /etc/systemd/system/multi-user.target.wants/accordion-update.path
 fi
 
 if [ -d /run/systemd/system ]; then

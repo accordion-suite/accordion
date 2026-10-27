@@ -25,9 +25,10 @@ use tokio::sync::watch;
 
 use crate::AppState;
 use crate::setup::asset;
-use crate::updates::UpdateStatus;
+use crate::updates::{CheckResult, UpdateStatus};
 use accordion_module::ApiError;
 use accordion_module::Authenticated;
+use accordion_update::protocol::Outcome;
 
 /// A certificate that expires sooner than this is a problem, not a warning.
 /// Renewal starts when a third of the certificate's lifetime is left, so this
@@ -122,7 +123,7 @@ impl Health {
             checks.push(backup_check(&backup.borrow(), now));
         }
         if let Some(updates) = &self.updates {
-            checks.push(updates_check(&updates.borrow()));
+            checks.push(updates_check(&updates.borrow(), now));
         }
         checks
     }
@@ -418,7 +419,7 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
 }
 
 /// Such as "3 a.m." or "midnight".
-fn updates_check(status: &UpdateStatus) -> Check {
+fn updates_check(status: &UpdateStatus, now: SystemTime) -> Check {
     let check = |state, summary: String| Check {
         id: "updates",
         title: "Updates",
@@ -426,47 +427,96 @@ fn updates_check(status: &UpdateStatus) -> Check {
         summary,
     };
     let installed = &status.installed;
-    if let Some(release) = status.waiting() {
-        let (state, urgency) = if release.security {
-            (
-                Level::Warning,
-                " It fixes a security problem, so install it soon.",
-            )
-        } else {
-            (Level::Ok, "")
-        };
+    if let Some(installing) = &status.installing {
         return check(
-            state,
+            Level::Ok,
             format!(
-                "Accordion {} is available, released {}. This server runs {installed}.{urgency} \
-                 The Updates page says how to install it.",
-                release.version,
-                long_date(&release.published),
+                "Accordion is installing {}. It restarts while it updates, so pages may stop \
+                 answering for a few minutes.",
+                installing.version
             ),
         );
     }
-    match &status.last_check {
-        None => check(
-            Level::Ok,
-            format!(
-                "This server runs Accordion {installed}. Accordion checks for updates once a \
-                 day, and hasn't checked yet."
+    if let Some(problem) = &status.install_problem {
+        return check(Level::Warning, problem.clone());
+    }
+    let Some(release) = status.waiting() else {
+        return match &status.last_check {
+            None => check(
+                Level::Ok,
+                format!(
+                    "This server runs Accordion {installed}. Accordion checks for updates once a \
+                     day, and hasn't checked yet."
+                ),
             ),
-        ),
-        Some(last) => match &last.problem {
-            Some(problem) => check(
+            Some(CheckResult {
+                problem: Some(problem),
+                ..
+            }) => check(
                 Level::Warning,
                 format!(
                     "This server runs Accordion {installed}. The last check for updates didn't \
                      work. {problem}. Accordion tries again in a few hours."
                 ),
             ),
-            None => check(
+            Some(_) => check(
                 Level::Ok,
                 format!("This server runs Accordion {installed}, which is up to date."),
             ),
-        },
+        };
+    };
+    let version = &release.version;
+    if let Some(failed) = status.failed(version) {
+        let reason = failed
+            .reason
+            .as_deref()
+            .unwrap_or("The helper didn't say why");
+        let what = match failed.outcome {
+            Outcome::RolledBack => format!(
+                "Accordion {version} didn't work, so Accordion went back to {installed}. {reason}."
+            ),
+            _ => format!("Accordion didn't update to {version}. {reason}."),
+        };
+        return check(
+            Level::Warning,
+            format!(
+                "{what} Accordion won't install {version} on its own, but it will install a \
+                 newer release."
+            ),
+        );
     }
+    let available = format!(
+        "Accordion {version} is available, released {}. This server runs {installed}.",
+        long_date(&release.published)
+    );
+    if let Some(from) = status.installs_from() {
+        let when = match from.duration_since(now) {
+            Err(_) => "after tonight's backup".to_owned(),
+            Ok(left) => {
+                let days = left.as_secs().div_ceil(24 * 60 * 60);
+                format!(
+                    "after the nightly backup, starting in {}",
+                    count(days, "day")
+                )
+            }
+        };
+        return check(
+            Level::Ok,
+            format!("{available} It installs on its own {when}."),
+        );
+    }
+    let (state, urgency) = if release.security {
+        (
+            Level::Warning,
+            " It fixes a security problem, so install it soon.",
+        )
+    } else {
+        (Level::Ok, "")
+    };
+    check(
+        state,
+        format!("{available}{urgency} The Updates page says how to install it."),
+    )
 }
 
 /// A date such as `2026-11-02`, as "November 2, 2026".
@@ -832,6 +882,7 @@ mod tests {
             hour: 3,
             running: false,
             targets,
+            last_nightly: None,
         };
 
         let off = check(BackupStatus::default());

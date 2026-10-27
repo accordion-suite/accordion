@@ -6,8 +6,9 @@
 #
 # Usage: scripts/build-packages.sh [output folder]
 #
-# The output folder defaults to target/packages. install.sh holds the public
-# release key from packaging/release-key.pem. To test with another key, set
+# The output folder defaults to target/packages. install.sh, the server, and
+# the update helper hold the public release key from
+# packaging/release-key.pem. To test with another key, set
 # ACCORDION_RELEASE_KEY to its PEM file. CI runs this for each
 # release, and the developer runs it again before signing one, so the two
 # builds can be compared (decision 9). For that, the same commit must give
@@ -73,6 +74,12 @@ release_key="${ACCORDION_RELEASE_KEY:-packaging/release-key.pem}"
 release_key_line="$(grep -v -- '-----' "$release_key")"
 [[ "$release_key_line" =~ ^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$ ]] \
     || die "$release_key isn't an Ed25519 public key in PEM format."
+# The programs build the real key in, unless they're for testing another.
+if [[ -n "${ACCORDION_RELEASE_KEY:-}" ]]; then
+    ACCORDION_RELEASE_KEY_HEX="$(printf '%s' "$release_key_line" | base64 -d | tail -c 32 \
+        | od -A n -t x1 | tr -d ' \n')"
+    export ACCORDION_RELEASE_KEY_HEX
+fi
 
 version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
@@ -88,7 +95,7 @@ targets=()
 for target in "${RUST_TARGET[@]}"; do
     targets+=(--target "$target")
 done
-cargo zigbuild --locked --release -p accordion-server "${targets[@]}"
+cargo zigbuild --locked --release -p accordion-server -p accordion-update "${targets[@]}"
 
 python3 -I packaging/third-party-licenses.py "${RUST_TARGET[@]}" > target/third-party-licenses.txt
 
@@ -109,7 +116,11 @@ for arch in amd64 arm64; do
     mkdir -p "$root/usr/lib/accordion"
     bunzip2 --stdout "target/restic/$restic" > "$root/usr/lib/accordion/restic"
     chmod 0755 "$root/usr/lib/accordion/restic"
-    install -D -m 0644 packaging/systemd/accordion.service "$root/usr/lib/systemd/system/accordion.service"
+    install -m 0755 "target/${RUST_TARGET[$arch]}/release/accordion-update" \
+        "$root/usr/lib/accordion/accordion-update"
+    for unit in accordion.service accordion-update.path accordion-update.service; do
+        install -D -m 0644 "packaging/systemd/$unit" "$root/usr/lib/systemd/system/$unit"
+    done
     install -D -m 0644 packaging/systemd/accordion.sysusers "$root/usr/lib/sysusers.d/accordion.conf"
     install -D -m 0644 packaging/debian/copyright "$root/usr/share/doc/accordion/copyright"
     install -m 0644 LICENSE "$root/usr/share/doc/accordion/LICENSE"

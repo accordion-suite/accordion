@@ -1,10 +1,11 @@
-//! `/updates`: which version this server runs, and whether a newer one is
-//! out (decision 12).
+//! `/updates`: which version this server runs, whether a newer one is out,
+//! and when updates install (decision 12).
 //!
 //! Like the other admin pages, it opens only from the home network, and only
 //! for admins.
 
 mod fetch;
+mod install;
 mod service;
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -12,13 +13,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use accordion_core::identity::SignedIn;
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::Role;
+use accordion_update::protocol::{Outcome, Report};
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-pub use service::{CheckResult, Error, Release, UpdateSource, UpdateStatus, Updates};
+pub use service::{
+    CheckResult, Error, Installing, Release, UpdateSource, UpdateStatus, Updates, WAIT,
+};
 
 use crate::AppState;
 use crate::setup::asset;
@@ -35,6 +39,8 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/updates", get(status))
         .route("/api/updates/check", post(check))
+        .route("/api/updates/install", post(install))
+        .route("/api/updates/settings", put(settings))
 }
 
 const UPDATES_HTML: &str = include_str!("updates/updates.html");
@@ -56,6 +62,19 @@ fn service(state: &AppState, user: &SignedIn) -> Result<Updates, ApiError> {
     })
 }
 
+fn api_error(err: Error) -> ApiError {
+    let status = match &err {
+        Error::Db(_) | Error::Sqlite(_) | Error::Io(_) | Error::Setup(_) => {
+            tracing::error!(%err, "update service error");
+            return ApiError::server_problem();
+        }
+        Error::NothingWaiting | Error::Busy(_) => StatusCode::CONFLICT,
+        Error::NeedsInstallCommand(_) | Error::NoHelper => StatusCode::UNPROCESSABLE_ENTITY,
+        Error::Download(_) => StatusCode::BAD_GATEWAY,
+    };
+    ApiError::new(status, err.to_string())
+}
+
 #[derive(Serialize)]
 struct StatusView {
     installed: String,
@@ -64,6 +83,52 @@ struct StatusView {
     newest: Option<ReleaseView>,
     /// Whether `newest` is newer than this server.
     waiting: bool,
+    automatic: bool,
+    /// Whether this page can install the waiting release, rather than the
+    /// install command.
+    can_install: bool,
+    /// When the waiting release installs on its own, at the earliest:
+    /// after the nightly backup on or after this time.
+    installs_from: Option<u64>,
+    installing: Option<InstallingView>,
+    install_problem: Option<String>,
+    /// What the update helper did, newest first.
+    history: Vec<ReportView>,
+    /// The helper's last word on the waiting release, if it didn't install
+    /// it.
+    failed: Option<ReportView>,
+}
+
+#[derive(Serialize)]
+struct InstallingView {
+    version: String,
+    since: u64,
+}
+
+#[derive(Serialize)]
+struct ReportView {
+    version: String,
+    from: String,
+    /// `installed`, `rolled-back`, or `refused`.
+    outcome: &'static str,
+    finished_at: u64,
+    reason: Option<String>,
+}
+
+impl From<&Report> for ReportView {
+    fn from(report: &Report) -> Self {
+        Self {
+            version: report.version.clone(),
+            from: report.from.clone(),
+            outcome: match report.outcome {
+                Outcome::Installed => "installed",
+                Outcome::RolledBack => "rolled-back",
+                Outcome::Refused => "refused",
+            },
+            finished_at: millis(report.finished_at),
+            reason: report.reason.clone(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -108,6 +173,19 @@ impl From<&UpdateStatus> for StatusView {
                 link: release.link.clone(),
             }),
             waiting: status.waiting().is_some(),
+            automatic: status.automatic,
+            can_install: status.installable().is_some(),
+            installs_from: status.installs_from().map(millis),
+            installing: status.installing.as_ref().map(|installing| InstallingView {
+                version: installing.version.clone(),
+                since: millis(installing.since),
+            }),
+            install_problem: status.install_problem.clone(),
+            history: status.history.iter().map(Into::into).collect(),
+            failed: status
+                .waiting()
+                .and_then(|release| status.failed(&release.version))
+                .map(Into::into),
         }
     }
 }
@@ -129,10 +207,41 @@ async fn check(
     Authenticated(me): Authenticated,
 ) -> Result<Json<StatusView>, ApiError> {
     let updates = service(&state, &me)?;
-    updates.check().await.map_err(|err| {
-        tracing::error!(%err, "couldn't record an update check");
-        ApiError::server_problem()
-    })?;
+    updates.check().await.map_err(api_error)?;
     tracing::info!(user = %me.user.id, "checked for updates");
     Ok(Json(StatusView::from(&*updates.status().borrow())))
+}
+
+/// `POST /api/updates/install`: downloads the waiting release and hands it to
+/// the update helper, which stops the server and installs it. Answers once
+/// the download is done.
+async fn install(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+) -> Result<StatusCode, ApiError> {
+    let updates = service(&state, &me)?;
+    updates.install().await.map_err(api_error)?;
+    tracing::info!(user = %me.user.id, "started an update");
+    Ok(StatusCode::ACCEPTED)
+}
+
+#[derive(Deserialize)]
+struct Settings {
+    automatic: bool,
+}
+
+/// `PUT /api/updates/settings`: whether updates install after the nightly
+/// backup, or wait for an admin.
+async fn settings(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    Json(request): Json<Settings>,
+) -> Result<StatusCode, ApiError> {
+    let updates = service(&state, &me)?;
+    updates
+        .set_automatic(request.automatic)
+        .await
+        .map_err(api_error)?;
+    tracing::info!(user = %me.user.id, automatic = request.automatic, "changed when updates install");
+    Ok(StatusCode::NO_CONTENT)
 }

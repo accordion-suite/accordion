@@ -10,13 +10,19 @@ if [ "$1" = configure ]; then
     if [ -z "$2" ]; then
         systemctl enable accordion.service
     fi
+    # The update helper waits for the server to ask for an update.
+    systemctl enable accordion-update.path
     # Without a running systemd, such as while an image is being built, the
     # service starts on the next boot instead. Otherwise start it now, or
-    # restart into the new version, unless the admin turned it off.
+    # restart into the new version, unless the admin turned it off. A
+    # version that doesn't start still counts as installed, so the update
+    # helper can tell "didn't start" from "didn't install", and install.sh
+    # reports it either way.
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload
+        systemctl start accordion-update.path
         if systemctl is-enabled --quiet accordion.service; then
-            systemctl restart accordion.service
+            systemctl restart accordion.service || true
         fi
     fi
 fi
