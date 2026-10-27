@@ -39,6 +39,9 @@ confidence-threshold = 0.9
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# The server depends on the update helper's crate by path alone, so its
+# version always matches the server's. Only unpublished crates may do this.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
