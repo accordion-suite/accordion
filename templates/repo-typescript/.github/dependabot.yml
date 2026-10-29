@@ -8,6 +8,11 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+    # Types match the oldest Node.js the repo supports (22, Ubuntu's), so the
+    # type check rejects functions that Node.js 22 doesn't have.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
