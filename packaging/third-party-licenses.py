@@ -1,14 +1,18 @@
-"""Writes the licenses of every Rust library built into the server.
+"""Writes the licenses of every Rust library built into the server, and of
+every library in the web app.
 
 Most of them are under licenses, such as MIT and Apache-2.0, that ask for
 their notices to come with a program built from them, so the release
 packages include this file.
 
-Usage: python3 packaging/third-party-licenses.py TARGET... > licenses.txt
+Usage: python3 packaging/third-party-licenses.py [--web FOLDER] TARGET... > licenses.txt
 
 Run it from the repo, after `cargo fetch --locked`. TARGET is a Rust target,
-such as aarch64-unknown-linux-musl. The output is the same on every machine
-for the same Cargo.lock, so it doesn't break reproducible packages.
+such as aarch64-unknown-linux-musl. FOLDER is a checkout of accordion-web
+after `npm ci`. Only its packages that aren't build tools go into the web
+app, so only theirs are listed. The output is the same on every machine for
+the same Cargo.lock and package-lock.json, so it doesn't break reproducible
+packages.
 """
 
 import hashlib
@@ -55,11 +59,28 @@ def built_in(meta):
     return [packages[i] for i in found if not packages[i]["name"].startswith("accordion")]
 
 
-def license_files(package):
-    folder = os.path.dirname(package["manifest_path"])
+def web_packages(folder):
+    """The web app's packages that the build bundles into the app, as
+    (name, version, license, source, folder). Build tools, such as esbuild,
+    are dev dependencies and never reach the browser."""
+    with open(os.path.join(folder, "package-lock.json"), encoding="utf-8") as file:
+        lock = json.load(file)
+    for path, entry in sorted(lock["packages"].items()):
+        if not path or entry.get("dev"):
+            continue
+        installed = os.path.join(folder, path)
+        with open(os.path.join(installed, "package.json"), encoding="utf-8") as file:
+            manifest = json.load(file)
+        source = manifest.get("repository")
+        if isinstance(source, dict):
+            source = source.get("url")
+        yield manifest["name"], manifest["version"], manifest.get("license"), source, installed
+
+
+def license_files(folder, license_file=None):
     names = sorted(n for n in os.listdir(folder) if LICENSE_FILE.match(n))
-    if package.get("license_file") and os.path.basename(package["license_file"]) not in names:
-        names.append(package["license_file"])
+    if license_file and os.path.basename(license_file) not in names:
+        names.append(license_file)
     for name in names:
         path = os.path.join(folder, name)
         if os.path.isfile(path):
@@ -67,8 +88,31 @@ def license_files(package):
                 yield os.path.basename(name), file.read().strip()
 
 
+def write(out, seen, name, version, license, source, files):
+    out.write("\n" + "=" * 78 + "\n")
+    out.write(f"{name} {version}\n")
+    out.write(f"License: {license or 'see the files below'}\n")
+    if source:
+        out.write(f"Source: {source}\n")
+    if not files:
+        out.write("\nThis library ships no license file.\n")
+    for file_name, text in files:
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        if digest in seen:
+            out.write(f"\n{file_name}: the same text as {seen[digest]}.\n")
+            continue
+        seen[digest] = f"{file_name} for {name} {version}"
+        out.write(f"\n{file_name}:\n\n{text}\n")
+
+
 def main():
-    targets = sys.argv[1:]
+    args = sys.argv[1:]
+    web = None
+    if args[:1] == ["--web"]:
+        if len(args) < 2:
+            sys.exit(__doc__)
+        web, args = args[1], args[2:]
+    targets = args
     if not targets:
         sys.exit(__doc__)
     packages = {}
@@ -77,26 +121,19 @@ def main():
             packages[(package["name"], package["version"])] = package
 
     out = sys.stdout
-    out.write("Licenses of the Rust libraries built into Accordion\n\n")
+    out.write("Licenses of the libraries built into Accordion\n\n")
     out.write("Each library's name and version is followed by its license and the license\n")
     out.write("files it ships with. A text that appeared earlier isn't repeated.\n")
     seen = {}
+    out.write("\n\nRust libraries in the server\n")
     for (name, version), package in sorted(packages.items()):
-        out.write("\n" + "=" * 78 + "\n")
-        out.write(f"{name} {version}\n")
-        out.write(f"License: {package.get('license') or 'see the files below'}\n")
-        if package.get("repository"):
-            out.write(f"Source: {package['repository']}\n")
-        files = list(license_files(package))
-        if not files:
-            out.write("\nThis library ships no license file.\n")
-        for file_name, text in files:
-            digest = hashlib.sha256(text.encode()).hexdigest()
-            if digest in seen:
-                out.write(f"\n{file_name}: the same text as {seen[digest]}.\n")
-                continue
-            seen[digest] = f"{file_name} for {name} {version}"
-            out.write(f"\n{file_name}:\n\n{text}\n")
+        folder = os.path.dirname(package["manifest_path"])
+        files = list(license_files(folder, package.get("license_file")))
+        write(out, seen, name, version, package.get("license"), package.get("repository"), files)
+    if web:
+        out.write("\n\nLibraries in the web app\n")
+        for name, version, license, source, folder in web_packages(web):
+            write(out, seen, name, version, license, source, list(license_files(folder)))
 
 
 if __name__ == "__main__":

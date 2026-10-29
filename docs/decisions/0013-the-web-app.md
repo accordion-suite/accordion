@@ -150,7 +150,8 @@ The server, not the module, answers these, because there's one app. A module tha
 
 ### Dependencies and the build
 
-- **esbuild and the TypeScript compiler** are pinned by version. esbuild is downloaded and checked against its checksum, like zig and restic.
+- **esbuild and the TypeScript compiler** are pinned by version in the lockfile, and npm checks each package against the lockfile's checksum.
+- **Node.js is pinned too.** The release build downloads it and checks it against its checksum, like zig and restic. Each Node.js build compresses the app's files a little differently, so the same Node.js on every computer keeps releases reproducible.
 - **npm installs only libraries,** from a committed lockfile, with `npm ci --ignore-scripts`, so no package runs code when it's installed.
 - **Each new package needs a reason** in the commit that adds it, and Dependabot proposes updates as it does for Rust.
 - **Licenses** of the browser packages go into the package's third-party license file, with the Rust crates' licenses.
@@ -183,7 +184,7 @@ The shell, sign-in, and Drive's pages, with the scope from the context above. Sh
 ## Consequences
 
 - **The `accordion-web` repo is created** with `scripts/new-repo.sh`. The template gains a variant for a TypeScript repo, with its own CI and Dependabot settings for npm.
-- **The release build gains a web step,** and decision 9's reproducibility check covers the web app's files too. CI installs esbuild and Node.js at pinned versions.
+- **The release build gains a web step,** and decision 9's reproducibility check covers the web app's files too. The release build uses esbuild and Node.js at pinned versions.
 - **The server serves the web app** from `/usr/lib/accordion/web`, or from `ACCORDION_WEB_DIR`, and answers `/<id>/` for each module that's on.
 - **`pin-versions.sh` pins the web app's commit** in `packaging/web-commit`, beside `Cargo.lock`.
 - **Drive's API is the web app's first user.** Gaps it finds, such as a way to list a folder in pages, go into `accordion-drive`.

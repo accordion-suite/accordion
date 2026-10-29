@@ -9,9 +9,12 @@ Files for installing Accordion on a Linux machine as a system service, and the D
 | `debian/postinst`, `prerm`, `postrm` | Package scripts | Create the user, start the service when installed, stop it when removed, and turn it off when purged |
 | `debian/copyright` | `/usr/share/doc/accordion/copyright` | Accordion's and restic's licenses |
 | `install.sh` | Not installed | The install command's script, which downloads, checks, and installs the package for the machine |
-| `third-party-licenses.py` | `/usr/share/doc/accordion/third-party-licenses.txt` | Collects the licenses of the Rust libraries built into Accordion |
+| `third-party-licenses.py` | `/usr/share/doc/accordion/third-party-licenses.txt` | Collects the licenses of the Rust libraries built into Accordion, and of the web app's libraries |
+| `web-commit` | Not installed | The commit of [`accordion-web`](https://github.com/accordion-suite/accordion-web) that the package's web app is built from. `scripts/pin-versions.sh` writes it. |
 
 The package also includes [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)), as `/usr/lib/accordion/restic`. It's kept apart from any restic your distribution installs, so Accordion always runs the version it was tested with. Backups to another computer over SFTP also need OpenSSH's client, which the package recommends.
+
+The web app ([decision 13](../docs/decisions/0013-the-web-app.md)) is in `/usr/lib/accordion/web`, where the server finds it. It's the same for both architectures.
 
 The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi OS based on Debian 12 or later, on x86_64 and ARM64.
 
@@ -28,6 +31,7 @@ The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi 
 
 - **The Rust version in `rust-toolchain.toml`.** rustup installs it.
 - **zig 0.14.1 and cargo-zigbuild 0.23.4,** which build both architectures from one machine. Install cargo-zigbuild with `cargo install --locked cargo-zigbuild --version 0.23.4`.
+- **An internet connection.** The script downloads Node.js 24.22.2 from nodejs.org, and checks it against the checksum Node.js published. It then fetches the web app's pinned commit from GitHub, installs its packages from npm, and builds it. Every computer uses this Node.js, rather than one already installed, because each Node.js build compresses the app's files a little differently.
 - **The release key's public half** in `packaging/release-key.pem`, which goes into `install.sh`. To test with another key, set `ACCORDION_RELEASE_KEY` to its public PEM file.
 - **A clone outside the workspace,** with no changes that aren't committed. In the workspace, Cargo builds your checkouts of the other repos instead of the versions in `Cargo.lock`.
 
@@ -47,7 +51,7 @@ Each release is a tag on `main`, built by CI and signed on the developer's compu
 
 To make a release:
 
-1. Set the version in `Cargo.toml`, and write the release notes in `packaging/release-notes/<version>.md`. Servers show the notes on their updates page, so keep them short and plain. [`packaging/update-json.py`](update-json.py) describes the file. Commit both with the updated `Cargo.lock`, and push to `main`.
+1. Set the version in `Cargo.toml`, and write the release notes in `packaging/release-notes/<version>.md`. Servers show the notes on their updates page, so keep them short and plain. [`packaging/update-json.py`](update-json.py) describes the file. Run `scripts/pin-versions.sh`, so the release has the latest pushed commit of each repo, including the web app. Commit the version, the notes, `Cargo.lock`, and `packaging/web-commit` without building in between, and push to `main`.
 2. Tag the commit and push the tag:
 
    ```sh

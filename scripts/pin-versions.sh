@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Pins Cargo.lock to the latest pushed commit of each Accordion repo that a
-# repo depends on. Run it before committing Cargo.lock.
+# repo depends on. Run it before committing Cargo.lock. For the suite, it also
+# writes the web app's latest pushed commit to packaging/web-commit, which the
+# release build builds.
 #
 # Usage: scripts/pin-versions.sh [repo]
 #
@@ -26,6 +28,13 @@ mapfile -t crates < <(grep -hoE "^[a-z0-9-]+ = \{ git = \"$org_url/" "$repo_dir"
     | sed -E 's/ = .*//' | sort -u)
 mapfile -t repos < <(grep -hoE "git = \"$org_url/[a-z0-9-]+\"" "$repo_dir"/crates/*/Cargo.toml \
     | sed -E "s|.*$org_url/([a-z0-9-]+)\"|\1|" | sort -u)
+
+# The suite also pins the web app, which isn't a Rust crate (decision 13).
+pin_web=
+if [[ "$repo_dir" == "$suite_repo" ]]; then
+    pin_web=1
+    repos+=(accordion-web)
+fi
 
 # The pinned commits are what's on GitHub, so local work isn't in them.
 for repo in "${repos[@]}"; do
@@ -58,3 +67,11 @@ grep -A2 -E "^name = \"($(IFS='|'; echo "${crates[*]}"))\"" "$repo_dir/Cargo.loc
     | grep -oE "$org_url/[a-z0-9-]+#[0-9a-f]{7}" \
     | sort -u \
     | sed -E "s|$org_url/(.*)#|pinned   \1 at |"
+
+if [[ -n "$pin_web" ]]; then
+    web_commit="$(git ls-remote "$org_url/accordion-web" refs/heads/main | cut -f 1)" || web_commit=
+    [[ "$web_commit" =~ ^[0-9a-f]{40}$ ]] \
+        || { echo "Couldn't read accordion-web's main branch from GitHub. Check your connection, then try again." >&2; exit 1; }
+    echo "$web_commit" > "$repo_dir/packaging/web-commit"
+    echo "pinned   accordion-web at ${web_commit:0:7}"
+fi

@@ -18,6 +18,9 @@
 #
 # - Rust is the version in rust-toolchain.toml, and zig, which compiles the C
 #   parts and links, is the version below.
+# - The web app is the accordion-web commit in packaging/web-commit, built
+#   with the Node.js version below. Its zlib and Brotli make the app's
+#   compressed copies, and distributions' Node.js builds use other ones.
 # - Paths to the checkout and Cargo's folder are replaced in the program.
 # - Every file in the packages gets the release commit's time.
 #
@@ -35,6 +38,15 @@ declare -A RESTIC_SHA256=(
     [amd64]=f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c
     [arm64]=a5f64aaab53d51e311fa3829124c5b703f2d14cf187d8640b6be3b2b49376465
 )
+NODE_VERSION=24.22.2
+# From Node.js's SHASUMS256.txt for this version, signed by a releaser's key.
+# The build runs on the machine's own architecture, and gives the same web
+# app on either.
+declare -A NODE_SHA256=(
+    [x64]=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
+    [arm64]=eb187837a2230d4047161ac0be008584e16b46f726e9c9490ee35dc6b17d9ba8
+)
+WEB_REPO=https://github.com/accordion-suite/accordion-web
 declare -A RUST_TARGET=(
     [amd64]=x86_64-unknown-linux-musl
     [arm64]=aarch64-unknown-linux-musl
@@ -99,6 +111,46 @@ export SOURCE_DATE_EPOCH
 # Before the long build, so missing release notes stop it early.
 update_json="$(python3 -I packaging/update-json.py "$version" "$SOURCE_DATE_EPOCH" \
     "packaging/release-notes/$version.md")"
+
+# The web app (decision 13), before the long Rust build so a problem with it
+# stops the build early.
+web_commit="$(cat packaging/web-commit 2>/dev/null || true)"
+[[ "$web_commit" =~ ^[0-9a-f]{40}$ ]] \
+    || die "packaging/web-commit should hold one full commit ID of accordion-web. Run scripts/pin-versions.sh, then commit it."
+case "$(uname -m)" in
+    x86_64) node_arch=x64 ;;
+    aarch64) node_arch=arm64 ;;
+    *) die "Packages are built on x86_64 or ARM64 computers, and this one is $(uname -m)." ;;
+esac
+node_archive="node-v${NODE_VERSION}-linux-$node_arch.tar.xz"
+mkdir -p target/node
+if [[ ! -f "target/node/$node_archive" ]]; then
+    curl -fsSLo "target/node/$node_archive.part" \
+        "https://nodejs.org/dist/v${NODE_VERSION}/$node_archive"
+    mv "target/node/$node_archive.part" "target/node/$node_archive"
+fi
+echo "${NODE_SHA256[$node_arch]}  target/node/$node_archive" | sha256sum --check --quiet \
+    || die "The Node.js download isn't the file Node.js published. Delete target/node and try again."
+node_dir="target/node/node-v${NODE_VERSION}-linux-$node_arch"
+rm -rf "$node_dir"
+tar -xJf "target/node/$node_archive" -C target/node
+
+web_src=target/web
+rm -rf "$web_src"
+git init -q "$web_src"
+git -C "$web_src" fetch -q --depth 1 "$WEB_REPO" "$web_commit" \
+    || die "Couldn't fetch accordion-web at $web_commit from GitHub. Check that the commit is pushed, then try again."
+git -C "$web_src" -c advice.detachedHead=false checkout -q FETCH_HEAD
+(
+    cd "$web_src"
+    export PATH="$repo/$node_dir/bin:$PATH"
+    export npm_config_update_notifier=false npm_config_fund=false npm_config_audit=false
+    # Install scripts are a common way for npm attacks to spread, and the
+    # app's packages don't need them.
+    npm ci --ignore-scripts
+    npm run build
+)
+
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$repo=/build"
 export CFLAGS="-ffile-prefix-map=$cargo_home=/cargo -ffile-prefix-map=$repo=/build"
@@ -109,7 +161,8 @@ for target in "${rust_targets[@]}"; do
 done
 cargo zigbuild --locked --release -p accordion-server -p accordion-update "${targets[@]}"
 
-python3 -I packaging/third-party-licenses.py "${rust_targets[@]}" > target/third-party-licenses.txt
+python3 -I packaging/third-party-licenses.py --web "$web_src" "${rust_targets[@]}" \
+    > target/third-party-licenses.txt
 
 debs=()
 for arch in "${arches[@]}"; do
@@ -129,6 +182,8 @@ for arch in "${arches[@]}"; do
     mkdir -p "$root/usr/lib/accordion"
     bunzip2 --stdout "target/restic/$restic" > "$root/usr/lib/accordion/restic"
     chmod 0755 "$root/usr/lib/accordion/restic"
+    cp -R "$web_src/dist" "$root/usr/lib/accordion/web"
+    chmod -R u=rwX,go=rX "$root/usr/lib/accordion/web"
     install -m 0755 "target/${RUST_TARGET[$arch]}/release/accordion-update" \
         "$root/usr/lib/accordion/accordion-update"
     for unit in accordion.service accordion-update.path accordion-update.service; do

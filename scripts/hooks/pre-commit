@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Refuses a commit whose Cargo.lock has lost the commits it pins.
+# Refuses a commit whose Cargo.lock has lost the commits it pins, or whose
+# packaging/web-commit isn't a commit.
 #
 # Local builds use the checkouts in this workspace (see link-workspace.sh),
 # and while they do, Cargo rewrites Cargo.lock without the git sources of
@@ -7,6 +8,16 @@
 # CI. link-workspace.sh turns this hook on.
 
 set -euo pipefail
+
+# The release build fetches the web app by this full commit ID (decision 13).
+if ! git diff --cached --quiet -- packaging/web-commit; then
+    web_commit="$(git show :packaging/web-commit 2>/dev/null || true)"
+    if [[ ! "$web_commit" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "packaging/web-commit should hold one full commit ID of accordion-web." >&2
+        echo "Run scripts/pin-versions.sh to write it, then stage it and commit again." >&2
+        exit 1
+    fi
+fi
 
 git diff --cached --quiet -- Cargo.lock && exit 0
 

@@ -22,6 +22,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -32,6 +33,8 @@ OWNER = "alex"
 # A throwaway server's password, which upgrade-test.sh gives create-owner.
 PASSWORD = "correct horse"
 BACKUP_FOLDER = "/mnt/accordion-upgrade-test"
+# Releases from before decision 13 have no web app.
+WEB_APP = "/usr/lib/accordion/web/index.html"
 # A non-ASCII name, so the test covers names that need encoding.
 FILES = {
     "Documents/Café notes.txt": "Pick up the bread.\n".encode(),
@@ -213,6 +216,9 @@ def check(state_file, version=None):
         if installed != version:
             fail(f"the server says it's {installed}, not {version}.")
 
+    if os.path.isfile(WEB_APP):
+        check_web_app()
+
     usernames = {person["username"] for person in call("GET", "/api/people", token)["people"]}
     if usernames != {"alex", "sam"}:
         fail(f"the people are {sorted(usernames)}, not alex and sam.")
@@ -243,6 +249,20 @@ def check(state_file, version=None):
     if not outcome["ok"]:
         fail(f"the restore test didn't work: {outcome['problem']}")
     say(f"the data is all there{f' on {version}' if version else ''}, and backups work.")
+
+
+def check_web_app():
+    """Drive's address opens the installed web app, and its script loads."""
+    status, headers, page = request("GET", "/drive/")
+    if status != 200 or not headers.get("Content-Type", "").startswith("text/html"):
+        fail(f"Drive's page answered {status} with {headers.get('Content-Type')}, not the web app.")
+    script = re.search(rb'src="(/app/[^"]+[.]js)"', page)
+    if not script:
+        fail("Drive's page doesn't load the web app's script.")
+    path = script.group(1).decode()
+    status, _, _ = request("GET", path)
+    if status != 200:
+        fail(f"the web app's script, {path}, answered {status}.")
 
 
 def update(state_file, version, outcome, installed):
