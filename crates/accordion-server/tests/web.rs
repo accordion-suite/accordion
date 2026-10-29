@@ -113,12 +113,12 @@ async fn sends_the_apps_page_for_every_address_in_drive() {
         assert_eq!(response.status(), StatusCode::OK, "{path}");
         assert_eq!(body, PAGE, "{path}");
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
-        assert!(
-            response.headers()[header::CONTENT_SECURITY_POLICY]
-                .to_str()
-                .unwrap()
-                .contains("script-src 'self'")
-        );
+        let policy = response.headers()[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap();
+        assert!(policy.contains("script-src 'self'"));
+        // Drive shows PDFs in a frame.
+        assert!(policy.contains("frame-src 'self'"));
     }
     // Only modules have pages in the app.
     let (response, _) = server.get("/photos/", None).await;

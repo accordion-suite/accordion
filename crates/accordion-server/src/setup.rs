@@ -651,11 +651,12 @@ const OWNER_HTML: &str = include_str!("setup/owner.html");
 const OWNER_JS: &str = include_str!("setup/owner.js");
 pub(crate) const SETUP_CSS: &str = include_str!("setup/setup.css");
 
-/// Scripts and styles come only from the server itself, and no other site
-/// can show these pages in a frame.
+/// Scripts, styles, and frames come only from the server itself, and no
+/// other site can show these pages in a frame. Drive's web pages show PDFs
+/// in a frame, in the browser's own PDF viewer.
 pub(crate) const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'none'; script-src 'self'; \
-     style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; \
-     frame-ancestors 'none'; base-uri 'none'";
+     style-src 'self'; connect-src 'self'; img-src 'self'; frame-src 'self'; \
+     form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 pub(crate) fn asset(body: &'static str, content_type: &'static str) -> Response {
     (
