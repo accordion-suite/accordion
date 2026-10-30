@@ -656,7 +656,7 @@ pub(crate) const SETUP_CSS: &str = include_str!("setup/setup.css");
 /// in a frame, in the browser's own PDF viewer.
 pub(crate) const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'none'; script-src 'self'; \
      style-src 'self'; connect-src 'self'; img-src 'self'; frame-src 'self'; \
-     form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+     manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 pub(crate) fn asset(body: &'static str, content_type: &'static str) -> Response {
     (

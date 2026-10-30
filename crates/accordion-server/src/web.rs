@@ -1,5 +1,6 @@
 //! The web app (decision 13 in `docs/decisions`): its page at each module's
-//! address, such as `/drive/`, and its scripts and styles under `/app/`.
+//! address, such as `/drive/`, its scripts, styles, and icons under `/app/`,
+//! and the manifest that lets phones and computers install it.
 //!
 //! The release package installs the app's files in `/usr/lib/accordion/web`.
 //! `ACCORDION_WEB_DIR` points the server at another build instead, such as
@@ -66,9 +67,11 @@ impl WebApp {
 }
 
 /// The app's page at each of `pages`, the IDs of the modules that are on,
-/// and its files under `/app/`.
+/// its files under `/app/`, and its manifest.
 pub(crate) fn routes<'a>(pages: impl Iterator<Item = &'a str>) -> Router<AppState> {
-    let mut router = Router::new().route("/app/{file}", get(app_file));
+    let mut router = Router::new()
+        .route("/app/{file}", get(app_file))
+        .route("/manifest.webmanifest", get(manifest));
     for id in pages {
         router = router
             .route(&format!("/{id}"), get(page))
@@ -97,6 +100,21 @@ async fn page(State(state): State<AppState>, headers: HeaderMap) -> Response {
     serve(
         &web.dir.join("index.html"),
         "text/html; charset=utf-8",
+        "no-cache",
+        &headers,
+    )
+    .await
+}
+
+/// The manifest. Its name can't change, so browsers check it on each visit,
+/// and see new icons after an update.
+async fn manifest(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let Some(web) = state.web else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    serve(
+        &web.dir.join("manifest.webmanifest"),
+        "application/manifest+json",
         "no-cache",
         &headers,
     )
@@ -136,7 +154,6 @@ fn content_type(file: &str) -> Option<&'static str> {
         "css" => "text/css",
         "svg" => "image/svg+xml",
         "png" => "image/png",
-        "webmanifest" => "application/manifest+json",
         _ => return None,
     })
 }

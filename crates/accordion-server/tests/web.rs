@@ -21,6 +21,7 @@ use tower::ServiceExt;
 const HOST: &str = "accordion.example.com";
 const PAGE: &str = "<!doctype html><title>Accordion</title>";
 const SCRIPT: &str = "console.log(1)";
+const MANIFEST: &str = r#"{"name":"Accordion"}"#;
 
 struct Server {
     _dir: tempfile::TempDir,
@@ -68,6 +69,7 @@ async fn start(web: bool) -> Server {
     std::fs::write(build.join("app/main-ABC123.js"), SCRIPT).unwrap();
     std::fs::write(build.join("app/main-ABC123.js.gz"), "gzip script").unwrap();
     std::fs::write(build.join("app/notes.txt"), "not part of the app").unwrap();
+    std::fs::write(build.join("manifest.webmanifest"), MANIFEST).unwrap();
 
     let app = router(
         AppState {
@@ -182,6 +184,21 @@ async fn sends_only_the_apps_own_files() {
         let (response, _) = server.get(path, None).await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
     }
+}
+
+#[tokio::test]
+async fn sends_the_manifest_that_installs_the_app() {
+    let (response, body) = start(true).await.get("/manifest.webmanifest", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "application/manifest+json"
+    );
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
+    assert_eq!(body, MANIFEST);
+
+    let (response, _) = start(false).await.get("/manifest.webmanifest", None).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

@@ -193,5 +193,5 @@ The shell, sign-in, and Drive's pages, with the scope from the context above. Sh
 ## Open questions
 
 - **Offline data.** How Docs and Notes keep documents in the browser while offline, and how much storage they use, belong with the Docs and Notes decisions.
-- **The service worker after an update.** A server update changes the app's files. The app has to notice and reload, without losing an upload or an unsaved change. That will be designed with the PWA.
+- **The service worker.** The installable app shipped without one, because browsers no longer need one to install an app, and without one every visit loads the newest files. It comes with offline data. Then a server update that changes the app's files has to be noticed, and the app has to reload without losing an upload or an unsaved change.
 - **Translation.** Where community translators work, such as a self-hosted Weblate, before the five languages the spec asks for at 1.0.
