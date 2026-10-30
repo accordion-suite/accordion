@@ -2,12 +2,13 @@
 //! scripts, from a folder laid out like `accordion-web`'s build.
 
 use accordion_core::db::Database;
-use accordion_core::identity::Identity;
+use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
 use accordion_gateway::Peer;
 use accordion_module::{Services, Stopping};
 use accordion_server::web::WebApp;
 use accordion_server::{AppState, Site, modules, router};
+use accordion_types::Role;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::connect_info::MockConnectInfo;
@@ -27,11 +28,21 @@ struct Server {
     app: Router,
 }
 
-/// Starts a server with every module, and with a web app build if `web`.
+/// Starts a set-up server with every module, and with a web app build if
+/// `web`.
 async fn start(web: bool) -> Server {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open(&dir.path().join("accordion.db")).unwrap();
     let identity = Identity::new(db.clone()).await.unwrap();
+    identity
+        .create_user(NewUser {
+            username: "alex".into(),
+            display_name: "Alex Kim".into(),
+            role: Role::Owner,
+            password: "correct horse".into(),
+        })
+        .await
+        .unwrap();
     let storage = Storage::open(db.clone(), identity.clone(), &dir.path().join("storage"))
         .await
         .unwrap();
@@ -179,4 +190,16 @@ async fn explains_a_server_without_the_app() {
     let (response, body) = server.get("/drive/", None).await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert!(body.contains("ACCORDION_WEB_DIR"));
+}
+
+#[tokio::test]
+async fn opens_drive_from_the_servers_address() {
+    let (response, _) = start(true).await.get("/", None).await;
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(response.headers()[header::LOCATION], "/drive/");
+
+    // Without the app, the server's own page links to the others.
+    let (response, body) = start(false).await.get("/", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body.contains(r#"href="/account""#));
 }

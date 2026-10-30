@@ -66,15 +66,20 @@ impl<S: Sync> FromRequestParts<S> for Connection {
     }
 }
 
+impl AdminAccess {
+    /// Whether the setup and admin pages open on `peer`'s connection.
+    pub(crate) fn allows(self, peer: Option<Peer>) -> bool {
+        self == Self::Anywhere || peer.is_some_and(|peer| peer.on_home_network())
+    }
+}
+
 /// Middleware for the setup and admin pages.
 pub async fn only_home_network(
     State(access): State<AdminAccess>,
     request: Request,
     next: Next,
 ) -> Response {
-    let allowed = access == AdminAccess::Anywhere
-        || peer(request.extensions()).is_some_and(|peer| peer.on_home_network());
-    if allowed {
+    if access.allows(peer(request.extensions())) {
         return next.run(request).await;
     }
     let message = "Accordion's admin pages only open on the same network as the server. \

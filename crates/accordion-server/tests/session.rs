@@ -131,6 +131,7 @@ async fn signs_in_and_out_with_a_cookie() {
     assert_eq!(body["user"]["username"], "alex");
     assert_eq!(body["user"]["role"], "owner");
     assert_eq!(body["session"]["device_name"], "Firefox on Linux");
+    assert_eq!(body["admin_pages"], true);
 
     assert_eq!(current(&app, header::COOKIE, &cookie).await, StatusCode::OK);
 
@@ -264,4 +265,25 @@ async fn pauses_sign_ins_after_too_many_wrong_passwords() {
         sign_in(&home, "correct horse").await.status(),
         StatusCode::OK
     );
+}
+
+#[tokio::test]
+async fn says_whether_the_admin_pages_open_here() {
+    let (_dir, server) = start_server(&Site::Unnamed).await;
+    let home = server.clone().layer(MockConnectInfo(peer("192.168.1.30")));
+    let away = server.layer(MockConnectInfo(peer("203.0.113.5")));
+    let cookie = session_cookie(&sign_in(&home, "correct horse").await);
+    for (app, open) in [(&home, true), (&away, false)] {
+        let response = app
+            .clone()
+            .oneshot(
+                request("GET")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(json(response).await["admin_pages"], open);
+    }
 }

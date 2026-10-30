@@ -948,7 +948,8 @@ async fn create_owner(
     Ok((
         StatusCode::CREATED,
         [(SET_COOKIE, auth::session_cookie(&token))],
-        Json(SessionResponse::new(user, session)),
+        // Setup only opens where the admin pages do.
+        Json(SessionResponse::new(user, session, true)),
     )
         .into_response())
 }

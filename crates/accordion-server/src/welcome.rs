@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::device;
+use crate::network::Connection;
 use crate::session::SessionResponse;
 use crate::setup::asset;
 
@@ -83,6 +84,7 @@ struct SetPassword {
 /// and signs the person in on this browser.
 async fn set_password(
     State(state): State<AppState>,
+    connection: Connection,
     headers: HeaderMap,
     Json(request): Json<SetPassword>,
 ) -> Result<Response, ApiError> {
@@ -103,7 +105,11 @@ async fn set_password(
     tracing::info!(user = %user.id, session = %session.id, "set a password from a link");
     Ok((
         [(SET_COOKIE, auth::session_cookie(&token))],
-        Json(SessionResponse::new(user, session)),
+        Json(SessionResponse::new(
+            user,
+            session,
+            state.admin_access.allows(Some(connection.0)),
+        )),
     )
         .into_response())
 }

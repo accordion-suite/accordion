@@ -25,6 +25,9 @@ pub struct SignInRequest {
 pub struct SessionResponse {
     user: UserView,
     session: SessionView,
+    /// Whether the admin pages open for this user on this connection, so the
+    /// web app links to them only where they'd work.
+    admin_pages: bool,
 }
 
 #[derive(Serialize)]
@@ -44,8 +47,12 @@ struct SessionView {
 }
 
 impl SessionResponse {
-    pub(crate) fn new(user: User, session: Session) -> Self {
+    /// `admin_pages_open` is whether the admin pages open on the request's
+    /// connection, whoever's signed in.
+    pub(crate) fn new(user: User, session: Session, admin_pages_open: bool) -> Self {
+        let admin_pages = admin_pages_open && matches!(user.role, Role::Owner | Role::Admin);
         Self {
+            admin_pages,
             user: UserView {
                 id: user.id,
                 username: user.username,
@@ -91,16 +98,26 @@ pub async fn sign_in(
     tracing::info!(user = %user.id, session = %session.id, "signed in");
     Ok((
         [(SET_COOKIE, auth::session_cookie(&token))],
-        Json(SessionResponse::new(user, session)),
+        Json(SessionResponse::new(
+            user,
+            session,
+            state.admin_access.allows(Some(connection.0)),
+        )),
     )
         .into_response())
 }
 
 /// `GET /api/session`: returns the signed-in user and their session.
 pub async fn current(
+    State(state): State<AppState>,
     Authenticated(SignedIn { user, session, .. }): Authenticated,
+    connection: Connection,
 ) -> Json<SessionResponse> {
-    Json(SessionResponse::new(user, session))
+    Json(SessionResponse::new(
+        user,
+        session,
+        state.admin_access.allows(Some(connection.0)),
+    ))
 }
 
 #[derive(Deserialize)]
