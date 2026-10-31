@@ -29,6 +29,8 @@ async function api(method, path, body) {
 }
 
 async function load() {
+  // Until the form shows, the error sits under the title.
+  $("choose").before($("error"));
   if (!token) {
     showError("This link is missing its last part. Open the whole link from the message you were sent.");
     return;
@@ -45,6 +47,7 @@ async function load() {
     $("welcome-username").textContent = data.username;
     $("username").value = data.username;
     $("choose").hidden = false;
+    $("choose").querySelector(".actions").before($("error"));
     $("new-password").focus();
   } catch (error) {
     showError(error.message);
@@ -71,7 +74,9 @@ $("choose").addEventListener("submit", async (event) => {
     // The link is used up, so keep it out of the browser's history.
     history.replaceState(null, "", location.pathname);
     $("choose").hidden = true;
+    $("title").textContent = "You're all set";
     $("done").hidden = false;
+    $("title").focus();
   } catch (error) {
     showError(error.message);
     button.disabled = false;

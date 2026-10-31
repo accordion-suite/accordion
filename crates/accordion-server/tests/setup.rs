@@ -185,6 +185,16 @@ async fn the_wizard_answers_only_the_home_network_by_its_own_names() {
 }
 
 #[tokio::test]
+async fn the_wizard_sends_its_page_and_what_the_page_loads() {
+    let (_dir, setup, _) = start(false).await;
+    let app = wizard(&setup, "192.168.1.30");
+    for path in ["/", "/wizard.js", "/setup.css", "/favicon.svg"] {
+        let (status, _) = call(&app, "GET", "accordion.local", path, Value::Null).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+    }
+}
+
+#[tokio::test]
 async fn claiming_needs_the_code_and_unlocks_progress() {
     let (dir, setup, _) = start(false).await;
     let app = wizard(&setup, "192.168.1.30");

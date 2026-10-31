@@ -40,6 +40,8 @@ async function start() {
     $("code-field").hidden = Boolean(handoff) || !status.code_needed;
     $("owner").hidden = false;
   } catch (error) {
+    // Before the form shows, the error has no step to sit in.
+    $("owner").before($("error"));
     showError(error.message);
   }
 }
@@ -63,6 +65,7 @@ $("owner").addEventListener("submit", async (event) => {
     });
     $("owner").hidden = true;
     $("finished").hidden = false;
+    $("finished").querySelector("h1").focus();
   } catch (error) {
     // A handoff lasts five minutes. After that, the setup code still works.
     if (error.message.startsWith("That setup code isn't right") && handoff) {

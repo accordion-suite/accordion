@@ -3,13 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f1f4f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
 <title>Welcome to Accordion</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/setup.css">
 <script src="/welcome.js" defer></script>
 </head>
 <body>
 <main>
-  <h1 id="title">Welcome to Accordion</h1>
+  <p class="eyebrow">Accordion</p>
+  <h1 id="title" tabindex="-1">Welcome to Accordion</h1>
 
   <form id="choose" hidden>
     <p id="greeting"></p>
@@ -20,15 +24,19 @@
     <input id="new-password" type="password" autocomplete="new-password" required>
     <label for="repeat-password">Type it again</label>
     <input id="repeat-password" type="password" autocomplete="new-password" required>
-    <button type="submit">Set password</button>
+    <p id="error" class="error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="submit">Set password</button>
+    </div>
   </form>
 
   <section id="done" hidden>
-    <p>Your password is set, and you're signed in on this browser. <a href="/">Open Drive</a></p>
-    <p>To open your Drive files in File Explorer on Windows, Finder on a Mac, or a phone app, create an app password in <a href="/settings/devices">Settings</a>.</p>
+    <p>Your password is set, and you're signed in on this browser.</p>
+    <p class="hint">To open your Drive files in File Explorer on Windows, Finder on a Mac, or a phone app, create an app password in <a href="/settings/devices">Settings</a>.</p>
+    <div class="actions">
+      <a class="button" href="/">Open Drive</a>
+    </div>
   </section>
-
-  <p id="error" class="error" role="alert" hidden></p>
 </main>
 </body>
 </html>

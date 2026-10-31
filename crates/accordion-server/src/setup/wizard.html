@@ -3,34 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f1f4f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
 <title>Set up Accordion</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/setup.css">
 <script src="/wizard.js" defer></script>
 </head>
 <body>
 <main>
-  <h1>Set up Accordion</h1>
+  <p class="eyebrow">Set up Accordion</p>
 
   <form id="claim" hidden>
-    <h2>Enter the setup code</h2>
+    <h1 tabindex="-1">Enter the setup code</h1>
     <p id="code-help">The setup code proves you have access to the server. It's 10 letters, shown on the server's screen and in its log. You can also see it by running <code>accordion setup-code</code> on the server.</p>
     <p id="window-help" hidden>This server has no screen, so it doesn't need a setup code for the first 30 minutes after it starts.</p>
     <div id="code-field">
       <label for="code">Setup code</label>
-      <input id="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="abcde-fghij">
+      <input id="code" class="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="abcde-fghij">
     </div>
-    <button type="submit">Continue</button>
+    <div class="actions">
+      <button type="submit">Continue</button>
+    </div>
   </form>
 
   <section id="start" hidden>
-    <h2>Start fresh or restore</h2>
-    <p>If you used Accordion before and kept backups, restore one to bring back everyone's accounts, files, and settings, including the server's name. Otherwise, set up a new server.</p>
-    <button id="choose-new" type="button">Set up a new server</button>
-    <button id="choose-restore" type="button" class="secondary">Restore from a backup</button>
+    <h1 tabindex="-1">Start fresh or restore</h1>
+    <p>If you used Accordion before and kept backups, you can bring everything back. Otherwise, set up a new server.</p>
+    <div class="paths">
+      <button id="choose-new" type="button" class="path">
+        <strong>Set up a new server</strong>
+        <span>Choose the server's name, then create your account.</span>
+      </button>
+      <button id="choose-restore" type="button" class="path">
+        <strong>Restore from a backup</strong>
+        <span>Bring back everyone's accounts, files, and settings, including the server's name.</span>
+      </button>
+    </div>
   </section>
 
   <form id="restore" hidden>
-    <h2>Restore from a backup</h2>
+    <h1 tabindex="-1">Restore from a backup</h1>
     <fieldset>
       <legend>Where are your backups?</legend>
       <label class="choice"><input type="radio" name="restore-kind" value="folder" checked> <span><strong>On a disk,</strong> such as a USB disk. Connect it to this server first.</span></label>
@@ -60,8 +73,10 @@
     </fieldset>
     <fieldset id="restore-sftp" hidden disabled>
       <p class="hint">This server has a new key, because the old one is inside the backup. On the other computer, add this key as a line in ~/.ssh/authorized_keys for the user Accordion signs in as.</p>
-      <p class="secret link"><code id="restore-ssh-key"></code></p>
-      <button id="restore-copy-key" type="button" class="secondary">Copy key</button>
+      <div class="secret">
+        <code id="restore-ssh-key"></code>
+        <button id="restore-copy-key" type="button" class="secondary">Copy key</button>
+      </div>
       <label for="restore-server">Computer</label>
       <p class="hint">Its name or address, such as nas.local or 192.168.1.50. Add :port at the end if SSH doesn't use port 22.</p>
       <input id="restore-server" autocapitalize="none" spellcheck="false" required>
@@ -84,38 +99,48 @@
     </fieldset>
     <label for="restore-key">Recovery key</label>
     <p class="hint">The 30 letters you wrote down or printed when you turned on backups. Spaces are optional.</p>
-    <input id="restore-key" autocomplete="off" autocapitalize="none" spellcheck="false" required>
-    <button type="submit">Find backups</button>
-    <p id="find-progress" class="hint" role="status" hidden></p>
-    <button id="restore-back" type="button" class="secondary">Set up a new server instead</button>
+    <input id="restore-key" class="code" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+    <p id="find-progress" class="waiting" role="status" hidden><span class="spinner"></span><span id="find-progress-text"></span></p>
+    <div class="actions">
+      <button id="restore-back" type="button" class="secondary">Back</button>
+      <button type="submit">Find backups</button>
+    </div>
   </form>
 
   <form id="choose" hidden>
-    <h2>Choose a backup</h2>
+    <h1 tabindex="-1">Choose a backup</h1>
     <p>The newest backup has your most recent files. Choose an earlier one only if the newest has a problem.</p>
-    <div id="snapshots"></div>
+    <fieldset>
+      <legend class="visually-hidden">Backups</legend>
+      <div id="snapshots"></div>
+    </fieldset>
     <p class="hint">Restoring replaces everything on this server. A large backup can take up to an hour.</p>
-    <button type="submit">Restore this backup</button>
-    <button id="choose-back" type="button" class="secondary">Back</button>
+    <div class="actions">
+      <button id="choose-back" type="button" class="secondary">Back</button>
+      <button type="submit">Restore this backup</button>
+    </div>
   </form>
 
   <section id="restoring" hidden>
-    <h2>Restoring your data</h2>
+    <h1 tabindex="-1">Restoring your data</h1>
     <progress id="restore-progress" max="100" value="0" aria-label="Restore progress"></progress>
-    <p id="restore-percent"></p>
+    <p id="restore-percent" class="hint"></p>
     <p>A large backup can take up to an hour. Keep this page open.</p>
   </section>
 
   <section id="restored" hidden>
-    <h2>Your data is back</h2>
+    <div class="done-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9.5 16.6 5.2 12.3l-1.4 1.4 5.7 5.7L20.2 8.7l-1.4-1.4z"/></svg></div>
+    <h1 tabindex="-1">Your data is back</h1>
     <p>Accordion is starting again with your restored data. Sign in with the same account you used before.</p>
-    <p id="restored-named"><a id="restored-link" href="#">Go to your server</a></p>
     <p id="restored-unnamed" hidden>Open Accordion the way you did before.</p>
     <p class="hint">If the page doesn't open, wait a minute while the server's name updates to point at this server, then try again.</p>
+    <div id="restored-named" class="actions">
+      <a id="restored-link" class="button" href="#">Go to your server</a>
+    </div>
   </section>
 
   <form id="name" hidden>
-    <h2>Choose the server's name</h2>
+    <h1 tabindex="-1">Choose the server's name</h1>
     <p>Your devices find Accordion by this name, and it gets a certificate so browsers trust it. The name has to be under a domain whose DNS is hosted at deSEC or Cloudflare.</p>
     <label for="server-name">Server name</label>
     <p class="hint">Certificates are listed in public logs, so choose a name that doesn't identify your household.</p>
@@ -129,20 +154,26 @@
     <p class="hint">Accordion uses it to prove it controls the name and to point the name at the server. Limit the token to the name's A record and its <code>_acme-challenge</code> TXT record if your provider allows it.</p>
     <input id="token" type="password" autocomplete="off" required>
     <p class="hint">Accordion gets its certificate from Let's Encrypt. Continuing means agreeing to the <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">Let's Encrypt Subscriber Agreement</a>.</p>
-    <button type="submit">Get certificate</button>
-    <button id="name-back" type="button" class="secondary">Back</button>
+    <div class="actions">
+      <button id="name-back" type="button" class="secondary">Back</button>
+      <button type="submit">Get certificate</button>
+    </div>
   </form>
 
   <section id="working" hidden>
-    <h2>Getting the certificate</h2>
-    <p>Accordion is getting a certificate for <strong id="working-name"></strong>. This usually takes 1–5 minutes, and can take up to 15. Keep this page open.</p>
+    <h1 tabindex="-1">Getting the certificate</h1>
+    <p class="waiting" role="status"><span class="spinner"></span><span>Working on <strong id="working-name"></strong></span></p>
+    <p>This usually takes 1–5 minutes, and can take up to 15. Keep this page open.</p>
   </section>
 
   <section id="done" hidden>
-    <h2>The server has its name</h2>
+    <div class="done-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9.5 16.6 5.2 12.3l-1.4 1.4 5.7 5.7L20.2 8.7l-1.4-1.4z"/></svg></div>
+    <h1 tabindex="-1">The server has its name</h1>
     <p>Next, you'll create the owner account on the secure page.</p>
-    <p><a id="done-link" href="#">Continue to the secure page</a></p>
     <p class="hint">If the page doesn't open, check that this device uses your home network's DNS, then try the link again.</p>
+    <div class="actions">
+      <a id="done-link" class="button" href="#">Continue to the secure page</a>
+    </div>
   </section>
 
   <p id="error" class="error" role="alert" hidden></p>

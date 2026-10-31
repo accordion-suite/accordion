@@ -82,6 +82,10 @@ async fn explains_a_server_without_the_web_app() {
     let body = String::from_utf8(body.to_vec()).unwrap();
     assert!(body.contains("ACCORDION_WEB_DIR"));
 
-    // The page's styles load from anywhere, unlike the admin APIs.
+    // The page's styles and tab icon load from anywhere, unlike the admin
+    // APIs.
     assert_eq!(get(&app, "/setup.css").await.status(), StatusCode::OK);
+    let icon = get(&app, "/favicon.svg").await;
+    assert_eq!(icon.status(), StatusCode::OK);
+    assert_eq!(icon.headers()[header::CONTENT_TYPE], "image/svg+xml");
 }

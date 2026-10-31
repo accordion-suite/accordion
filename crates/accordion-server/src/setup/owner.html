@@ -3,20 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f1f4f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
 <title>Create the owner account</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/setup.css">
 <script src="/owner.js" defer></script>
 </head>
 <body>
 <main>
-  <h1>Create the owner account</h1>
+  <p class="eyebrow">Set up Accordion</p>
 
   <form id="owner" hidden>
+    <h1>Create the owner account</h1>
     <p>The owner manages Accordion: its users, modules, backups, and updates. You can add family members after this.</p>
     <div id="code-field" hidden>
       <label for="code">Setup code</label>
       <p class="hint">It's 10 letters, shown on the server's screen and in its log, or by running <code>accordion setup-code</code> on the server.</p>
-      <input id="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="abcde-fghij">
+      <input id="code" class="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="abcde-fghij">
     </div>
     <label for="display-name">Your name</label>
     <input id="display-name" autocomplete="name" required>
@@ -28,19 +32,29 @@
     <input id="password" type="password" autocomplete="new-password" required>
     <label for="confirm">Confirm password</label>
     <input id="confirm" type="password" autocomplete="new-password" required>
-    <button type="submit">Create account</button>
+    <p id="error" class="error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="submit">Create account</button>
+    </div>
   </form>
 
   <section id="finished" hidden>
-    <h2>You're all set</h2>
+    <div class="done-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9.5 16.6 5.2 12.3l-1.4 1.4 5.7 5.7L20.2 8.7l-1.4-1.4z"/></svg></div>
+    <h1 tabindex="-1">You're all set</h1>
     <p>Your owner account is ready, and you're signed in on this device.</p>
+    <p class="hint">To add family members, go to <a href="/settings/people">People</a> in Settings.</p>
+    <div class="actions">
+      <a class="button" href="/">Open Drive</a>
+    </div>
   </section>
 
   <section id="set-up" hidden>
-    <p>This server is already set up. Sign in with your account instead.</p>
+    <h1>This server is set up</h1>
+    <p>It already has an owner. Sign in with your account instead.</p>
+    <div class="actions">
+      <a class="button" href="/">Sign in</a>
+    </div>
   </section>
-
-  <p id="error" class="error" role="alert" hidden></p>
 </main>
 </body>
 </html>

@@ -19,10 +19,25 @@ let memoryToken = token();
 // "restore". Until then, the wizard asks.
 let choice = null;
 
+const STEPS = ["claim", "start", "restore", "choose", "restoring", "restored", "name", "working", "done"];
+
 function show(id) {
-  for (const section of ["claim", "start", "restore", "choose", "restoring", "restored", "name", "working", "done"]) {
+  const step = $(id);
+  if (!step.hidden) return;
+  for (const section of STEPS) {
     $(section).hidden = section !== id;
   }
+  placeError();
+  // Screen readers start reading the new step from its title.
+  step.querySelector("h1").focus();
+}
+
+// The error sits above the step's buttons, where the reader is looking.
+function placeError() {
+  const step = STEPS.map($).find((section) => !section.hidden);
+  const actions = step && step.querySelector(".actions");
+  if (actions) actions.before($("error"));
+  else if (step) step.append($("error"));
 }
 
 // Such as "October 22, 2026 at 3:04 AM", in the reader's time zone.
@@ -43,6 +58,7 @@ function size(bytes) {
 }
 
 function showError(message) {
+  placeError();
   $("error").textContent = message;
   $("error").hidden = !message;
 }
@@ -269,10 +285,10 @@ $("restore").addEventListener("submit", async (event) => {
   // A location that doesn't answer fails after 10 seconds, so a search
   // that runs longer is reading a large or slow backup.
   const line = $("find-progress");
-  line.textContent = "Looking for backups. This usually takes a few seconds.";
+  $("find-progress-text").textContent = "Looking for backups. This usually takes a few seconds.";
   line.hidden = false;
   const later = setTimeout(() => {
-    line.textContent = "Still looking. Over a slow connection, this can take a minute or two.";
+    $("find-progress-text").textContent = "Still looking. Over a slow connection, this can take a minute or two.";
   }, 15 * 1000);
   try {
     const { snapshots } = await api("POST", "/api/setup/restore/find", {

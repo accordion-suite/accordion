@@ -1,157 +1,379 @@
+/* The pages the server shows outside the web app: the setup wizard, the
+   owner step, the welcome page, and the page for a server without the web
+   app. They work before the web app is there, so they keep their own
+   styles, with the web app's colors and shapes so the two look alike.
+   Change the tokens together with accordion-web's app.css. */
+
 :root {
   color-scheme: light dark;
-  --text: #1d1d1f;
-  --muted: #5b5b66;
-  --surface: #ffffff;
-  --page: #f4f4f7;
-  --border: #c9c9d3;
-  --accent: #3d4fd6;
+  --text: #1c2430;
+  --muted: #5b6573;
+  --page: #f1f4f9;
+  --panel: #ffffff;
+  --surface: #e9eef6;
+  --border: #d5dce6;
+  --accent: #1a5fb4;
   --accent-text: #ffffff;
+  --accent-soft: #d6e4f8;
+  --selected: #dbe7f8;
   --error: #b3261e;
+  --error-soft: #fbe3e1;
+  --focus: #1a5fb4;
   --ok: #1d6b38;
-  --ok-bg: #dcf2e3;
-  --warning: #7a4f00;
-  --warning-bg: #fbeccb;
-  --problem-bg: #fadcd9;
+  --ok-soft: #dcf2e3;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.08), 0 4px 16px rgb(16 24 40 / 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #ececf1;
-    --muted: #a5a5b3;
-    --surface: #1e1e24;
-    --page: #121216;
-    --border: #3b3b46;
-    --accent: #8e9bff;
-    --accent-text: #10102a;
-    --error: #ffb4ab;
+    --text: #e4e8ee;
+    --muted: #a4adba;
+    --page: #111418;
+    --panel: #1a1e24;
+    --surface: #242a32;
+    --border: #353d48;
+    --accent: #8ab4f0;
+    --accent-text: #0b1a2e;
+    --accent-soft: #23385a;
+    --selected: #22344f;
+    --error: #f2b8b5;
+    --error-soft: #4a1f1c;
+    --focus: #8ab4f0;
     --ok: #9fdcb0;
-    --ok-bg: #173523;
-    --warning: #f5cf86;
-    --warning-bg: #3d2e0b;
-    --problem-bg: #4a1a16;
+    --ok-soft: #173523;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.5);
   }
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
   margin: 0;
-  padding: 32px 16px;
-  background: var(--page);
+  padding: 24px 16px;
+  font: 15px/1.5 system-ui, sans-serif;
   color: var(--text);
-  font: 16px/1.5 system-ui, sans-serif;
+  background: var(--page);
 }
 
 main {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 24px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  padding: 32px;
+  background: var(--panel);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
 }
 
-h1 { font-size: 1.5rem; margin: 0 0 16px; }
-h2 { font-size: 1.15rem; margin: 0 0 8px; }
-p { margin: 0 0 16px; }
-.hint { color: var(--muted); font-size: 0.9rem; }
+@media (max-width: 480px) {
+  main {
+    padding: 24px 20px;
+  }
+}
 
-label { display: block; font-weight: 600; margin: 16px 0 4px; }
-label + .hint { margin: 0 0 6px; }
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
 
-input, select {
+[hidden] {
+  display: none !important;
+}
+
+/* Read by screen readers, not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* What the page is for, such as "Set up Accordion", above each step's
+   title. */
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* Each step's title takes focus when the step opens, so screen readers
+   read it. It doesn't need an outline, since it isn't a control. */
+h1:focus {
+  outline: none;
+}
+
+h2 {
+  margin: 24px 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+p {
+  margin: 0 0 16px;
+}
+
+a {
+  color: var(--accent);
+}
+
+code {
+  font-size: 0.95em;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+/* Forms. */
+
+label {
+  display: block;
+  margin: 16px 0 4px;
+  font-weight: 600;
+}
+
+label + .hint {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+input:not([type="radio"]),
+select {
   width: 100%;
   padding: 10px 12px;
   font: inherit;
   color: inherit;
-  background: var(--page);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
-button {
-  margin-top: 20px;
-  padding: 10px 18px;
+/* The setup code, which is read off a screen and typed in. */
+input.code {
+  font-family: ui-monospace, monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+}
+
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  margin: 16px 0 4px;
+  padding: 0;
+  font-weight: 600;
+}
+
+/* A choice among a few, such as where the backups are. The whole box is
+   the label, so it's a large target on a phone. */
+label.choice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 8px 0;
+  padding: 12px 14px;
+  font-weight: normal;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+label.choice:has(:checked) {
+  background: var(--selected);
+  border-color: var(--accent);
+}
+
+label.choice input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+/* The two ways to start: a new server, or one restored from a backup. */
+.paths {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 0;
+}
+
+button.path {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 16px 18px;
+  color: var(--text);
+  font-weight: normal;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+button.path:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+button.path strong {
+  color: var(--accent);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+button.path span {
+  color: var(--muted);
+}
+
+/* Buttons. */
+
+button,
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
   font: inherit;
   font-weight: 600;
   color: var(--accent-text);
   background: var(--accent);
-  border: 0;
-  border-radius: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  text-decoration: none;
   cursor: pointer;
 }
 
-button:disabled { opacity: 0.6; cursor: default; }
-a { color: var(--accent); }
-code { font-size: 0.95em; }
-/* A command to copy, such as the install command. It wraps, so it fits a
-   phone's screen. */
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: var(--page);
-  padding: 8px 12px;
-  border-radius: 8px;
-}
-.error { color: var(--error); font-weight: 600; margin-top: 16px; }
-[hidden] { display: none !important; }
-
-/* The health page. */
-.overall { font-weight: 600; }
-.checks { list-style: none; margin: 0 0 16px; padding: 0; }
-.check { border-top: 1px solid var(--border); padding: 16px 0 0; }
-.check p { margin-bottom: 16px; }
-.state {
-  display: inline-block;
-  margin-left: 4px;
-  padding: 0 8px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  border-radius: 999px;
-  vertical-align: middle;
-  background: var(--ok-bg);
-  color: var(--ok);
-}
-[data-state="warning"] .state { background: var(--warning-bg); color: var(--warning); }
-[data-state="problem"] .state { background: var(--problem-bg); color: var(--error); }
-
-/* The account page. */
-section { border-top: 1px solid var(--border); margin-top: 24px; padding-top: 16px; }
-.secret code {
-  display: block;
-  padding: 12px;
-  font-size: 1.3rem;
-  letter-spacing: 0.05em;
-  text-align: center;
-  background: var(--page);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.details { margin: 0 0 16px; }
-.details dt { font-weight: 600; }
-.details dd { margin: 0 0 8px; overflow-wrap: anywhere; }
-.steps { padding-left: 20px; }
-.steps li { margin-bottom: 8px; }
-.passwords { list-style: none; margin: 0; padding: 0; }
-.passwords li { border-top: 1px solid var(--border); padding: 12px 0; }
-.passwords li:first-child { border-top: 0; }
-.passwords p { margin: 0; }
-button.secondary {
-  margin-top: 8px;
-  padding: 6px 14px;
+button.secondary,
+a.button.secondary {
   color: var(--accent);
   background: transparent;
-  border: 1px solid var(--border);
+  border-color: var(--border);
 }
 
-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-legend { font-weight: 600; margin: 16px 0 4px; padding: 0; }
+button.secondary:hover,
+a.button.secondary:hover {
+  background: var(--surface);
+}
 
-/* The setup wizard's restore. */
-.choice { display: flex; gap: 10px; align-items: baseline; font-weight: normal; margin: 10px 0; }
-.choice input { width: auto; }
-progress { width: 100%; height: 12px; margin-bottom: 8px; accent-color: var(--accent); }
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 
-/* The people page's password links. */
-.secret.link code { font-size: 0.95rem; letter-spacing: 0; text-align: left; overflow-wrap: anywhere; }
+/* A step's buttons: Back on the left, the way forward on the right. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.actions > :last-child {
+  margin-left: auto;
+}
+
+/* Something to copy, such as the restore step's SSH key, with its Copy
+   button. */
+.secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.secret code {
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* Waiting and finishing. */
+
+.waiting {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+
+.spinner {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--surface);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 3s;
+  }
+}
+
+progress {
+  width: 100%;
+  height: 10px;
+  margin: 4px 0 8px;
+  accent-color: var(--accent);
+}
+
+/* The check mark at the end of a step that's done. */
+.done-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 0 16px;
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-radius: 50%;
+}
+
+.done-mark svg {
+  width: 26px;
+  height: 26px;
+}
+
+.error {
+  margin: 20px 0 0;
+  padding: 10px 14px;
+  color: var(--error);
+  font-weight: 500;
+  background: var(--error-soft);
+  border-radius: 8px;
+}

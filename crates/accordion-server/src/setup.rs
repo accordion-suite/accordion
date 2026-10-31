@@ -621,6 +621,10 @@ pub fn wizard_router(setup: Arc<Setup>) -> Router {
             get(|| async { asset(WIZARD_JS, "text/javascript") }),
         )
         .route("/setup.css", get(|| async { asset(SETUP_CSS, "text/css") }))
+        .route(
+            "/favicon.svg",
+            get(|| async { asset(ICON_SVG, "image/svg+xml") }),
+        )
         .route("/api/setup", get(wizard_status))
         .route("/api/setup/claim", post(claim))
         .route("/api/setup/name", post(set_name))
@@ -650,6 +654,9 @@ const WIZARD_JS: &str = include_str!("setup/wizard.js");
 const OWNER_HTML: &str = include_str!("setup/owner.html");
 const OWNER_JS: &str = include_str!("setup/owner.js");
 pub(crate) const SETUP_CSS: &str = include_str!("setup/setup.css");
+/// The tab icon, a copy of the web app's `src/icon/icon.svg`. The wizard
+/// opens before the web app is there, so the server keeps its own.
+pub(crate) const ICON_SVG: &str = include_str!("setup/icon.svg");
 
 /// Scripts, styles, and frames come only from the server itself, and no
 /// other site can show these pages in a frame. Drive's web pages show PDFs

@@ -11,15 +11,19 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 
 use crate::AppState;
-use crate::setup::{SETUP_CSS, asset};
+use crate::setup::{ICON_SVG, SETUP_CSS, asset};
 use accordion_module::ApiError;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(home))
-        // Shared by the home, setup, and welcome pages, which open from
-        // anywhere.
+        // The styles and tab icon of the home, setup, and welcome pages,
+        // which open from anywhere.
         .route("/setup.css", get(|| async { asset(SETUP_CSS, "text/css") }))
+        .route(
+            "/favicon.svg",
+            get(|| async { asset(ICON_SVG, "image/svg+xml") }),
+        )
 }
 
 const HOME_HTML: &str = include_str!("home/home.html");
