@@ -58,8 +58,7 @@ fn check_recent(user: &SignedIn) -> Result<(), ApiError> {
     if user.recently_authenticated {
         return Ok(());
     }
-    Err(ApiError::new(
-        StatusCode::FORBIDDEN,
+    Err(ApiError::password_needed(
         "For your security, enter your password again before you see the recovery key.",
     ))
 }

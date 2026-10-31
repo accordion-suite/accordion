@@ -102,8 +102,7 @@ async fn create_app_password(
     Json(request): Json<NewAppPassword>,
 ) -> Result<(StatusCode, Json<CreatedAppPassword>), ApiError> {
     if !me.recently_authenticated {
-        return Err(ApiError::new(
-            StatusCode::FORBIDDEN,
+        return Err(ApiError::password_needed(
             "For your security, enter your password again before you create an app password.",
         ));
     }

@@ -54,8 +54,7 @@ fn check_recent(me: &SignedIn) -> Result<(), ApiError> {
     if me.recently_authenticated {
         return Ok(());
     }
-    Err(ApiError::new(
-        StatusCode::FORBIDDEN,
+    Err(ApiError::password_needed(
         "For your security, enter your password again before you change someone's account.",
     ))
 }
