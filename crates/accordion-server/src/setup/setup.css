@@ -75,6 +75,11 @@ main {
   }
 }
 
+main > :last-child,
+main > section > :last-child {
+  margin-bottom: 0;
+}
+
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;

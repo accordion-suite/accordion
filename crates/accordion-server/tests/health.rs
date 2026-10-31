@@ -65,6 +65,7 @@ async fn start_with(
         storage: Some(watch::channel(StorageStatus::default()).1),
         backup: None,
         updates: None,
+        web: None,
     };
     let app = router(
         AppState {

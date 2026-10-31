@@ -134,7 +134,7 @@ The module rules carry over to the browser, so any module's pages could move lat
 
 ### How the server serves it
 
-The release build checks out the `accordion-web` commit that the suite pins, installs its packages, builds it, and puts the files in the package at `/usr/lib/accordion/web`. The server serves them from there. They're read-only to the service, like the server program itself. During development, the `ACCORDION_WEB_DIR` setting points the server at `accordion-web`'s build folder instead, so a change to a page needs a rebuild of the web app, not of the server.
+The release build checks out the `accordion-web` commit that the suite pins, installs its packages, builds it, and puts the files in the package at `/usr/lib/accordion/web`. The server serves them from there. They're read-only to the service, like the server program itself. During development, the `ACCORDION_WEB_DIR` setting points the server at `accordion-web`'s build folder instead, so a change to a page needs a rebuild of the web app, not of the server. The build also writes `files.json`, each file's SHA-256 hash. The server checks the files against it as it starts. If one is missing or changed, the app's pages explain what happened instead of loading partway, and Server health shows a problem with the fix.
 
 The suite pins the web app's commit the same way it pins module versions: `scripts/pin-versions.sh` writes it to `packaging/web-commit`, and the lock check covers it.
 

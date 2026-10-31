@@ -35,6 +35,9 @@ PASSWORD = "correct horse"
 BACKUP_FOLDER = "/mnt/accordion-upgrade-test"
 # Releases from before decision 13 have no web app.
 WEB_APP = "/usr/lib/accordion/web/index.html"
+# The web app's list of its files, with their hashes. Older releases don't
+# have it.
+WEB_FILES = "/usr/lib/accordion/web/files.json"
 # A non-ASCII name, so the test covers names that need encoding.
 FILES = {
     "Documents/Café notes.txt": "Pick up the bread.\n".encode(),
@@ -217,7 +220,7 @@ def check(state_file, version=None):
             fail(f"the server says it's {installed}, not {version}.")
 
     if os.path.isfile(WEB_APP):
-        check_web_app()
+        check_web_app(token)
 
     usernames = {person["username"] for person in call("GET", "/api/people", token)["people"]}
     if usernames != {"alex", "sam"}:
@@ -251,8 +254,10 @@ def check(state_file, version=None):
     say(f"the data is all there{f' on {version}' if version else ''}, and backups work.")
 
 
-def check_web_app():
-    """Drive's address opens the installed web app, and its script loads."""
+def check_web_app(token):
+    """Drive's address opens the installed web app, and its script loads.
+    Where the release lists the app's files, each one the server sends
+    matches the list, and Server health says the app has them all."""
     status, headers, page = request("GET", "/drive/")
     if status != 200 or not headers.get("Content-Type", "").startswith("text/html"):
         fail(f"Drive's page answered {status} with {headers.get('Content-Type')}, not the web app.")
@@ -263,6 +268,22 @@ def check_web_app():
     status, _, _ = request("GET", path)
     if status != 200:
         fail(f"the web app's script, {path}, answered {status}.")
+    if not os.path.isfile(WEB_FILES):
+        return
+    with open(WEB_FILES) as file:
+        files = json.load(file)["files"]
+    for name, digest in files.items():
+        # This client doesn't ask for compressed copies, so the server sends
+        # each file in app/ as it is. Server health covers the rest.
+        if not name.startswith("app/") or name.endswith((".gz", ".br")):
+            continue
+        status, _, content = request("GET", "/" + name)
+        if status != 200 or hashlib.sha256(content).hexdigest() != digest:
+            fail(f"the web app's {name} answered {status}, or doesn't match the release's list.")
+    checks = call("GET", "/api/health", token)["checks"]
+    web = next((check for check in checks if check["id"] == "web_app"), None)
+    if not web or web["state"] != "ok":
+        fail(f"Server health says this about the web app: {web}")
 
 
 def update(state_file, version, outcome, installed):

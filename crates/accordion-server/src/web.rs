@@ -8,10 +8,18 @@
 //! `accordion-web`'s `dist/` folder during development. The build writes a
 //! gzip and a Brotli copy of each file, so the server never compresses on a
 //! request.
+//!
+//! The build also writes `files.json`, every file's SHA-256 hash. The server
+//! checks the files against it as it starts. If any is missing or changed,
+//! such as after a disk problem or an install that stopped partway, the
+//! app's pages say so and how to fix it, and Server health shows a problem.
 
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
+use accordion_update::Sha256;
 use axum::Router;
 use axum::extract::{Path as UrlPath, State};
 use axum::http::header::{
@@ -21,23 +29,40 @@ use axum::http::header::{
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
+use serde::Deserialize;
 
 use crate::AppState;
-use crate::setup::CONTENT_SECURITY_POLICY_VALUE;
+use crate::setup::{CONTENT_SECURITY_POLICY_VALUE, asset};
 
 /// Where the release package installs the app.
 const INSTALLED: &str = "/usr/lib/accordion/web";
+
+/// The build's list of its files.
+const FILE_LIST: &str = "files.json";
+
+#[derive(Deserialize)]
+struct FileList {
+    /// Each file's path in the build, such as `app/main-HSNK3GWX.js`, and
+    /// its SHA-256 hash in lowercase hex.
+    files: BTreeMap<String, String>,
+}
 
 /// The app's built files.
 #[derive(Clone, Debug)]
 pub struct WebApp {
     dir: Arc<Path>,
+    /// The files that are missing or changed, as of when the server started.
+    damaged: Arc<[String]>,
 }
 
 impl WebApp {
+    /// The build in `dir`, after checking its files against its list.
     pub fn new(dir: impl Into<PathBuf>) -> Self {
+        let dir: PathBuf = dir.into();
+        let damaged = damaged_files(&dir).into();
         Self {
-            dir: Arc::from(dir.into()),
+            dir: Arc::from(dir),
+            damaged,
         }
     }
 
@@ -53,19 +78,82 @@ impl WebApp {
                     dir.display()
                 ));
             }
-            return Ok(Some(Self::new(dir)));
+            return Ok(Some(Self::new(dir).logged()));
         }
         let installed = Path::new(INSTALLED);
         Ok(installed
             .join("index.html")
             .is_file()
-            .then(|| Self::new(installed)))
+            .then(|| Self::new(installed).logged()))
+    }
+
+    fn logged(self) -> Self {
+        if !self.damaged.is_empty() {
+            tracing::error!(
+                files = ?self.damaged,
+                "the web app in {} is missing files or has files that changed, so its pages \
+                 don't open. {}",
+                self.dir.display(),
+                self.fix()
+            );
+        }
+        self
     }
 
     pub fn dir(&self) -> &Path {
         &self.dir
     }
+
+    /// The files that are missing or changed. Empty when the app is whole.
+    pub fn damaged(&self) -> &[String] {
+        &self.damaged
+    }
+
+    /// How an admin puts the files back.
+    pub fn fix(&self) -> &'static str {
+        if *self.dir == *Path::new(INSTALLED) {
+            "Run Accordion's install command again on the server. It puts the files back and \
+             keeps everyone's data."
+        } else {
+            "Build accordion-web again with npm run build, then restart Accordion."
+        }
+    }
 }
+
+/// The files in `dir` that don't match its list. The list itself counts as
+/// missing if it's not there or can't be read.
+fn damaged_files(dir: &Path) -> Vec<String> {
+    let list = std::fs::read(dir.join(FILE_LIST))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<FileList>(&bytes).ok());
+    let Some(list) = list else {
+        return vec![FILE_LIST.to_owned()];
+    };
+    list.files
+        .into_iter()
+        .filter(|(path, hash)| {
+            // The list names files inside the build, never outside it.
+            let inside = Path::new(path)
+                .components()
+                .all(|part| matches!(part, Component::Normal(_)));
+            !inside || !std::fs::read(dir.join(path)).is_ok_and(|bytes| sha256_hex(&bytes) == *hash)
+        })
+        .map(|(path, _)| path)
+        .collect()
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut sum = Sha256::default();
+    sum.update(bytes);
+    let mut hex = String::with_capacity(64);
+    for byte in sum.finish() {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
+/// What the app's pages show while its files are damaged.
+const DAMAGED_HTML: &str = include_str!("web/damaged.html");
 
 /// The server's own pages from before the web app had Settings, and the
 /// sections of Settings that took their place, so bookmarks still work.
@@ -111,6 +199,13 @@ async fn page(State(state): State<AppState>, headers: HeaderMap) -> Response {
         )
             .into_response();
     };
+    if !web.damaged.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            asset(DAMAGED_HTML, "text/html; charset=utf-8"),
+        )
+            .into_response();
+    }
     // Checked on each visit, because the page names the newest scripts.
     serve(
         &web.dir.join("index.html"),

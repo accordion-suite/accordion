@@ -26,6 +26,7 @@ use tokio::sync::watch;
 
 use crate::AppState;
 use crate::updates::{CheckResult, UpdateStatus};
+use crate::web::WebApp;
 use accordion_module::ApiError;
 use accordion_module::Authenticated;
 use accordion_update::protocol::Outcome;
@@ -51,6 +52,8 @@ pub struct Health {
     pub backup: Option<watch::Receiver<BackupStatus>>,
     /// Set once update checks are running.
     pub updates: Option<watch::Receiver<UpdateStatus>>,
+    /// Set when the server has the web app.
+    pub web: Option<WebApp>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -126,6 +129,9 @@ impl Health {
         }
         if let Some(updates) = &self.updates {
             checks.push(updates_check(&updates.borrow(), now));
+        }
+        if let Some(web) = &self.web {
+            checks.push(web_check(web));
         }
         checks
     }
@@ -279,6 +285,40 @@ fn local_name_check(status: &LocalNameStatus, name: Option<&NameHealth>) -> Chec
     Check {
         id: "local_name",
         title: "Local name",
+        state,
+        summary,
+    }
+}
+
+fn web_check(web: &WebApp) -> Check {
+    let (state, summary) = match web.damaged() {
+        [] => (
+            Level::Ok,
+            "The web app that shows Drive and Settings in a browser has all its files.".to_owned(),
+        ),
+        [file] => (
+            Level::Problem,
+            format!(
+                "The web app's file {file} in {} is missing or changed, so Drive and Settings \
+                 don't open in a browser. {}",
+                web.dir().display(),
+                web.fix()
+            ),
+        ),
+        [first, ..] => (
+            Level::Problem,
+            format!(
+                "Accordion found {} in {} missing or changed, such as {first}, so Drive and \
+                 Settings don't open in a browser. {}",
+                count(web.damaged().len() as u64, "web app file"),
+                web.dir().display(),
+                web.fix()
+            ),
+        ),
+    };
+    Check {
+        id: "web_app",
+        title: "Web app",
         state,
         summary,
     }
@@ -664,6 +704,7 @@ mod tests {
             storage: None,
             backup: None,
             updates: None,
+            web: None,
         }
     }
 

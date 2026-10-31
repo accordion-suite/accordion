@@ -184,6 +184,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         storage: Some(storage.status()),
         backup: Some(backup.status()),
         updates: Some(updates.status()),
+        web: web.clone(),
         ..Health::default()
     };
     let mut background = JoinSet::new();

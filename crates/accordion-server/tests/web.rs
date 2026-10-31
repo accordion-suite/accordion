@@ -1,14 +1,19 @@
 //! Opens the web app (decision 13): its page at Drive's address, and its
 //! scripts, from a folder laid out like `accordion-web`'s build.
 
+use std::path::Path;
+use std::time::SystemTime;
+
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
 use accordion_gateway::Peer;
 use accordion_module::{Services, Stopping};
+use accordion_server::health::{Health, Level};
 use accordion_server::web::WebApp;
 use accordion_server::{AppState, Site, modules, router};
 use accordion_types::Role;
+use accordion_update::Sha256;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::connect_info::MockConnectInfo;
@@ -32,6 +37,12 @@ struct Server {
 /// Starts a set-up server with every module, and with a web app build if
 /// `web`.
 async fn start(web: bool) -> Server {
+    start_with(web, |_| {}).await
+}
+
+/// Like `start`, with a build that `change` alters after it's written, as a
+/// disk problem or an install that stopped partway would.
+async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open(&dir.path().join("accordion.db")).unwrap();
     let identity = Identity::new(db.clone()).await.unwrap();
@@ -70,6 +81,8 @@ async fn start(web: bool) -> Server {
     std::fs::write(build.join("app/main-ABC123.js.gz"), "gzip script").unwrap();
     std::fs::write(build.join("app/notes.txt"), "not part of the app").unwrap();
     std::fs::write(build.join("manifest.webmanifest"), MANIFEST).unwrap();
+    write_file_list(&build);
+    change(&build);
 
     let app = router(
         AppState {
@@ -95,6 +108,28 @@ async fn start(web: bool) -> Server {
         _stop: stop,
         app,
     }
+}
+
+/// Lists the build's files with their hashes, as the build does.
+fn write_file_list(build: &Path) {
+    let mut files = serde_json::Map::new();
+    for path in [
+        "index.html",
+        "index.html.br",
+        "app/main-ABC123.js",
+        "app/main-ABC123.js.gz",
+        "manifest.webmanifest",
+    ] {
+        let mut sum = Sha256::default();
+        sum.update(&std::fs::read(build.join(path)).unwrap());
+        let hex: String = sum.finish().iter().map(|b| format!("{b:02x}")).collect();
+        files.insert(path.into(), hex.into());
+    }
+    std::fs::write(
+        build.join("files.json"),
+        serde_json::json!({ "files": files }).to_string(),
+    )
+    .unwrap();
 }
 
 impl Server {
@@ -241,4 +276,83 @@ async fn sends_the_apps_page_for_settings_and_the_pages_it_replaced() {
         assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT, "{old}");
         assert_eq!(response.headers()[header::LOCATION], new);
     }
+}
+
+#[tokio::test]
+async fn says_so_when_the_apps_files_are_missing_or_changed() {
+    let server = start_with(true, |build| {
+        std::fs::write(build.join("app/main-ABC123.js"), "changed").unwrap();
+        std::fs::remove_file(build.join("index.html.br")).unwrap();
+    })
+    .await;
+    for path in ["/drive/", "/settings/account"] {
+        let (response, body) = server.get(path, None).await;
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{path}");
+        assert!(body.contains("Drive can't open right now"), "{path}");
+    }
+}
+
+#[test]
+fn checks_the_apps_files_against_the_builds_list() {
+    let dir = tempfile::tempdir().unwrap();
+    let build = dir.path();
+    std::fs::create_dir_all(build.join("app")).unwrap();
+    for path in [
+        "index.html",
+        "index.html.br",
+        "app/main-ABC123.js",
+        "app/main-ABC123.js.gz",
+        "manifest.webmanifest",
+    ] {
+        std::fs::write(build.join(path), path).unwrap();
+    }
+    let health = |web: WebApp| {
+        Health {
+            web: Some(web),
+            ..Health::default()
+        }
+        .checks(SystemTime::now())
+        .into_iter()
+        .find(|check| check.id == "web_app")
+        .unwrap()
+    };
+
+    // A build from before the list, or with a list that's gone.
+    let web = WebApp::new(build);
+    assert_eq!(web.damaged(), ["files.json"]);
+    let check = health(web);
+    assert_eq!(check.state, Level::Problem);
+    assert!(
+        check.summary.starts_with("The web app's file files.json"),
+        "{}",
+        check.summary
+    );
+
+    write_file_list(build);
+    let web = WebApp::new(build);
+    assert!(web.damaged().is_empty());
+    assert_eq!(health(web).state, Level::Ok);
+
+    std::fs::write(build.join("app/main-ABC123.js"), "changed").unwrap();
+    std::fs::remove_file(build.join("index.html.br")).unwrap();
+    let web = WebApp::new(build);
+    assert_eq!(web.damaged(), ["app/main-ABC123.js", "index.html.br"]);
+    let check = health(web);
+    assert_eq!(check.state, Level::Problem);
+    assert!(
+        check
+            .summary
+            .starts_with("Accordion found two web app files"),
+        "{}",
+        check.summary
+    );
+    assert!(check.summary.contains("npm run build"), "{}", check.summary);
+
+    // The list can't send the check outside the build.
+    std::fs::write(
+        build.join("files.json"),
+        r#"{"files": {"../outside.txt": "00"}}"#,
+    )
+    .unwrap();
+    assert_eq!(WebApp::new(build).damaged(), ["../outside.txt"]);
 }

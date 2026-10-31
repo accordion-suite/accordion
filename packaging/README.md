@@ -14,7 +14,7 @@ Files for installing Accordion on a Linux machine as a system service, and the D
 
 The package also includes [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)), as `/usr/lib/accordion/restic`. It's kept apart from any restic your distribution installs, so Accordion always runs the version it was tested with. Backups to another computer over SFTP also need OpenSSH's client, which the package recommends.
 
-The web app ([decision 13](../docs/decisions/0013-the-web-app.md)) is in `/usr/lib/accordion/web`, where the server finds it. It's the same for both architectures.
+The web app ([decision 13](../docs/decisions/0013-the-web-app.md)) is in `/usr/lib/accordion/web`, where the server finds it. It's the same for both architectures. The server checks its files against `files.json` as it starts. Running the install command again puts back any that are missing or changed.
 
 The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi OS based on Debian 12 or later, on x86_64 and ARM64.
 

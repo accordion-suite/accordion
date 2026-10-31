@@ -140,7 +140,10 @@ main() {
     apt-get update -qq \
         || fail "apt couldn't update its list of packages. Check that this machine is online, then try again."
     say "Installing the package."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$dir/$deb" \
+    # --reinstall, so running the install command again puts back files
+    # that are missing or changed, such as the web app's, even when this
+    # version is already installed.
+    DEBIAN_FRONTEND=noninteractive apt-get install --reinstall -y -q "$dir/$deb" \
         || fail "apt couldn't install Accordion. Its messages above say why."
     # Accordion's update helper goes back to this package if an update to a
     # later version doesn't start.
@@ -150,7 +153,7 @@ main() {
 
     case "$previous" in
         "") show_wizard "$since" ;;
-        "$ACCORDION_VERSION") say "Accordion $ACCORDION_VERSION was already installed." ;;
+        "$ACCORDION_VERSION") say "Accordion $ACCORDION_VERSION is installed again, with the data it already had." ;;
         *) say "Accordion is updated from $previous to $ACCORDION_VERSION." ;;
     esac
 }
