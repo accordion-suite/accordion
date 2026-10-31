@@ -3,7 +3,7 @@
 //!
 //! It sends people to the owner step while the server has no owner, and
 //! then to Drive, as Google's sites open on an app. A server without the web
-//! app, such as one for development, shows a short page with links instead.
+//! app, such as one for development, shows a short page that says so instead.
 
 use axum::Router;
 use axum::extract::State;
@@ -17,8 +17,8 @@ use accordion_module::ApiError;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(home))
-        // Shared by the home, setup, and health pages. Admin pages only open
-        // on the home network, so the home page's styles can't live there.
+        // Shared by the home, setup, and welcome pages, which open from
+        // anywhere.
         .route("/setup.css", get(|| async { asset(SETUP_CSS, "text/css") }))
 }
 
@@ -30,7 +30,8 @@ async fn home(State(state): State<AppState>) -> Result<Response, ApiError> {
     }
     // Temporary, so browsers ask again once other apps can be chosen here.
     if state.web.is_some() && state.modules.in_web_app().contains(&"drive") {
-        return Ok(Redirect::temporary("/drive/").into_response());
+        // The app opens the person's start page from here, Home or My Drive.
+        return Ok(Redirect::temporary("/drive/start").into_response());
     }
     Ok(asset(HOME_HTML, "text/html; charset=utf-8"))
 }

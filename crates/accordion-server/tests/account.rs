@@ -1,4 +1,4 @@
-//! Creates an app password on the account page's API, then uses it to open
+//! Creates an app password the way Settings does, then uses it to open
 //! Drive over WebDAV through the whole server.
 
 use accordion_core::db::Database;
@@ -107,7 +107,7 @@ impl Server {
     }
 }
 
-/// A request from the account page.
+/// A request from Settings in the web app.
 fn browser(method: &str, path: &str) -> axum::http::request::Builder {
     Request::builder()
         .method(method)
@@ -141,8 +141,10 @@ async fn an_app_password_opens_drive_over_webdav() {
     let server = start().await;
     let cookie = server.sign_in().await;
 
+    // The old page's address leads to Settings in the web app.
     let page = server.send(browser("GET", "/account"), Body::empty()).await;
-    assert_eq!(page.status(), StatusCode::OK);
+    assert_eq!(page.status(), StatusCode::PERMANENT_REDIRECT);
+    assert_eq!(page.headers()[header::LOCATION], "/settings/account");
 
     let response = server
         .send(

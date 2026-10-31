@@ -1,4 +1,4 @@
-//! Turns connections off and on over HTTP, the way the Network page does.
+//! Turns connections off and on over HTTP, the way Network settings do.
 //! Adding a backup location runs the real restic program. Set
 //! `ACCORDION_RESTIC` to its path, or put it on `PATH`.
 
@@ -187,14 +187,6 @@ async fn lists_each_connection_and_where_it_goes() {
     assert_eq!(network["certificate"]["provider_host"], "desec.io");
     assert_eq!(network["backups"], json!([]));
 
-    let request = Request::builder()
-        .uri("/network")
-        .header(header::HOST, HOST)
-        .body(Body::empty())
-        .unwrap();
-    let response = server.app.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
     // Only admins see the page's data.
     let (status, _) = server.send("GET", "/api/network", &server.user, None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -285,7 +277,7 @@ async fn pauses_a_backup_location() {
         .send("POST", "/api/backups/run", &server.owner, None)
         .await;
     assert_eq!(status, StatusCode::CONFLICT);
-    assert!(body["error"].as_str().unwrap().contains("Network page"));
+    assert!(body["error"].as_str().unwrap().contains("Network settings"));
 
     let (status, _) = server.turn(&path, true).await;
     assert_eq!(status, StatusCode::NO_CONTENT);

@@ -458,8 +458,6 @@ async fn only_admins_at_home_manage_people() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let (status, _) = send(&server.away, "GET", "/people", None, None).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
     let (status, _) = send(&server.away, "GET", "/welcome", None, None).await;
     assert_eq!(status, StatusCode::OK);
 

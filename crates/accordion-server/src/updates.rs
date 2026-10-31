@@ -1,7 +1,8 @@
-//! `/updates`: which version this server runs, whether a newer one is out,
-//! and when updates install (decision 12).
+//! The API behind Updates in the web app's Settings: which version this
+//! server runs, whether a newer one is out, and when updates install
+//! (decision 12).
 //!
-//! Like the other admin pages, it opens only from the home network, and only
+//! Like the other admin APIs, it answers only on the home network, and only
 //! for admins.
 
 mod fetch;
@@ -25,26 +26,14 @@ pub use service::{
 };
 
 use crate::AppState;
-use crate::setup::asset;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route(
-            "/updates",
-            get(|| async { asset(UPDATES_HTML, "text/html; charset=utf-8") }),
-        )
-        .route(
-            "/updates.js",
-            get(|| async { asset(UPDATES_JS, "text/javascript") }),
-        )
         .route("/api/updates", get(status))
         .route("/api/updates/check", post(check))
         .route("/api/updates/install", post(install))
         .route("/api/updates/settings", put(settings))
 }
-
-const UPDATES_HTML: &str = include_str!("updates/updates.html");
-const UPDATES_JS: &str = include_str!("updates/updates.js");
 
 /// The update checker, for an admin. Anyone else gets `403 Forbidden`.
 fn service(state: &AppState, user: &SignedIn) -> Result<Updates, ApiError> {

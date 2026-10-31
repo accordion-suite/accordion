@@ -1,6 +1,6 @@
-//! The health page: how the server's certificate, its name's address record,
-//! `accordion.local`, stored files, backups, and updates are doing, for the
-//! household admin.
+//! Server health, in the web app's Settings: how the server's certificate,
+//! its name's address record, `accordion.local`, stored files, backups, and
+//! updates are doing, for the household admin.
 //!
 //! The spec's health page also covers disk space, SMART status, encryption,
 //! and mail. Each will add a check here once it exists.
@@ -25,7 +25,6 @@ use serde::Serialize;
 use tokio::sync::watch;
 
 use crate::AppState;
-use crate::setup::asset;
 use crate::updates::{CheckResult, UpdateStatus};
 use accordion_module::ApiError;
 use accordion_module::Authenticated;
@@ -336,7 +335,7 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
         return check(
             Level::Warning,
             "Backups are off, so a failing disk could lose everything on this server. Turn \
-             them on from the Backups page."
+             them on in Backups settings."
                 .to_owned(),
         );
     }
@@ -344,7 +343,7 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
         return check(
             Level::Warning,
             "Backups are on, but there's nowhere for them to go. Add a location, such as a USB \
-             disk, on the Backups page."
+             disk, in Backups settings."
                 .to_owned(),
         );
     }
@@ -353,7 +352,7 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
         return check(
             Level::Warning,
             "Backups are paused for every location, so nothing is being backed up. Turn one \
-             back on from the Network page."
+             back on in Network settings."
                 .to_owned(),
         );
     }
@@ -363,7 +362,7 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
     for target in &status.targets {
         let name = &target.target.name;
         if target.target.paused {
-            notes.push(format!("Backups to {name} are paused on the Network page."));
+            notes.push(format!("Backups to {name} are paused in Network settings."));
             continue;
         }
         let problem =
@@ -426,7 +425,7 @@ fn backup_check(status: &BackupStatus, now: SystemTime) -> Check {
     if status.key == KeyState::Unconfirmed {
         state = state.max(Level::Warning);
         notes.push(
-            "Confirm on the Backups page that you've saved the recovery key. You'll need it to \
+            "Confirm in Backups settings that you've saved the recovery key. You'll need it to \
              restore a backup."
                 .to_owned(),
         );
@@ -462,7 +461,7 @@ fn updates_check(status: &UpdateStatus, now: SystemTime) -> Check {
                 Level::Ok,
                 format!(
                     "This server runs Accordion {installed}. Accordion doesn't check for updates \
-                     on its own, because the update check is turned off on the Network page."
+                     on its own, because the update check is turned off in Network settings."
                 ),
             );
         }
@@ -540,7 +539,7 @@ fn updates_check(status: &UpdateStatus, now: SystemTime) -> Check {
     };
     check(
         state,
-        format!("{available}{urgency} The Updates page says how to install it."),
+        format!("{available}{urgency} Updates in Settings says how to install it."),
     )
 }
 
@@ -608,20 +607,8 @@ fn count(n: u64, unit: &str) -> String {
 }
 
 pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/health",
-            get(|| async { asset(HEALTH_HTML, "text/html; charset=utf-8") }),
-        )
-        .route(
-            "/health.js",
-            get(|| async { asset(HEALTH_JS, "text/javascript") }),
-        )
-        .route("/api/health", get(report))
+    Router::new().route("/api/health", get(report))
 }
-
-const HEALTH_HTML: &str = include_str!("health/health.html");
-const HEALTH_JS: &str = include_str!("health/health.js");
 
 /// `GET /api/health`: every check, for admins.
 async fn report(

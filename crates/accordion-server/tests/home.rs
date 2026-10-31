@@ -74,15 +74,14 @@ async fn sends_people_to_the_owner_step_until_there_is_an_owner() {
 }
 
 #[tokio::test]
-async fn shows_a_page_that_links_to_the_health_page() {
+async fn explains_a_server_without_the_web_app() {
     let (_dir, app) = start(true).await;
     let response = get(&app, "/").await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let body = String::from_utf8(body.to_vec()).unwrap();
-    assert!(body.contains(r#"href="/health""#));
+    assert!(body.contains("ACCORDION_WEB_DIR"));
 
-    // The page's styles load from anywhere, unlike the admin pages.
+    // The page's styles load from anywhere, unlike the admin APIs.
     assert_eq!(get(&app, "/setup.css").await.status(), StatusCode::OK);
-    assert_eq!(get(&app, "/health").await.status(), StatusCode::FORBIDDEN);
 }

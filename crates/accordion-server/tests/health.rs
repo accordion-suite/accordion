@@ -130,32 +130,14 @@ async fn only_admins_see_the_report() {
 }
 
 #[tokio::test]
-async fn the_page_loads_nothing_from_other_sites() {
-    let (_dir, app, _, _) = start().await;
-    let response = app
-        .oneshot(
-            Request::get("/health")
-                .header(header::HOST, HOST)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let policy = response.headers()[header::CONTENT_SECURITY_POLICY]
-        .to_str()
-        .unwrap();
-    assert!(policy.starts_with("default-src 'none'; script-src 'self'"));
-}
-
-#[tokio::test]
 async fn opens_only_on_the_home_network_unless_the_admin_allows_anywhere() {
     let (_dir, app, owner, _) = start_with(AdminAccess::HomeNetwork, "203.0.113.5").await;
     let (status, body) = get(&app, "/api/health", Some(&owner)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert!(body["error"].as_str().unwrap().contains("home network"));
+    // Settings opens anywhere, and says why its server sections don't.
     let (status, _) = get(&app, "/health", None).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::PERMANENT_REDIRECT);
     // Sign-in itself isn't an admin page.
     let (status, _) = get(&app, "/api/session", Some(&owner)).await;
     assert_eq!(status, StatusCode::OK);

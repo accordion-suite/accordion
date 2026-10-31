@@ -1,6 +1,7 @@
 //! The web app (decision 13 in `docs/decisions`): its page at each module's
-//! address, such as `/drive/`, its scripts, styles, and icons under `/app/`,
-//! and the manifest that lets phones and computers install it.
+//! address, such as `/drive/`, and at `/settings/`, its scripts, styles, and
+//! icons under `/app/`, and the manifest that lets phones and computers
+//! install it.
 //!
 //! The release package installs the app's files in `/usr/lib/accordion/web`.
 //! `ACCORDION_WEB_DIR` points the server at another build instead, such as
@@ -18,7 +19,7 @@ use axum::http::header::{
     REFERRER_POLICY, VARY, X_CONTENT_TYPE_OPTIONS,
 };
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 
 use crate::AppState;
@@ -66,13 +67,27 @@ impl WebApp {
     }
 }
 
+/// The server's own pages from before the web app had Settings, and the
+/// sections of Settings that took their place, so bookmarks still work.
+const MOVED: [(&str, &str); 6] = [
+    ("/account", "/settings/account"),
+    ("/people", "/settings/people"),
+    ("/health", "/settings/health"),
+    ("/backups", "/settings/backups"),
+    ("/updates", "/settings/updates"),
+    ("/network", "/settings/network"),
+];
+
 /// The app's page at each of `pages`, the IDs of the modules that are on,
-/// its files under `/app/`, and its manifest.
+/// and at Settings, its files under `/app/`, and its manifest.
 pub(crate) fn routes<'a>(pages: impl Iterator<Item = &'a str>) -> Router<AppState> {
     let mut router = Router::new()
         .route("/app/{file}", get(app_file))
         .route("/manifest.webmanifest", get(manifest));
-    for id in pages {
+    for (from, to) in MOVED {
+        router = router.route(from, get(move || async move { Redirect::permanent(to) }));
+    }
+    for id in pages.chain(["settings"]) {
         router = router
             .route(&format!("/{id}"), get(page))
             .route(&format!("/{id}/"), get(page))

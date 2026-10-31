@@ -1,5 +1,6 @@
-//! `/people`: where admins add the people in the household, make password
-//! links, change roles and names, turn accounts off, and delete them.
+//! The API behind People in the web app's Settings, where admins add the
+//! people in the household, make password links, change roles and names,
+//! turn accounts off, and delete them.
 //!
 //! Admins never choose or see anyone's password. A new account gets a
 //! one-time link, which the admin passes on, and the person sets their own
@@ -9,7 +10,7 @@
 //! admin can't lock the owner out or give themselves more power. Nobody
 //! changes their own role or the owner's account here.
 //!
-//! Like the other admin pages, it opens only from the home network.
+//! Like the other admin APIs, it answers only on the home network.
 
 use accordion_core::identity::{
     AppPasswords, LinkPurpose, LinkToken, Member, PasswordLink, SignedIn, User,
@@ -25,18 +26,9 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::setup::asset;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route(
-            "/people",
-            get(|| async { asset(PEOPLE_HTML, "text/html; charset=utf-8") }),
-        )
-        .route(
-            "/people.js",
-            get(|| async { asset(PEOPLE_JS, "text/javascript") }),
-        )
         .route("/api/people", get(list).post(add))
         .route("/api/people/{id}", delete(delete_person))
         .route("/api/people/{id}/name", put(rename))
@@ -45,9 +37,6 @@ pub fn routes() -> Router<AppState> {
         .route("/api/people/{id}/turn-off", post(turn_off))
         .route("/api/people/{id}/turn-on", post(turn_on))
 }
-
-const PEOPLE_HTML: &str = include_str!("people/people.html");
-const PEOPLE_JS: &str = include_str!("people/people.js");
 
 fn check_admin(me: &SignedIn) -> Result<(), ApiError> {
     if me.user.role.is_admin() {
@@ -75,8 +64,8 @@ fn check_recent(me: &SignedIn) -> Result<(), ApiError> {
 fn refusal(me: &User, target: &User) -> Option<&'static str> {
     if target.id == me.id {
         Some(
-            "You can't change your own account here. To change your password, go to your \
-             account page.",
+            "You can't change your own account here. To change your name or password, go to \
+             Account in Settings.",
         )
     } else if target.role == Role::Owner {
         Some("The owner's account can't be changed here.")

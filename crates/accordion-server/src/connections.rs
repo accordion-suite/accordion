@@ -1,7 +1,8 @@
-//! `/network`: every connection Accordion makes to other computers, and
-//! switches to turn them off (decision 11).
+//! The API behind Network in the web app's Settings: every connection
+//! Accordion makes to other computers, and switches to turn them off
+//! (decision 11).
 //!
-//! Like the other admin pages, it opens only from the home network, and only
+//! Like the other admin APIs, it answers only on the home network, and only
 //! for admins. Backup targets and the update check keep their own switches,
 //! in their services. This module keeps the rest.
 
@@ -22,7 +23,6 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
 use crate::AppState;
-use crate::setup::asset;
 
 const MIGRATIONS: &[Migration] = &[Migration {
     version: 1,
@@ -90,22 +90,11 @@ fn turned_on(conn: &rusqlite::Connection, purpose: &str) -> Result<bool, db::Err
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route(
-            "/network",
-            get(|| async { asset(NETWORK_HTML, "text/html; charset=utf-8") }),
-        )
-        .route(
-            "/network.js",
-            get(|| async { asset(NETWORK_JS, "text/javascript") }),
-        )
         .route("/api/network", get(status))
         .route("/api/network/updates", put(set_updates))
         .route("/api/network/address", put(set_address))
         .route("/api/network/backups/{id}", put(set_backup))
 }
-
-const NETWORK_HTML: &str = include_str!("connections/network.html");
-const NETWORK_JS: &str = include_str!("connections/network.js");
 
 fn require_admin(user: &SignedIn) -> Result<(), ApiError> {
     if matches!(user.user.role, Role::Owner | Role::Admin) {

@@ -213,10 +213,32 @@ async fn explains_a_server_without_the_app() {
 async fn opens_drive_from_the_servers_address() {
     let (response, _) = start(true).await.get("/", None).await;
     assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
-    assert_eq!(response.headers()[header::LOCATION], "/drive/");
+    assert_eq!(response.headers()[header::LOCATION], "/drive/start");
 
-    // Without the app, the server's own page links to the others.
+    // Without the app, the server's own page says what's missing.
     let (response, body) = start(false).await.get("/", None).await;
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(body.contains(r#"href="/account""#));
+    assert!(body.contains("ACCORDION_WEB_DIR"));
+}
+
+#[tokio::test]
+async fn sends_the_apps_page_for_settings_and_the_pages_it_replaced() {
+    let server = start(true).await;
+    for path in ["/settings", "/settings/", "/settings/people"] {
+        let (response, body) = server.get(path, None).await;
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert_eq!(body, PAGE, "{path}");
+    }
+    for (old, new) in [
+        ("/account", "/settings/account"),
+        ("/people", "/settings/people"),
+        ("/health", "/settings/health"),
+        ("/backups", "/settings/backups"),
+        ("/updates", "/settings/updates"),
+        ("/network", "/settings/network"),
+    ] {
+        let (response, _) = server.get(old, None).await;
+        assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT, "{old}");
+        assert_eq!(response.headers()[header::LOCATION], new);
+    }
 }

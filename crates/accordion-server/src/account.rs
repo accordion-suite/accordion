@@ -1,9 +1,9 @@
-//! `/account`: where people create app passwords, so standard clients such
-//! as File Explorer, Finder, and phone apps can reach Drive (decision 3 in
-//! `docs/decisions`), change their password, and change their name.
+//! The API behind the web app's Account and Apps and devices settings:
+//! app passwords, so standard clients such as File Explorer, Finder, and
+//! phone apps can reach Drive (decision 3 in `docs/decisions`), changing a
+//! password, and changing a name.
 //!
-//! Every user can open it from anywhere, unlike the admin pages. It stands
-//! in until the web app has its own settings pages.
+//! Every user can use it from anywhere, unlike the admin APIs.
 
 use accordion_core::identity::{self, AppPassword, AppPasswordUse};
 use accordion_module::{ApiError, Authenticated};
@@ -16,18 +16,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::network::Connection;
-use crate::setup::asset;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route(
-            "/account",
-            get(|| async { asset(ACCOUNT_HTML, "text/html; charset=utf-8") }),
-        )
-        .route(
-            "/account.js",
-            get(|| async { asset(ACCOUNT_JS, "text/javascript") }),
-        )
         .route(
             "/api/app-passwords",
             get(app_passwords).post(create_app_password),
@@ -36,9 +27,6 @@ pub fn routes() -> Router<AppState> {
         .route("/api/account/password", post(change_password))
         .route("/api/account/name", put(rename))
 }
-
-const ACCOUNT_HTML: &str = include_str!("account/account.html");
-const ACCOUNT_JS: &str = include_str!("account/account.js");
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

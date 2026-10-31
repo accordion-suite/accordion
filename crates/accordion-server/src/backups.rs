@@ -1,9 +1,9 @@
-//! `/backups`: where the admin turns on backups, keeps the recovery key,
-//! chooses where backups go, and runs a backup or restore test by hand
-//! (decision 8 in `docs/decisions`).
+//! The API behind Backups in the web app's Settings, where the admin turns
+//! on backups, keeps the recovery key, chooses where backups go, and runs a
+//! backup or restore test by hand (decision 8 in `docs/decisions`).
 //!
-//! Like the health page, it opens only from the home network, and only for
-//! admins.
+//! Like the other admin APIs, it answers only on the home network, and only
+//! for admins.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -22,18 +22,9 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::setup::asset;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route(
-            "/backups",
-            get(|| async { asset(BACKUPS_HTML, "text/html; charset=utf-8") }),
-        )
-        .route(
-            "/backups.js",
-            get(|| async { asset(BACKUPS_JS, "text/javascript") }),
-        )
         .route("/api/backups", get(status))
         .route("/api/backups/key", get(show_key).post(create_key))
         .route("/api/backups/key/confirm", post(confirm_key))
@@ -44,9 +35,6 @@ pub fn routes() -> Router<AppState> {
         .route("/api/backups/run", post(run_now))
         .route("/api/backups/settings", put(settings))
 }
-
-const BACKUPS_HTML: &str = include_str!("backups/backups.html");
-const BACKUPS_JS: &str = include_str!("backups/backups.js");
 
 /// The backup service, for an admin. Anyone else gets `403 Forbidden`.
 fn service(state: &AppState, user: &SignedIn) -> Result<Backup, ApiError> {
