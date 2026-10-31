@@ -127,6 +127,8 @@ cargo run                                          # Start the server on http://
 
 `cargo run -- --help` lists every command and setting. To run the server as a system service, see [packaging](packaging/README.md).
 
+Drive and Settings open in the web app, which is in its own repo. Build it in `accordion-web` with `npm ci` and `npm run build` (you need Node.js 22 or later), then start the server with `ACCORDION_WEB_DIR` set to the build's full path, such as `ACCORDION_WEB_DIR=$PWD/../accordion-web/dist cargo run`. Without it, the server's address shows a page that says the web app is missing.
+
 ### Trying each part
 
 **HTTPS.** You need a name under a domain whose DNS is at deSEC or Cloudflare, and an API token that can change the name's A record and its `_acme-challenge` TXT record. Run `cargo run -- set-name <name> <desec|cloudflare> --staging`, which asks for the token and gets a test certificate from Let's Encrypt that browsers don't trust. The server then serves `https://<name>` on port 443, redirects port 80 there, and keeps the name pointed at its address on your network.
@@ -136,11 +138,11 @@ cargo run                                          # Start the server on http://
 
 **The setup wizard.** Skip `create-owner`, and start with an empty data folder and `ACCORDION_CERTIFICATE_AUTHORITY=lets-encrypt-staging`. The log shows the wizard's address and setup code. Other devices on your network can also open it at `http://accordion.local`. The wizard gets the name and certificate, then moves to `https://<name>/setup` to create the owner account.
 
-**The health page.** `https://<name>/health` shows how the certificate, the address record, `accordion.local`, and backups are doing. Like every admin page, it opens only from your home network unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
+**Server health.** In Settings, **Server health** shows how the certificate, the address record, `accordion.local`, backups, updates, and the web app are doing. Like every Server section in Settings, it opens only from your home network unless you set `ACCORDION_ADMIN_ACCESS=anywhere`.
 
-**Your household.** At `/people`, the owner or an admin adds people, renames them, makes reset links, turns accounts off and on, and deletes them. Deleting someone gives their files to another person or deletes them. Each new person gets a one-time link to `/welcome`, where they choose their own password. Everyone can change their password and name at `/account`. If the owner forgets theirs, `cargo run -- reset-owner-password` prints a link for choosing a new one.
+**Your household.** In Settings, under **People**, the owner or an admin adds people, renames them, makes reset links, turns accounts off and on, and deletes them. Deleting someone gives their files to another person or deletes them. Each new person gets a one-time link to `/welcome`, where they choose their own password. Everyone can change their password and name in Settings, under **Account**. If the owner forgets theirs, `cargo run -- reset-owner-password` prints a link for choosing a new one.
 
-**Backups.** Install [restic](https://restic.net) 0.19.1, and set `ACCORDION_RESTIC` to its full path if it isn't on your `PATH`. At `/backups`, turn backups on, save the recovery key, and add a place for backups to go:
+**Backups.** Install [restic](https://restic.net) 0.19.1, and set `ACCORDION_RESTIC` to its full path if it isn't on your `PATH`. In Settings, under **Backups**, turn backups on, save the recovery key, and add a place for backups to go:
 
 - **A folder on another disk.**
 - **An S3 bucket,** such as at Backblaze B2. Make the bucket private, and give the key access to that bucket only. At Backblaze, set the bucket's lifecycle to **Keep only the last version**, or the data restic deletes keeps taking up space you pay for.
@@ -151,11 +153,17 @@ Backups run every night at 3 a.m., and **Back up now** runs one right away.
 
 **Restoring.** Start with an empty data folder, and select **Restore from a backup** in the setup wizard. For a backup on another computer, first add the new SSH key the wizard shows. Accordion restores everything, including accounts and the server's name, then starts again. Sign in with the account you used before.
 
-**Drive over WebDAV.** Create an app password at `/account`, then connect File Explorer, Finder, or another WebDAV client to `/dav/drive/` with your username and that app password. File Explorer needs HTTPS, so use a server with a name. Over plain HTTP, try `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
+**Drive over WebDAV.** Create an app password in **Settings** > **Apps and devices**, then connect File Explorer, Finder, or another WebDAV client to `/dav/drive/` with your username and that app password. File Explorer needs HTTPS, so use a server with a name. Over plain HTTP, try `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
 
 ### Working across repos
 
-`clone-workspace.sh` makes local builds use your checkouts of the other repos. To commit `Cargo.lock`:
+`clone-workspace.sh` makes local builds use your checkouts of the other repos. To ship a change that spans repos, commit in each repo, then run `scripts/ship.sh`. It pushes `accordion-core`, `accordion-gateway`, the modules, and `accordion-web` in that order, pins this repo to what it pushed, and pushes this repo. Give it a message to commit this repo's own changes together with the pins:
+
+```sh
+scripts/ship.sh "Add Settings, and pin core and web"
+```
+
+To pin `Cargo.lock` by hand instead:
 
 1. Push the other repos.
 2. Run `scripts/pin-versions.sh`, which pins the versions on GitHub.
