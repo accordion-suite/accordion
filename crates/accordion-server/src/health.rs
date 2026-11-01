@@ -349,7 +349,7 @@ fn thumbnails_check(status: &ThumbnailStatus) -> Check {
                 count(status.waiting, "file")
             )
         } else {
-            "Every photo and PDF that can have a thumbnail has one.".to_owned()
+            "Every file that can have a thumbnail has one.".to_owned()
         };
         if status.failed > 0 {
             summary.push_str(&format!(
@@ -1050,7 +1050,7 @@ mod tests {
         let check = thumbnails_check(&ThumbnailStatus::default());
         assert_eq!(
             check.summary,
-            "Every photo and PDF that can have a thumbnail has one."
+            "Every file that can have a thumbnail has one."
         );
     }
 

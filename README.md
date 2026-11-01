@@ -153,7 +153,7 @@ Backups run every night at 3 a.m., and **Back up now** runs one right away.
 
 **Restoring.** Start with an empty data folder, and select **Restore from a backup** in the setup wizard. For a backup on another computer, first add the new SSH key the wizard shows. Accordion restores everything, including accounts and the server's name, then starts again. Sign in with the account you used before.
 
-**Thumbnails.** Drive's grid shows a thumbnail of each photo and PDF. Install the programs that make them, which the release package depends on: `sudo apt install libvips-tools libheif-plugin-libde265 poppler-utils`. They run in a sandbox that needs Linux 5.13 or later with Landlock turned on ([decision 14](docs/decisions/0014-thumbnails-and-sandboxed-workers.md)). **Server health** says why if there are none.
+**Thumbnails.** Drive's grid shows a thumbnail of each photo and PDF, and the first lines of each text file. Install the programs that make them, which the release package depends on: `sudo apt install libvips-tools libheif-plugin-libde265 poppler-utils`. They run in a sandbox that needs Linux 5.13 or later with Landlock turned on ([decision 14](docs/decisions/0014-thumbnails-and-sandboxed-workers.md)). **Server health** says why if there are none.
 
 **Drive over WebDAV.** Create an app password in **Settings** > **Apps and devices**, then connect File Explorer, Finder, or another WebDAV client to `/dav/drive/` with your username and that app password. File Explorer needs HTTPS, so use a server with a name. Over plain HTTP, try `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
 

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** October 31, 2026
-- **Updated:** November 1, 2026, after measuring libvips in the sandbox: the memory limit, PDFs, and the package's dependencies changed
+- **Updated:** November 1, 2026, after measuring libvips in the sandbox: the memory limit, PDFs, and the package's dependencies changed. Later the same day, text files gained thumbnails of their first lines.
 
 ## Context
 
@@ -156,6 +156,7 @@ libvips is the only option that shows iPhone photos and PDFs, and it's the faste
 
 - **One size,** 480 pixels on the longer side, saved as WebP. The grid shows it cropped to fit the card, and it's sharp on high-resolution screens.
 - **Formats:** JPEG, PNG, GIF, WebP, TIFF, HEIC, and AVIF first. PDFs show their first page: `pdftoppm` draws it in the sandbox, and libvips turns that into the thumbnail. Videos, through ffmpeg, and Office files, through LibreOffice, follow in the same sandbox, each with its own decision on size and limits.
+- **Text files show their first lines,** as Google Drive shows them. Core keeps up to 40 lines from the file's first 4 KB, as UTF-8, and apps draw them as a small page, so they follow the app's light or dark look. Telling text apart needs no decoder: the server checks that the start is valid UTF-8 without control characters, which Rust does safely, so text skips the sandbox. SVG and RTF files aren't shown as text, because their markup would look broken, and Drive shows none for a file whose name says it's a song, a video, or another kind that isn't text.
 - **libvips runs with `VIPS_BLOCK_UNTRUSTED=1`,** and the server checks a file's first bytes before starting the worker, so a file that claims to be a JPEG but isn't is never decoded.
 - **Limits for each thumbnail:** 1 GB of writable memory, 20 seconds of CPU time, a 10 MB result, and 30 seconds in all. Files over 200 MB get no thumbnail. HEIC and AVIF files over 24 megapixels get none either, judged from the file's header before it's decoded, because they're decoded whole.
 - **Why writable memory, not address space.** Decoders reserve far more address space than they use. To decode a 7-megapixel iPhone photo in 117 MB, libheif reserves about 1.5 GB, so an address-space cap either breaks HEIC or protects nothing. A cap on writable memory (`RLIMIT_DATA`) leaves the reservation out.
