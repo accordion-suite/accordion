@@ -174,8 +174,9 @@ async fn sends_the_apps_page_for_every_address_in_drive() {
             .to_str()
             .unwrap();
         assert!(policy.contains("script-src 'self'"));
-        // Drive shows PDFs in a frame.
+        // Drive shows PDFs in a frame, and plays videos.
         assert!(policy.contains("frame-src 'self'"));
+        assert!(policy.contains("media-src 'self'"));
     }
     // Only modules have pages in the app.
     let (response, _) = server.get("/photos/", None).await;
