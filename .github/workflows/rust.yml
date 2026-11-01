@@ -84,6 +84,16 @@ jobs:
           sudo install -m 0755 "${name}/rclone" /usr/local/bin/rclone
           rm -r "${name}" "${name}.zip"
           rclone version
+      # Core's thumbnail tests run libvips and poppler in the sandbox
+      # (decision 14), and make their test images with libheif's AV1
+      # encoder.
+      - name: Install the thumbnail programs
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libvips-tools \
+            libheif-plugin-libde265 libheif-plugin-aomdec libheif-plugin-aomenc poppler-utils
+          vips --version
+          pdftoppm -v 2>&1 | head -n 1
       # Decision 11: the tests run under strace, and the build fails if
       # anything connects to another machine. The script lives in the
       # accordion repo, so other repos fetch it here. Building first keeps
