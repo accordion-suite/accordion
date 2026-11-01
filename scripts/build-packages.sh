@@ -204,7 +204,7 @@ Version: $version
 Architecture: $arch
 Maintainer: $MAINTAINER
 Installed-Size: $(du -s -k --apparent-size "$root/usr" | cut -f 1)
-Depends: systemd (>= 252), ca-certificates
+Depends: systemd (>= 252), ca-certificates, libvips-tools, poppler-utils, libheif-plugin-libde265 | libheif1 (<< 1.16)
 Recommends: openssh-client
 Section: net
 Priority: optional

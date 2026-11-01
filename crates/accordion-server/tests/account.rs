@@ -4,6 +4,7 @@
 use accordion_core::db::Database;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
+use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::Peer;
 use accordion_module::{Services, Stopping};
 use accordion_server::{AppState, Site, modules, router};
@@ -49,9 +50,17 @@ async fn start() -> Server {
     let modules = modules::start(
         modules::all(),
         &Services {
-            db,
+            db: db.clone(),
             identity: identity.clone(),
-            storage,
+            storage: storage.clone(),
+            thumbnails: Thumbnails::open(
+                db,
+                storage,
+                dir.path(),
+                Tools::installed(env!("CARGO_BIN_EXE_accordion")),
+            )
+            .await
+            .unwrap(),
         },
         &Stopping::new(stopping),
         &mut JoinSet::new(),

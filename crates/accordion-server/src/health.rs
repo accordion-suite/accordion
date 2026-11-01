@@ -27,6 +27,7 @@ use tokio::sync::watch;
 use crate::AppState;
 use crate::updates::{CheckResult, UpdateStatus};
 use crate::web::WebApp;
+use accordion_core::thumbnails::ThumbnailStatus;
 use accordion_module::ApiError;
 use accordion_module::Authenticated;
 use accordion_update::protocol::Outcome;
@@ -54,6 +55,8 @@ pub struct Health {
     pub updates: Option<watch::Receiver<UpdateStatus>>,
     /// Set when the server has the web app.
     pub web: Option<WebApp>,
+    /// Set once the thumbnail worker is running.
+    pub thumbnails: Option<watch::Receiver<ThumbnailStatus>>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -132,6 +135,9 @@ impl Health {
         }
         if let Some(web) = &self.web {
             checks.push(web_check(web));
+        }
+        if let Some(thumbnails) = &self.thumbnails {
+            checks.push(thumbnails_check(&thumbnails.borrow()));
         }
         checks
     }
@@ -319,6 +325,45 @@ fn web_check(web: &WebApp) -> Check {
     Check {
         id: "web_app",
         title: "Web app",
+        state,
+        summary,
+    }
+}
+
+fn thumbnails_check(status: &ThumbnailStatus) -> Check {
+    let (state, summary) = if let Some(reason) = &status.unavailable {
+        (
+            Level::Warning,
+            format!("Drive shows icons instead of thumbnails, because {reason}"),
+        )
+    } else if let Some(error) = &status.last_error {
+        (
+            Level::Warning,
+            format!("Accordion ran into a problem making thumbnails ({error}). It'll try again."),
+        )
+    } else {
+        let mut summary = if status.waiting > 0 {
+            let verb = if status.waiting == 1 { "is" } else { "are" };
+            format!(
+                "Accordion is making thumbnails, and {} {verb} waiting.",
+                count(status.waiting, "file")
+            )
+        } else {
+            "Every photo and PDF that can have a thumbnail has one.".to_owned()
+        };
+        if status.failed > 0 {
+            summary.push_str(&format!(
+                " Accordion couldn't make thumbnails of {}, so {} an icon instead. The server's log \
+                 says why.",
+                count(status.failed, "file"),
+                if status.failed == 1 { "it shows" } else { "they show" }
+            ));
+        }
+        (Level::Ok, summary)
+    };
+    Check {
+        id: "thumbnails",
+        title: "Thumbnails",
         state,
         summary,
     }
@@ -705,6 +750,7 @@ mod tests {
             backup: None,
             updates: None,
             web: None,
+            thumbnails: None,
         }
     }
 
@@ -974,6 +1020,38 @@ mod tests {
 
         assert_eq!(hour_label(0), "midnight");
         assert_eq!(hour_label(15), "3 p.m.");
+    }
+
+    #[test]
+    fn says_how_thumbnails_are_doing() {
+        let check = thumbnails_check(&ThumbnailStatus {
+            unavailable: Some("the programs that make thumbnails aren't installed.".into()),
+            ..ThumbnailStatus::default()
+        });
+        assert_eq!(check.state, Level::Warning);
+        assert_eq!(
+            check.summary,
+            "Drive shows icons instead of thumbnails, because the programs that make \
+             thumbnails aren't installed."
+        );
+
+        let check = thumbnails_check(&ThumbnailStatus {
+            waiting: 3,
+            failed: 1,
+            ..ThumbnailStatus::default()
+        });
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Accordion is making thumbnails, and three files are waiting. Accordion couldn't \
+             make thumbnails of one file, so it shows an icon instead. The server's log says why."
+        );
+
+        let check = thumbnails_check(&ThumbnailStatus::default());
+        assert_eq!(
+            check.summary,
+            "Every photo and PDF that can have a thumbnail has one."
+        );
     }
 
     #[test]

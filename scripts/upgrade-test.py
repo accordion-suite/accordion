@@ -10,7 +10,8 @@ The server is a throwaway install that serves plain HTTP on 127.0.0.1:8080,
 because it has an owner but no name. add signs in as the owner, which
 upgrade-test.sh creates, then adds a person, files in Drive over WebDAV, and
 a backup to a folder. It saves what it added, with the test passwords, in the
-state file. check reads it all back, and runs a backup and a restore test.
+state file. check reads it all back, checks a photo's thumbnail on releases
+that make them, and runs a backup and a restore test.
 update installs a release from the Updates page's API, waits for the update
 helper, and checks how the update ended: installed or rolled-back.
 
@@ -26,6 +27,7 @@ import re
 import sys
 import time
 import urllib.parse
+import zlib
 
 HOST = "127.0.0.1"
 PORT = 8080
@@ -38,11 +40,43 @@ WEB_APP = "/usr/lib/accordion/web/index.html"
 # The web app's list of its files, with their hashes. Older releases don't
 # have it.
 WEB_FILES = "/usr/lib/accordion/web/files.json"
+
+
+def png(width, height):
+    """A small gradient as a PNG, for a file that gets a thumbnail."""
+
+    def chunk(kind, data):
+        return (
+            len(data).to_bytes(4, "big")
+            + kind
+            + data
+            + zlib.crc32(kind + data).to_bytes(4, "big")
+        )
+
+    # Each row starts with its filter type, 0 for none, then red, green,
+    # and blue for each pixel.
+    rows = b"".join(
+        b"\0" + b"".join(bytes((x * 255 // width, y * 255 // height, 128)) for x in range(width))
+        for y in range(height)
+    )
+    header = width.to_bytes(4, "big") + height.to_bytes(4, "big") + bytes([8, 2, 0, 0, 0])
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+
+
 # A non-ASCII name, so the test covers names that need encoding.
 FILES = {
     "Documents/Café notes.txt": "Pick up the bread.\n".encode(),
     "Photos/beach.bin": os.urandom(3 * 1024 * 1024),
+    "Photos/sunset.png": png(640, 480),
 }
+# Releases with thumbnails (decision 14) make them within this many
+# seconds.
+THUMBNAIL_TIMEOUT = 120
 # The update helper waits up to 10 minutes for a new version to start, then
 # five more to see that it stays up.
 UPDATE_TIMEOUT = 30 * 60
@@ -70,7 +104,10 @@ def request(method, path, token=None, body=None, auth=None, raw=None):
         headers["Content-Type"] = "application/json"
     connection = http.client.HTTPConnection(HOST, PORT, timeout=60)
     try:
-        connection.request(method, urllib.parse.quote(path), body=data, headers=headers)
+        # The query, if any, is already encoded.
+        connection.request(
+            method, urllib.parse.quote(path, safe="/?=&"), body=data, headers=headers
+        )
         response = connection.getresponse()
         content = response.read()
     finally:
@@ -221,6 +258,7 @@ def check(state_file, version=None):
 
     if os.path.isfile(WEB_APP):
         check_web_app(token)
+    check_thumbnails(token)
 
     usernames = {person["username"] for person in call("GET", "/api/people", token)["people"]}
     if usernames != {"alex", "sam"}:
@@ -284,6 +322,32 @@ def check_web_app(token):
     web = next((check for check in checks if check["id"] == "web_app"), None)
     if not web or web["state"] != "ok":
         fail(f"Server health says this about the web app: {web}")
+
+
+def check_thumbnails(token):
+    """On releases with thumbnails, the PNG gets one soon, and Drive sends
+    it."""
+    checks = call("GET", "/api/health", token)["checks"]
+    health = next((check for check in checks if check["id"] == "thumbnails"), None)
+    if health is None:
+        return
+    if health["state"] != "ok":
+        fail(f"Server health says this about thumbnails: {health['summary']}")
+    deadline = time.monotonic() + THUMBNAIL_TIMEOUT
+    while True:
+        found = call("GET", "/api/drive/search?q=sunset.png", token)
+        if len(found) != 1:
+            fail(f"searching for sunset.png found {len(found)} files, not one.")
+        if found[0]["thumbnail"]:
+            break
+        if time.monotonic() > deadline:
+            fail(f"sunset.png had no thumbnail after {THUMBNAIL_TIMEOUT} seconds.")
+        time.sleep(2)
+    status, headers, content = request(
+        "GET", f"/api/drive/items/{found[0]['id']}/thumbnail", token=token
+    )
+    if status != 200 or headers.get("Content-Type") != "image/webp" or content[8:12] != b"WEBP":
+        fail(f"sunset.png's thumbnail answered {status} with {headers.get('Content-Type')}.")
 
 
 def update(state_file, version, outcome, installed):

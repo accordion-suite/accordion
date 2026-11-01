@@ -5,8 +5,9 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#6be7f7ffd4f797c463407a19fe33fe844ea58609"
+source = "git+https://github.com/accordion-suite/accordion-core#205b5108b7f1336f5fbf68d2a3f2784f25c9799f"
 dependencies = [
+ "accordion-sandbox",
  "accordion-types",
  "argon2",
  "base64ct",
@@ -17,6 +18,7 @@ dependencies = [
  "rustls",
  "serde_json",
  "sha2",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-rustls",
@@ -27,10 +29,11 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#7a0d75b48a1d8048d9790ecb9b2406f867c5eb4a"
+source = "git+https://github.com/accordion-suite/accordion-drive#7647b365d222ad3483ac06ba608c7ab4c9170d4e"
 dependencies = [
  "accordion-core",
  "accordion-module",
+ "accordion-sandbox",
  "accordion-types",
  "axum",
  "bytes",
@@ -70,7 +73,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#6be7f7ffd4f797c463407a19fe33fe844ea58609"
+source = "git+https://github.com/accordion-suite/accordion-core#205b5108b7f1336f5fbf68d2a3f2784f25c9799f"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -84,7 +87,7 @@ dependencies = [
 [[package]]
 name = "accordion-sandbox"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#6be7f7ffd4f797c463407a19fe33fe844ea58609"
+source = "git+https://github.com/accordion-suite/accordion-core#205b5108b7f1336f5fbf68d2a3f2784f25c9799f"
 dependencies = [
  "landlock",
  "libc",
@@ -127,7 +130,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#6be7f7ffd4f797c463407a19fe33fe844ea58609"
+source = "git+https://github.com/accordion-suite/accordion-core#205b5108b7f1336f5fbf68d2a3f2784f25c9799f"
 dependencies = [
  "serde",
  "uuid",

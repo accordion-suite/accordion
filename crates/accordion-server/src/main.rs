@@ -10,6 +10,7 @@ use accordion_core::backup::{self, Backup};
 use accordion_core::db::Database;
 use accordion_core::identity::{AppPasswords, Identity, NewUser};
 use accordion_core::storage::Storage;
+use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::ProviderKind;
@@ -168,6 +169,14 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     )
     .await?;
     let switches = Switches::open(db.clone()).await?;
+    // Workers run in a sandbox that this program sets up (decision 14).
+    let thumbnails = Thumbnails::open(
+        db.clone(),
+        storage.clone(),
+        &data_dir,
+        Tools::installed(std::env::current_exe()?),
+    )
+    .await?;
     let web = WebApp::from_env()?;
     match &web {
         Some(web) => tracing::info!("serving the web app from {}", web.dir().display()),
@@ -198,18 +207,21 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         backup: Some(backup.status()),
         updates: Some(updates.status()),
         web: web.clone(),
+        thumbnails: Some(thumbnails.status()),
         ..Health::default()
     };
     let mut background = JoinSet::new();
     background.spawn(storage.clone().maintain(until_stopped()));
     background.spawn(backup.clone().maintain(until_stopped()));
     background.spawn(updates.clone().run(Some(backup.status()), until_stopped()));
+    background.spawn(thumbnails.clone().run(until_stopped()));
     let modules = modules::start(
         modules::all(),
         &Services {
             db,
             identity: identity.clone(),
             storage: storage.clone(),
+            thumbnails,
         },
         &Stopping::new(stopped.clone()),
         &mut background,

@@ -66,6 +66,7 @@ async fn start_with(
         backup: None,
         updates: None,
         web: None,
+        thumbnails: None,
     };
     let app = router(
         AppState {
