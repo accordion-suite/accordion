@@ -10,8 +10,8 @@ The server is a throwaway install that serves plain HTTP on 127.0.0.1:8080,
 because it has an owner but no name. add signs in as the owner, which
 upgrade-test.sh creates, then adds a person, files in Drive over WebDAV, and
 a backup to a folder. It saves what it added, with the test passwords, in the
-state file. check reads it all back, checks a photo's thumbnail on releases
-that make them, and runs a backup and a restore test.
+state file. check reads it all back, checks the thumbnails of a photo and a
+video on releases that make them, and runs a backup and a restore test.
 update installs a release from the Updates page's API, waits for the update
 helper, and checks how the update ended: installed or rolled-back.
 
@@ -68,11 +68,51 @@ def png(width, height):
     )
 
 
+# A two-second, 64 by 36 pixel H.264 video, for a file that gets a
+# thumbnail, made with:
+#
+#   ffmpeg -f lavfi -i testsrc2=size=64x36:rate=1:duration=2 -c:v libx264 \
+#       -preset veryslow -pix_fmt yuv420p -bsf:v filter_units=remove_types=6 \
+#       -movflags +faststart -map_metadata -1 -fflags +bitexact \
+#       -flags:v +bitexact clip.mp4
+CLIP = base64.b64decode(
+    "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"
+)
+
 # A non-ASCII name, so the test covers names that need encoding.
 FILES = {
     "Documents/Café notes.txt": "Pick up the bread.\n".encode(),
     "Photos/beach.bin": os.urandom(3 * 1024 * 1024),
     "Photos/sunset.png": png(640, 480),
+    "Videos/clip.mp4": CLIP,
 }
 # Releases with thumbnails (decision 14) make them within this many
 # seconds.
@@ -240,7 +280,7 @@ def add(state_file):
     }
     with open(state_file, "w") as file:
         json.dump(state, file)
-    say("added a person, two files in Drive, and a backup.")
+    say(f"added a person, {len(FILES)} files in Drive, and a backup.")
 
 
 def check(state_file, version=None):
@@ -325,29 +365,32 @@ def check_web_app(token):
 
 
 def check_thumbnails(token):
-    """On releases with thumbnails, the PNG gets one soon, and Drive sends
-    it."""
+    """On releases with thumbnails, the PNG and the video get one soon, and
+    Drive sends them. Video thumbnails (decision 15) came in the same release
+    as the others, and need ffmpeg, which the package recommends, so the
+    install command installs it."""
     checks = call("GET", "/api/health", token)["checks"]
     health = next((check for check in checks if check["id"] == "thumbnails"), None)
     if health is None:
         return
-    if health["state"] != "ok":
+    if health["state"] != "ok" or "Videos show an icon" in health["summary"]:
         fail(f"Server health says this about thumbnails: {health['summary']}")
-    deadline = time.monotonic() + THUMBNAIL_TIMEOUT
-    while True:
-        found = call("GET", "/api/drive/search?q=sunset.png", token)
-        if len(found) != 1:
-            fail(f"searching for sunset.png found {len(found)} files, not one.")
-        if found[0]["thumbnail"]:
-            break
-        if time.monotonic() > deadline:
-            fail(f"sunset.png had no thumbnail after {THUMBNAIL_TIMEOUT} seconds.")
-        time.sleep(2)
-    status, headers, content = request(
-        "GET", f"/api/drive/items/{found[0]['id']}/thumbnail", token=token
-    )
-    if status != 200 or headers.get("Content-Type") != "image/webp" or content[8:12] != b"WEBP":
-        fail(f"sunset.png's thumbnail answered {status} with {headers.get('Content-Type')}.")
+    for name in ("sunset.png", "clip.mp4"):
+        deadline = time.monotonic() + THUMBNAIL_TIMEOUT
+        while True:
+            found = call("GET", f"/api/drive/search?q={name}", token)
+            if len(found) != 1:
+                fail(f"searching for {name} found {len(found)} files, not one.")
+            if found[0]["thumbnail"]:
+                break
+            if time.monotonic() > deadline:
+                fail(f"{name} had no thumbnail after {THUMBNAIL_TIMEOUT} seconds.")
+            time.sleep(2)
+        status, headers, content = request(
+            "GET", f"/api/drive/items/{found[0]['id']}/thumbnail", token=token
+        )
+        if status != 200 or headers.get("Content-Type") != "image/webp" or content[8:12] != b"WEBP":
+            fail(f"{name}'s thumbnail answered {status} with {headers.get('Content-Type')}.")
 
 
 def update(state_file, version, outcome, installed):

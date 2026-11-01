@@ -359,6 +359,10 @@ fn thumbnails_check(status: &ThumbnailStatus) -> Check {
                 if status.failed == 1 { "it shows" } else { "they show" }
             ));
         }
+        // Not a warning: ffmpeg is optional, and an admin may leave it out.
+        if let Some(videos) = &status.videos {
+            summary.push_str(&format!(" Videos show an icon instead, because {videos}"));
+        }
         (Level::Ok, summary)
     };
     Check {
@@ -1051,6 +1055,20 @@ mod tests {
         assert_eq!(
             check.summary,
             "Every file that can have a thumbnail has one."
+        );
+
+        let check = thumbnails_check(&ThumbnailStatus {
+            videos: Some(
+                "ffmpeg isn't installed. Install it with apt to show a frame from each video."
+                    .into(),
+            ),
+            ..ThumbnailStatus::default()
+        });
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Every file that can have a thumbnail has one. Videos show an icon instead, because \
+             ffmpeg isn't installed. Install it with apt to show a frame from each video."
         );
     }
 
