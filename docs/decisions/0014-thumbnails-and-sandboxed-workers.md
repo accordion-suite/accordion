@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** October 31, 2026
+- **Updated:** November 1, 2026, after measuring libvips in the sandbox: the memory limit, PDFs, and the package's dependencies changed
 
 ## Context
 
@@ -46,15 +47,15 @@ Cons:
 
 Pros:
 
-- **The formats families have:** JPEG, PNG, GIF, WebP, TIFF, HEIC, and AVIF, through libheif, and PDFs through poppler.
-- **Fast and small.** For JPEG and HEIC, it decodes at a fraction of the size, so a 48-megapixel photo shrinks in about the time and memory of a small one.
+- **The formats families have:** JPEG, PNG, GIF, WebP, TIFF, HEIC, and AVIF, through libheif. PDFs go through poppler's own `pdftoppm`, because libvips doesn't trust its PDF reader with hostile files.
+- **Fast and small.** For JPEG, it decodes at a fraction of the size, so a 48-megapixel photo shrinks in 0.1 seconds and 42 MB. HEIC and AVIF are decoded whole, so they need more memory.
 - **Fixes come with system updates.** The distribution patches libvips and its decoders, and servers install the fixes with their other updates.
 - **It can refuse risky formats.** With `VIPS_BLOCK_UNTRUSTED` set, available since 8.13, libvips won't use the decoders its developers don't trust with hostile files, such as ImageMagick's.
 
 Cons:
 
 - **C decoders.** A crafted file can run code inside the worker, so everything rests on the sandbox.
-- **A bigger install.** `libvips-tools` brings in libheif, poppler, and more, tens of MB to measure.
+- **A bigger install.** `libvips-tools` brings in libheif and more, and HEIC and PDFs need two more packages, tens of MB to measure.
 - **Versions differ by distribution,** so the tests have to cover the oldest supported one.
 
 ### Option C: ImageMagick
@@ -103,7 +104,7 @@ The server starts its own program as a small launcher, `accordion sandbox`, with
 
 - **Landlock** lets the worker read only the system's program and library folders, such as `/usr`, and write nowhere. The data folder, the database, and other people's files are out of reach. The file to read is already open on standard input, so the worker needs no path into the data folder.
 - **A seccomp filter** refuses system calls the worker has no use for: making network connections, tracing other processes, running other programs once `vips` starts, and changing its own limits.
-- **Resource limits** cap its memory, CPU time, and the size of what it writes. The server also stops it after 30 seconds.
+- **Resource limits** cap its writable memory, CPU time, and the size of what it writes. The server also stops it after 30 seconds.
 - **Nothing else from the server:** an empty environment except for libvips's settings, no other open files, and a new process group, so stopping it stops everything it started.
 
 Landlock and seccomp need no privileges. They work for any user, inside the existing unit, and in tests.
@@ -117,7 +118,7 @@ Pros:
 Cons:
 
 - **The same user as the server.** Landlock alone keeps the worker out of the data folder. If the kernel doesn't support Landlock, there's no sandbox worth having, so the server has to refuse to run workers.
-- **Memory limits are rougher** than a control group's. A cap on address space also counts memory that's reserved but never used, so it needs some headroom.
+- **Memory limits are rougher** than a control group's. They apply to each process rather than the worker as a whole, and some decoders hang rather than fail when they reach one, so the time limit has to stop them.
 - **A seccomp filter to keep correct.** A filter that's too tight breaks `vips` after a distribution update, and one that's too loose protects less. Refusing known-dangerous calls, rather than allowing only known-safe ones, keeps it simple.
 
 ## Comparison
@@ -148,15 +149,29 @@ libvips is the only option that shows iPhone photos and PDFs, and it's the faste
 
 - **The launcher is the server's own program,** run as `accordion sandbox <limits> -- <program> <arguments>`. It applies Landlock, the seccomp filter, and the limits to itself, then runs the program. Doing this in a separate program, rather than between `fork` and `exec` in the server, keeps it out of the server's threads.
 - **Landlock is required.** If the kernel doesn't support it, the server makes no thumbnails, and **Server health** says why. Every other limit is always available.
-- **The unit allows the sandbox's system calls.** Its filter refuses calls outside `@system-service`, so it gets an exception for the Landlock calls if they're not in that set.
+- **The unit allows the sandbox's system calls.** Its filter refuses calls outside `@system-service`, and refuses `@resources`, so it allows `@sandbox` (Landlock and seccomp) and the two calls that lower a process's own priority.
 - **Every later worker uses the same launcher,** with its own program, limits, and folders it can read. A worker that needs a scratch folder, such as LibreOffice, gets a new empty one that's deleted afterward.
 
 ### Thumbnails
 
 - **One size,** 480 pixels on the longer side, saved as WebP. The grid shows it cropped to fit the card, and it's sharp on high-resolution screens.
-- **Formats:** JPEG, PNG, GIF, WebP, TIFF, HEIC, and AVIF first. PDFs show their first page, if poppler works under `VIPS_BLOCK_UNTRUSTED`. Videos, through ffmpeg, and Office files, through LibreOffice, follow in the same sandbox, each with its own decision on size and limits.
+- **Formats:** JPEG, PNG, GIF, WebP, TIFF, HEIC, and AVIF first. PDFs show their first page: `pdftoppm` draws it in the sandbox, and libvips turns that into the thumbnail. Videos, through ffmpeg, and Office files, through LibreOffice, follow in the same sandbox, each with its own decision on size and limits.
 - **libvips runs with `VIPS_BLOCK_UNTRUSTED=1`,** and the server checks a file's first bytes before starting the worker, so a file that claims to be a JPEG but isn't is never decoded.
-- **Limits for each thumbnail:** 1 GB of address space, 20 seconds of CPU time, a 10 MB result, and 30 seconds in all. Files over 200 MB get no thumbnail.
+- **Limits for each thumbnail:** 1 GB of writable memory, 20 seconds of CPU time, a 10 MB result, and 30 seconds in all. Files over 200 MB get no thumbnail. HEIC and AVIF files over 24 megapixels get none either, judged from the file's header before it's decoded, because they're decoded whole.
+- **Why writable memory, not address space.** Decoders reserve far more address space than they use. To decode a 7-megapixel iPhone photo in 117 MB, libheif reserves about 1.5 GB, so an address-space cap either breaks HEIC or protects nothing. A cap on writable memory (`RLIMIT_DATA`) leaves the reservation out.
+- **Measured in the sandbox,** on an x86_64 computer:
+
+  | File | Time | Peak memory | Needs a cap of |
+  |---|---|---|---|
+  | 48-megapixel JPEG | 0.1 s | 42 MB | 128 MB |
+  | 48-megapixel PNG | 0.5 s | 88 MB | 256 MB |
+  | 7-megapixel HEIC from an iPhone | 0.3 s | 117 MB | 512 MB |
+  | 24-megapixel AVIF | 1.3 s | 880 MB | 1 GB |
+  | 48-megapixel AVIF | 2 s | 1.6 GB | 2 GB |
+  | PDF, first page | 0.1 s | 22 MB | |
+  | A PNG that claims to be 60,000 × 60,000 | 0.9 s | | Stopped |
+
+- **Some decoders hang instead of failing** when they reach the memory limit, such as libheif's HEIC decoder. The 30-second limit stops them, and the failure is recorded, so the file isn't tried again.
 
 ### Where thumbnails are kept, and when they're made
 
@@ -183,9 +198,9 @@ libvips is the only option that shows iPhone photos and PDFs, and it's the faste
 
 ## Consequences
 
-- **A new package dependency,** `libvips-tools`, and the package's install size grows.
+- **New package dependencies:** `libvips-tools`, `poppler-utils` for PDFs, and `libheif-plugin-libde265`, without which libheif can't decode iPhone photos. Debian 12's libheif has that decoder built in and has no plugin package. The package's install size grows.
 - **A `sandbox` command in the server,** with the `landlock` and `seccompiler` crates.
-- **The unit's system call filter** gains the Landlock calls, if they're not already allowed.
+- **The unit's system call filter** allows `@sandbox`, `setpriority`, and `ioprio_set`.
 - **Core gains a thumbnail service:** a migration for its queue and failures, the cache folder, and an API for modules.
 - **Drive gains a thumbnail address,** and its lists say which files have one. The web app shows them in the grid when the **Thumbnails** setting is on.
 - **Backups exclude** `cache/` in the data folder.
@@ -194,6 +209,5 @@ libvips is the only option that shows iPhone photos and PDFs, and it's the faste
 ## Open questions
 
 - **Landlock on each supported system.** Check that Debian 12's, Ubuntu 24.04's, and Raspberry Pi OS's kernels turn it on, and which version each has, on the Raspberry Pi and in CI.
-- **PDFs under `VIPS_BLOCK_UNTRUSTED`.** If libvips counts poppler as untrusted, PDFs need poppler's own `pdftoppm` in the same sandbox instead.
-- **libvips under `MemoryDenyWriteExecute`.** libvips speeds some work up by generating code as it runs, which the unit forbids. Check that it falls back cleanly, or turn that off with `VIPS_NOVECTOR`.
+- **HEIC and AVIF over 24 megapixels.** iPhones can save 48-megapixel HEIC photos. Measure one on a Raspberry Pi, with a test image from libheif's HEVC encoder, and raise the limit if a 4 GB server can afford it. libheif's dav1d plugin may also decode AVIF in less memory than its aom plugin.
 - **The install size** that `libvips-tools` adds on each system.

@@ -15,6 +15,7 @@ accordion-core = { git = "https://github.com/accordion-suite/accordion-core", ve
 accordion-drive = { git = "https://github.com/accordion-suite/accordion-drive", version = "0.1.0" }
 accordion-gateway = { git = "https://github.com/accordion-suite/accordion-gateway", version = "0.1.0" }
 accordion-module = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
+accordion-sandbox = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 accordion-types = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 # Built with the server, so its version always matches.
 accordion-update = { path = "../accordion-update" }

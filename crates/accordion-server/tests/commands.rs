@@ -96,3 +96,51 @@ async fn theres_nothing_to_reset_without_an_owner() {
     let message = String::from_utf8(output.stderr).unwrap();
     assert!(message.contains("doesn't have an owner yet"), "{message}");
 }
+
+/// Runs `cat` with `args` in the sandbox, with the server as the launcher,
+/// reading `input`.
+async fn sandboxed_cat(
+    input: &std::path::Path,
+    args: &[std::ffi::OsString],
+) -> Result<Vec<u8>, accordion_sandbox::RunError> {
+    use std::time::Duration;
+
+    use accordion_sandbox::{Job, Limits, Sandbox};
+
+    Sandbox::new(env!("CARGO_BIN_EXE_accordion"))
+        .run(Job {
+            program: std::path::Path::new("/usr/bin/cat"),
+            args,
+            env: &[],
+            input: std::fs::File::open(input).unwrap(),
+            read: &[],
+            limits: Limits {
+                memory: 1024 * 1024 * 1024,
+                cpu: Duration::from_secs(10),
+                time: Duration::from_secs(20),
+                output: 1024,
+            },
+        })
+        .await
+}
+
+#[tokio::test]
+async fn the_server_is_the_launcher_for_sandboxed_workers() {
+    let data = tempfile::tempdir().unwrap();
+    let database = data.path().join("accordion.db");
+    std::fs::write(&database, "everyone's accounts").unwrap();
+    let photo = data.path().join("photo.jpg");
+    std::fs::write(&photo, "the photo's bytes").unwrap();
+
+    // The worker reads the file it's given.
+    let output = sandboxed_cat(&photo, &[]).await.unwrap();
+    assert_eq!(output, b"the photo's bytes");
+
+    // It can't open anything in the data folder.
+    match sandboxed_cat(&photo, &[database.into()]).await {
+        Err(accordion_sandbox::RunError::Failed { message, .. }) => {
+            assert!(message.contains("Permission denied"), "{message}");
+        }
+        other => panic!("expected the worker to be refused, not {other:?}"),
+    }
+}

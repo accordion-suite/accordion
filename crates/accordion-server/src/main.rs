@@ -81,8 +81,21 @@ Settings, from environment variables:
                           (default: /usr/lib/accordion/web)
   RUST_LOG                Log detail, such as info or debug (default: info)";
 
+fn main() -> ExitCode {
+    // The sandbox launcher that workers run in (decision 14). It's handled
+    // before the async runtime starts, so the launcher has one thread when
+    // it shuts itself in and runs the worker. Accordion runs it itself, so
+    // the usage doesn't list it.
+    let mut args = std::env::args_os().skip(1);
+    if args.next().is_some_and(|command| command == "sandbox") {
+        let code = accordion_sandbox::launch(args);
+        return ExitCode::from(u8::try_from(code).unwrap_or(1));
+    }
+    run()
+}
+
 #[tokio::main]
-async fn main() -> ExitCode {
+async fn run() -> ExitCode {
     tracing_subscriber::fmt()
         // Colors only on a terminal, so logs in files and journald stay plain.
         .with_ansi(io::stdout().is_terminal())

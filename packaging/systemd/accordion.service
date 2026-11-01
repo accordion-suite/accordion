@@ -65,6 +65,10 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
+# The sandbox that workers run in, such as the one that makes thumbnails,
+# needs Landlock and seccomp to shut a worker in, and lowers the worker's
+# priority (decision 14). A process can only lower its own priority.
+SystemCallFilter=@sandbox setpriority ioprio_set
 SystemCallErrorNumber=EPERM
 
 [Install]
