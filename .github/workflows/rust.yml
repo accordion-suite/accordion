@@ -84,17 +84,20 @@ jobs:
           sudo install -m 0755 "${name}/rclone" /usr/local/bin/rclone
           rm -r "${name}" "${name}.zip"
           rclone version
-      # Core's thumbnail tests run libvips, poppler, and ffmpeg in the
-      # sandbox (decisions 14 and 15), and make their test images with
-      # libheif's AV1 encoder and their test videos with ffmpeg.
+      # Core's thumbnail tests run libvips, poppler, ffmpeg, and LibreOffice
+      # in the sandbox (decisions 14, 15, and 17), and make their test
+      # images with libheif's AV1 encoder, their test videos with ffmpeg,
+      # and their test documents with LibreOffice.
       - name: Install the thumbnail programs
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends libvips-tools \
-            libheif-plugin-libde265 libheif-plugin-aomdec libheif-plugin-aomenc poppler-utils ffmpeg
+            libheif-plugin-libde265 libheif-plugin-aomdec libheif-plugin-aomenc poppler-utils ffmpeg \
+            libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui fonts-liberation2
           vips --version
           ffmpeg -hide_banner -version | head -n 1
           pdftoppm -v 2>&1 | head -n 1
+          soffice --version
       # Decision 11: the tests run under strace, and the build fails if
       # anything connects to another machine. The script lives in the
       # accordion repo, so other repos fetch it here. Building first keeps
