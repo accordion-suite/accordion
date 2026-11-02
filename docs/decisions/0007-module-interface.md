@@ -111,7 +111,7 @@ The server mounts each module's routes under paths named after its ID, so no mod
 | `/dav/<id>/…` | WebDAV, CalDAV, or CardDAV, for standard clients | Username and app password |
 | `/<id>/…` | The module's pages in the web app | Session cookie |
 
-For Drive, that's `/api/drive/`, `/dav/drive/`, and `/drive/`. The server keeps every other path, such as `/`, `/api/session`, `/setup`, `/health`, and the admin pages. Calendar and Contacts will need `/.well-known/caldav` and `/.well-known/carddav`. The trait adds a way to claim those when they ship.
+For Drive, that's `/api/drive/`, `/dav/drive/`, and `/drive/`. A module can also ask for more WebDAV addresses, each at `/dav/<name>`, as Drive does with `/dav/shared/` for what others shared ([decision 16](0016-sharing.md)). The server stops when it starts if a name is another module's ID or another module's extra name. The server keeps every other path, such as `/`, `/api/session`, `/setup`, `/health`, and the admin pages. Calendar and Contacts will need `/.well-known/caldav` and `/.well-known/carddav`. The trait adds a way to claim those when they ship.
 
 ### Security checks
 

@@ -46,7 +46,24 @@ pub async fn start(
         tracing::info!("started {}", module.name());
         mounted.push((id, started.routes));
     }
+    check_dav_names(&mounted);
     Ok(Mounted(Arc::new(mounted)))
+}
+
+/// Each module's extra WebDAV addresses are named like IDs, and mustn't
+/// clash with a module's own address or with each other.
+fn check_dav_names(mounted: &[(&'static str, Routes)]) {
+    let mut taken: Vec<&str> = mounted.iter().map(|&(id, _)| id).collect();
+    for (id, routes) in mounted {
+        for &(name, _) in &routes.more_dav {
+            check_id(name);
+            assert!(
+                !taken.contains(&name),
+                "{id} wants /dav/{name}, which another module already has"
+            );
+            taken.push(name);
+        }
+    }
 }
 
 impl Mounted {
@@ -63,6 +80,9 @@ impl Mounted {
             }
             if let Some(dav) = &routes.dav {
                 router = router.nest_service(&format!("/dav/{id}"), dav.clone());
+            }
+            for (name, dav) in &routes.more_dav {
+                router = router.nest_service(&format!("/dav/{name}"), dav.clone());
             }
             if let Some(pages) = &routes.pages {
                 router = router.nest_service(&format!("/{id}"), pages.clone());
@@ -123,6 +143,16 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "which another module already has")]
+    fn refuses_a_webdav_address_another_module_has() {
+        let routes = |more: &'static str| Routes {
+            more_dav: vec![(more, Router::new())],
+            ..Routes::default()
+        };
+        check_dav_names(&[("drive", routes("shared")), ("notes", routes("drive"))]);
     }
 
     #[test]
