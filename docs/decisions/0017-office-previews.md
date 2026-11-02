@@ -141,6 +141,7 @@ LibreOffice was tried in the sandbox, with each kind of access taken away in tur
 | Read the system's folders | Programs and libraries, as for every worker |
 | Read `/etc/libreoffice` and `/etc/fonts` | LibreOffice's settings, which Debian keeps there, and the list of fonts |
 | Read `/dev/urandom` | Random numbers. LibreOffice stops without them |
+| Read `/etc/passwd` | The list of accounts, which has no passwords. The service can't make memory both writable and runnable, so LibreOffice maps a file in its home folder twice instead, and it finds its home folder through this list. Without it, it tries `/tmp` and stops |
 | Read the one document | By its path, as for videos |
 | Write a new, empty scratch folder | Its profile and the PDF. The folder is deleted afterward, as decision 14 planned. The worker can't make links there, or run what it writes |
 | Make a local socket in `/tmp` | LibreOffice won't start without a socket of its own, to check whether another copy is running. Its folder is always `/tmp` or `/var/tmp`, whatever `TMPDIR` says |
@@ -149,7 +150,7 @@ LibreOffice was tried in the sandbox, with each kind of access taken away in tur
 - **The server removes the socket afterward.** The sandbox lets LibreOffice make files in `/tmp` but not remove them, so the server removes the sockets that appeared during the run.
 - **`/tmp` is Accordion's own.** The service runs with systemd's `PrivateTmp`, so the worker can't see or touch other programs' temporary files. In tests and development, `/tmp` is shared, and the worker can make sockets there but not read or change files.
 - **A ready-made profile.** On a new profile, LibreOffice sets it up and exits, asking to be started again. Accordion has LibreOffice make a profile in the sandbox the first time a document needs one after the server starts, adds the settings above, and gives each document a fresh copy in its scratch folder.
-- **It works under the service's own limits.** It was tried with systemd's `MemoryDenyWriteExecute` and system call filter, which every worker also runs under.
+- **It works under the service's own limits.** It runs under systemd's `MemoryDenyWriteExecute` and system call filter, which every worker also runs under. The first upgrade test found that the memory rule hadn't been in force when LibreOffice was tried, so the sandbox launcher now turns it on itself, and tests run every worker the way the service does.
 
 ### Limits
 
