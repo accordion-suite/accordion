@@ -205,7 +205,7 @@ Architecture: $arch
 Maintainer: $MAINTAINER
 Installed-Size: $(du -s -k --apparent-size "$root/usr" | cut -f 1)
 Depends: systemd (>= 252), ca-certificates, libvips-tools, poppler-utils, libheif-plugin-libde265 | libheif1 (<< 1.16)
-Recommends: openssh-client, ffmpeg
+Recommends: openssh-client, ffmpeg, libreoffice-writer-nogui, libreoffice-calc-nogui, libreoffice-impress-nogui, fonts-crosextra-carlito, fonts-crosextra-caladea, fonts-liberation2
 Section: net
 Priority: optional
 Homepage: https://github.com/accordion-suite/accordion

@@ -251,16 +251,22 @@ run() {
         python3 -I "$repo/scripts/upgrade-test.py" check "$state" "$old"
     fi
 
-    say "3. updating to $new through the update helper."
+    # The update helper installs only Accordion's own package, as dpkg
+    # does, so an admin installs LibreOffice from the release notes.
+    say "3. installing LibreOffice, which $new recommends, then updating to $new through the update helper."
+    apt-get update -q > /dev/null
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+        libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui fonts-liberation2 \
+        > /dev/null
     python3 -I "$repo/scripts/upgrade-test.py" update "$state" "$new" installed "$new"
     [[ "$(installed_version)" == "$new" ]] || die "dpkg says $(installed_version) is installed, not $new."
-    python3 -I "$repo/scripts/upgrade-test.py" check "$state" "$new"
+    python3 -I "$repo/scripts/upgrade-test.py" check "$state" "$new" documents
 
     say "4. updating to $broken, which doesn't start, so it rolls back."
     serve "$broken"
     python3 -I "$repo/scripts/upgrade-test.py" update "$state" "$broken" rolled-back "$new"
     [[ "$(installed_version)" == "$new" ]] || die "dpkg says $(installed_version) is installed, not $new."
-    python3 -I "$repo/scripts/upgrade-test.py" check "$state" "$new"
+    python3 -I "$repo/scripts/upgrade-test.py" check "$state" "$new" documents
 }
 
 [[ $# -eq 2 ]] || die "Usage: scripts/upgrade-test.sh build <folder>, then sudo scripts/upgrade-test.sh run <folder>"

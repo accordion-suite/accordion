@@ -114,6 +114,8 @@ async fn sandboxed_cat(
             env: &[],
             input: std::fs::File::open(input).unwrap(),
             read: &[],
+            write: &[],
+            sockets: None,
             limits: Limits {
                 memory: 1024 * 1024 * 1024,
                 cpu: Duration::from_secs(10),

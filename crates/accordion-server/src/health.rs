@@ -359,9 +359,15 @@ fn thumbnails_check(status: &ThumbnailStatus) -> Check {
                 if status.failed == 1 { "it shows" } else { "they show" }
             ));
         }
-        // Not a warning: ffmpeg is optional, and an admin may leave it out.
+        // Not warnings: ffmpeg and LibreOffice are optional, and an admin
+        // may leave them out.
         if let Some(videos) = &status.videos {
             summary.push_str(&format!(" Videos show an icon instead, because {videos}"));
+        }
+        if let Some(documents) = &status.documents {
+            summary.push_str(&format!(
+                " Office documents show an icon instead, because {documents}"
+            ));
         }
         (Level::Ok, summary)
     };
@@ -1069,6 +1075,17 @@ mod tests {
             check.summary,
             "Every file that can have a thumbnail has one. Videos show an icon instead, because \
              ffmpeg isn't installed. Install it with apt to show a frame from each video."
+        );
+
+        let check = thumbnails_check(&ThumbnailStatus {
+            documents: Some("LibreOffice isn't installed.".into()),
+            ..ThumbnailStatus::default()
+        });
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Every file that can have a thumbnail has one. Office documents show an icon \
+             instead, because LibreOffice isn't installed."
         );
     }
 

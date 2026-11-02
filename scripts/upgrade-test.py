@@ -3,7 +3,7 @@
 scripts/upgrade-test.sh.
 
 Usage: scripts/upgrade-test.py add <state file>
-       scripts/upgrade-test.py check <state file> [<version>]
+       scripts/upgrade-test.py check <state file> [<version> [documents]]
        scripts/upgrade-test.py update <state file> <version> <outcome> <installed version>
 
 The server is a throwaway install that serves plain HTTP on 127.0.0.1:8080,
@@ -11,7 +11,8 @@ because it has an owner but no name. add signs in as the owner, which
 upgrade-test.sh creates, then adds a person, files in Drive over WebDAV, and
 a backup to a folder. It saves what it added, with the test passwords, in the
 state file. check reads it all back, checks the thumbnails of a photo and a
-video on releases that make them, and runs a backup and a restore test.
+video on releases that make them, and of a Word document when it's told to
+with documents, and runs a backup and a restore test.
 update installs a release from the Updates page's API, waits for the update
 helper, and checks how the update ended: installed or rolled-back.
 
@@ -21,12 +22,14 @@ Only the standard library, so it runs on a fresh machine.
 import base64
 import hashlib
 import http.client
+import io
 import json
 import os
 import re
 import sys
 import time
 import urllib.parse
+import zipfile
 import zlib
 
 HOST = "127.0.0.1"
@@ -107,9 +110,46 @@ CLIP = base64.b64decode(
     "hJhCAcMi/Av+0ZGEkxF83unPwUmOH13fgBjCyONG3Az6XB5vaMKFpJ3ZQKA="
 )
 
+def docx():
+    """A one-paragraph Word document, for a file that gets a thumbnail
+    through LibreOffice."""
+    parts = {
+        "[Content_Types].xml": (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" ContentType="application/'
+            'vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+            "</Types>"
+        ),
+        "_rels/.rels": (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Target="word/document.xml" Type="http://schemas.'
+            'openxmlformats.org/officeDocument/2006/relationships/officeDocument"/>'
+            "</Relationships>"
+        ),
+        "word/document.xml": (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:body><w:p><w:r><w:t>Dear Sam, the garden needs watering.</w:t></w:r></w:p>"
+            "</w:body></w:document>"
+        ),
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, text in parts.items():
+            # A fixed date, so the file is the same every run.
+            archive.writestr(zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0)), text)
+    return buffer.getvalue()
+
+
 # A non-ASCII name, so the test covers names that need encoding.
 FILES = {
     "Documents/Café notes.txt": "Pick up the bread.\n".encode(),
+    "Documents/letter.docx": docx(),
     "Photos/beach.bin": os.urandom(3 * 1024 * 1024),
     "Photos/sunset.png": png(640, 480),
     "Videos/clip.mp4": CLIP,
@@ -283,7 +323,7 @@ def add(state_file):
     say(f"added a person, {len(FILES)} files in Drive, and a backup.")
 
 
-def check(state_file, version=None):
+def check(state_file, version=None, documents=False):
     with open(state_file) as file:
         state = json.load(file)
     wait_for_server()
@@ -298,7 +338,7 @@ def check(state_file, version=None):
 
     if os.path.isfile(WEB_APP):
         check_web_app(token)
-    check_thumbnails(token)
+    check_thumbnails(token, documents)
 
     usernames = {person["username"] for person in call("GET", "/api/people", token)["people"]}
     if usernames != {"alex", "sam"}:
@@ -364,18 +404,21 @@ def check_web_app(token):
         fail(f"Server health says this about the web app: {web}")
 
 
-def check_thumbnails(token):
+def check_thumbnails(token, documents):
     """On releases with thumbnails, the PNG and the video get one soon, and
     Drive sends them. Video thumbnails (decision 15) came in the same release
     as the others, and need ffmpeg, which the package recommends, so the
-    install command installs it."""
+    install command installs it. With documents, the Word document gets one
+    too, and its preview (decision 17), which needs LibreOffice."""
     checks = call("GET", "/api/health", token)["checks"]
     health = next((check for check in checks if check["id"] == "thumbnails"), None)
     if health is None:
         return
-    if health["state"] != "ok" or "Videos show an icon" in health["summary"]:
+    icons = ["Videos show an icon"] + (["Office documents show an icon"] if documents else [])
+    if health["state"] != "ok" or any(icon in health["summary"] for icon in icons):
         fail(f"Server health says this about thumbnails: {health['summary']}")
-    for name in ("sunset.png", "clip.mp4"):
+    names = ["sunset.png", "clip.mp4"] + (["letter.docx"] if documents else [])
+    for name in names:
         deadline = time.monotonic() + THUMBNAIL_TIMEOUT
         while True:
             found = call("GET", f"/api/drive/search?q={name}", token)
@@ -391,6 +434,18 @@ def check_thumbnails(token):
         )
         if status != 200 or headers.get("Content-Type") != "image/webp" or content[8:12] != b"WEBP":
             fail(f"{name}'s thumbnail answered {status} with {headers.get('Content-Type')}.")
+        if name.endswith(".docx"):
+            if found[0]["preview"] != "document":
+                fail(f"{name} has a thumbnail but no preview.")
+            status, headers, content = request(
+                "GET", f"/api/drive/items/{found[0]['id']}/preview", token=token
+            )
+            if (
+                status != 200
+                or headers.get("Content-Type") != "application/pdf"
+                or not content.startswith(b"%PDF-")
+            ):
+                fail(f"{name}'s preview answered {status} with {headers.get('Content-Type')}.")
 
 
 def update(state_file, version, outcome, installed):
@@ -446,6 +501,8 @@ def main():
             check(state_file)
         case ["check", state_file, version]:
             check(state_file, version)
+        case ["check", state_file, version, "documents"]:
+            check(state_file, version, documents=True)
         case ["update", state_file, version, outcome, installed]:
             update(state_file, version, outcome, installed)
         case _:

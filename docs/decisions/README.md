@@ -20,5 +20,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [14](0014-thumbnails-and-sandboxed-workers.md) | Thumbnails, and how workers are sandboxed | Accepted |
 | [15](0015-video-thumbnails.md) | Video thumbnails | Accepted |
 | [16](0016-sharing.md) | Sharing files and folders | Accepted |
+| [17](0017-office-previews.md) | Office previews | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
