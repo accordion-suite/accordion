@@ -837,3 +837,51 @@ async fn people_change_their_own_name() {
         .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
+
+#[tokio::test]
+async fn everyone_signed_in_can_find_people_to_share_with() {
+    let server = start().await;
+    let sam = server.add(&server.owner, "sam", "user").await;
+    // Waiting for a password, then turned off: neither is listed.
+    let (status, _) = server
+        .send(
+            "POST",
+            "/api/people",
+            Some(&server.owner),
+            Some(json!({ "username": "waiting", "display_name": "Waiting", "role": "user" })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+    server.add(&server.owner, "kim", "user").await;
+    let kim = server.id_of("kim").await;
+    let (status, _) = server
+        .send(
+            "POST",
+            &format!("/api/people/{kim}/turn-off"),
+            Some(&server.owner),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Away from home too, unlike People.
+    let (status, people) = send(&server.away, "GET", "/api/directory", Some(&sam), None).await;
+    assert_eq!(status, StatusCode::OK, "{people}");
+    let listed: Vec<_> = people
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|person| {
+            (
+                person["display_name"].as_str().unwrap(),
+                person["username"].as_str().unwrap(),
+                person["you"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(listed, [("Alex Kim", "alex", false), ("sam", "sam", true)]);
+    assert!(people[0].get("role").is_none());
+
+    let (status, _) = send(&server.away, "GET", "/api/directory", None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}

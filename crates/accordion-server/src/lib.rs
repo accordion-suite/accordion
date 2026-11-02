@@ -5,6 +5,7 @@ mod account;
 mod backups;
 pub mod connections;
 mod device;
+mod directory;
 pub mod health;
 mod home;
 pub mod modules;
@@ -104,6 +105,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .route("/api/session/confirm", post(session::confirm))
         .merge(home::routes())
         .merge(account::routes())
+        .merge(directory::routes())
         .merge(welcome::routes())
         .merge(web::routes(web_app_pages.into_iter()))
         .merge(
