@@ -493,10 +493,10 @@ def check_search(token):
         ("garden watering", "letter.docx"),
         ("lighthouse saturday", "tickets.pdf"),
     ]:
-        query = urllib.parse.quote(words)
         deadline = time.monotonic() + THUMBNAIL_TIMEOUT
         while True:
-            found = call("GET", f"/api/drive/search?words={query}", token)
+            # request() encodes the spaces.
+            found = call("GET", f"/api/drive/search?words={words}", token)
             if [item["name"] for item in found] == [name]:
                 break
             if time.monotonic() > deadline:
