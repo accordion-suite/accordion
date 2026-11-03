@@ -534,6 +534,7 @@ def check_remote_access(token):
     added = call("POST", "/api/remote-devices", token, {"name": "Upgrade test"}, expect=201)
     access = call("GET", "/api/remote-access", token)
     tunnel = access["network"].removesuffix(".0/24") + ".1"
+    os.makedirs(os.path.dirname(WIREGUARD_CONFIG), mode=0o700, exist_ok=True)
     with open(WIREGUARD_CONFIG, "w") as file:
         file.write(added["config"])
     os.chmod(WIREGUARD_CONFIG, 0o600)

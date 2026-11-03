@@ -225,6 +225,12 @@ run() {
         "$UPDATE_PORT" > /etc/systemd/system/accordion.service.d/upgrade-test.conf
     systemctl daemon-reload
 
+    # wg-quick brings up a test device's remote access setup, as a laptop
+    # would, on each release that has remote access.
+    apt-get update -q > /dev/null
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends wireguard-tools \
+        > /dev/null
+
     local first="$old"
     if [[ -n "$published" && "$old_ref" != "$published" ]]; then
         first="${published#v}"
@@ -256,13 +262,11 @@ run() {
 
     # The update helper installs only Accordion's own package, as dpkg
     # does, so an admin installs LibreOffice from the release notes.
-    # wg-quick brings up a test device's remote access setup, as a laptop
-    # would.
-    say "3. installing LibreOffice, which $new recommends, and WireGuard's tools, then updating to $new through the update helper."
+    say "3. installing LibreOffice, which $new recommends, then updating to $new through the update helper."
     apt-get update -q > /dev/null
     DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
         libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui fonts-liberation2 \
-        wireguard-tools > /dev/null
+        > /dev/null
     python3 -I "$repo/scripts/upgrade-test.py" update "$state" "$new" installed "$new"
     [[ "$(installed_version)" == "$new" ]] || die "dpkg says $(installed_version) is installed, not $new."
     python3 -I "$repo/scripts/upgrade-test.py" check "$state" "$new" documents
