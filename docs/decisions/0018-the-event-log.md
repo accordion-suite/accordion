@@ -186,7 +186,8 @@ Each module adds its own events and notifications when it's built, under the sam
 - **Notifications,** behind a bell in the top bar:
   - Someone shared something with you, or changed your access.
   - Someone added or changed files in something you shared, grouped by folder for each day, such as "Sam Rivera added 12 files to Holiday".
-  - Each person marks them read. Removing someone's access doesn't notify them.
+  - Opening the bell clears its count. Each notification stays highlighted until the person selects it, and they can remove one, or clear them all.
+  - Removing someone's access doesn't notify them.
 - **Your activity log,** in **Settings**, under **You**:
   - Your own sign-ins, with the device, browser, and its address on the home network or VPN, failed sign-ins, and changes to your password and app passwords.
   - What you shared with others, and what others shared with you.
