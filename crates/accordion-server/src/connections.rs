@@ -106,7 +106,7 @@ fn require_admin(user: &SignedIn) -> Result<(), ApiError> {
     ))
 }
 
-fn millis(time: SystemTime) -> u64 {
+pub(crate) fn millis(time: SystemTime) -> u64 {
     time.duration_since(UNIX_EPOCH).map_or(0, |since| {
         u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
     })
@@ -123,15 +123,17 @@ struct NetworkView {
     backups: Vec<BackupView>,
     /// The hour nightly backups start, from 0 to 23.
     backup_hour: u8,
+    /// Remote access's connections, while it's on.
+    remote: Option<crate::remote::RemoteNetwork>,
 }
 
 /// The last time a connection was made, and whether it worked.
 #[derive(Serialize)]
-struct LastView {
+pub(crate) struct LastView {
     /// Milliseconds since 1970, for the page to show in local time.
-    at: u64,
-    ok: bool,
-    problem: Option<String>,
+    pub at: u64,
+    pub ok: bool,
+    pub problem: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -296,6 +298,10 @@ async fn status(
         certificate,
         backups,
         backup_hour,
+        remote: state
+            .remote
+            .as_ref()
+            .and_then(crate::remote::RemoteAccess::network),
     }))
 }
 

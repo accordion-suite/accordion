@@ -25,6 +25,7 @@ use serde::Serialize;
 use tokio::sync::watch;
 
 use crate::AppState;
+use crate::remote::{RemoteAccess, RemoteHealth};
 use crate::updates::{CheckResult, UpdateStatus};
 use crate::web::WebApp;
 use accordion_core::texts::TextStatus;
@@ -59,6 +60,8 @@ pub struct Health {
     /// Set once the thumbnail worker is running.
     pub thumbnails: Option<watch::Receiver<ThumbnailStatus>>,
     pub search: Option<watch::Receiver<TextStatus>>,
+    /// Remote access, which reports once the server serves its name.
+    pub remote: Option<RemoteAccess>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -144,8 +147,107 @@ impl Health {
         if let Some(search) = &self.search {
             checks.push(search_check(&search.borrow()));
         }
+        if let Some(remote) = self.remote.as_ref().and_then(RemoteAccess::health) {
+            checks.push(remote_check(&remote, now));
+        }
         checks
     }
+}
+
+/// A device that connected this recently shows the port works, even if the
+/// router never said it forwards it.
+const RECENTLY_CONNECTED: Duration = Duration::from_secs(24 * 60 * 60);
+
+pub(crate) fn remote_check(health: &RemoteHealth, now: SystemTime) -> Check {
+    let check = |state, summary| Check {
+        id: "remote_access",
+        title: "Remote access",
+        state,
+        summary,
+    };
+    if !health.on {
+        return check(
+            Level::Ok,
+            "Remote access is off, so devices can reach the server only at home. An admin can \
+             turn it on in Settings, under Remote access."
+                .to_owned(),
+        );
+    }
+    if let Some(problem) = &health.home_problem {
+        return check(Level::Problem, problem.clone());
+    }
+    if let Some(problem) = &health.tunnel.problem {
+        return check(Level::Problem, problem.clone());
+    }
+    let port = health.port.unwrap_or_default();
+    let last = health.tunnel.connected.values().max().copied();
+    let connected = last.map(|at| now.duration_since(at).unwrap_or_default());
+    let mut state = Level::Ok;
+    let mut summary = String::from("Remote access is on.");
+    let router = &health.router;
+    match router.mapping {
+        _ if !health.named => summary.push_str(
+            " This server doesn't have a name, so it works only for testing, and Accordion \
+             doesn't ask the router to forward the port.",
+        ),
+        Some(_) if router.shared_address => {
+            state = Level::Warning;
+            summary.push_str(
+                " Your internet provider shares one public address among many homes, or the \
+                 router is behind another router, so devices away from home can't reach the \
+                 server through it.",
+            );
+            if health.record.ipv6.is_some() {
+                summary.push_str(" Devices on networks with IPv6 can still reach it.");
+            }
+            summary.push_str(
+                " Other ways in are asking your provider for your own public address, a \
+                 tailnet such as Tailscale, or a small server you rent as a relay.",
+            );
+        }
+        Some(mapping) => {
+            let _ = write!(
+                summary,
+                " The router forwards UDP port {} to the server, through {}.",
+                mapping.external_port, mapping.method
+            );
+        }
+        None if router.problem.is_some() => {
+            let home = health
+                .home
+                .map_or_else(|| "the server".to_owned(), |home| home.to_string());
+            if connected.is_some_and(|since| since < RECENTLY_CONNECTED) {
+                let _ = write!(
+                    summary,
+                    " The router didn't say it forwards UDP port {port}, but a device connected \
+                     from away, so the port works."
+                );
+            } else {
+                state = Level::Warning;
+                let _ = write!(
+                    summary,
+                    " The router didn't forward UDP port {port} by itself. In your router's \
+                     settings, forward UDP port {port} to {home}. The router's manual or its \
+                     maker's website shows where that setting is."
+                );
+            }
+        }
+        None => summary.push_str(" Accordion is asking the router to forward the port."),
+    }
+    if let Some(problem) = &health.record.problem {
+        state = state.max(Level::Warning);
+        let _ = write!(
+            summary,
+            " Accordion couldn't update the address record that devices find home at. {problem}"
+        );
+    }
+    match connected {
+        Some(since) => {
+            let _ = write!(summary, " A device last connected {} ago.", in_words(since));
+        }
+        None => summary.push_str(" No device has connected since the server started."),
+    }
+    check(state, summary)
 }
 
 fn certificate_check(health: &NameHealth, status: &CertificateStatus, now: SystemTime) -> Check {
@@ -822,6 +924,7 @@ mod tests {
             web: None,
             thumbnails: None,
             search: None,
+            remote: None,
         }
     }
 
@@ -1182,6 +1285,96 @@ mod tests {
         assert_eq!(
             check.summary,
             "Drive can search inside every file it can read."
+        );
+    }
+
+    #[test]
+    fn says_how_remote_access_is_doing() {
+        use accordion_gateway::endpoint::EndpointStatus;
+        use accordion_gateway::port_mapping::{Mapping, Method, PortStatus};
+        use accordion_gateway::tunnel::{Key, TunnelStatus};
+
+        let healthy = || RemoteHealth {
+            on: true,
+            named: true,
+            port: Some(51820),
+            home: Some("192.168.1.20".parse().unwrap()),
+            home_problem: None,
+            tunnel: TunnelStatus {
+                listening: Some(51820),
+                ..TunnelStatus::default()
+            },
+            router: PortStatus {
+                port: Some(51820),
+                mapping: Some(Mapping {
+                    method: Method::Pcp,
+                    external_address: Some("203.0.113.7".parse().unwrap()),
+                    external_port: 51820,
+                    lifetime: Duration::from_secs(3600),
+                }),
+                ..PortStatus::default()
+            },
+            record: EndpointStatus::default(),
+        };
+        let check = remote_check(&healthy(), now());
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Remote access is on. The router forwards UDP port 51820 to the server, through \
+             PCP. No device has connected since the server started."
+        );
+
+        // The router said no, and nobody has connected, so the admin
+        // forwards the port by hand.
+        let mut refused = healthy();
+        refused.router = PortStatus {
+            port: Some(51820),
+            problem: Some("The router said no.".into()),
+            ..PortStatus::default()
+        };
+        let check = remote_check(&refused, now());
+        assert_eq!(check.state, Level::Warning);
+        assert!(
+            check
+                .summary
+                .contains("forward UDP port 51820 to 192.168.1.20")
+        );
+
+        // A device that connected shows the port works anyway.
+        refused.tunnel.connected.insert(
+            Key::generate().public(),
+            now() - Duration::from_secs(5 * 60),
+        );
+        let check = remote_check(&refused, now());
+        assert_eq!(check.state, Level::Ok);
+        assert!(
+            check
+                .summary
+                .ends_with("A device last connected five minutes ago.")
+        );
+
+        let mut shared = healthy();
+        shared.router.shared_address = true;
+        let check = remote_check(&shared, now());
+        assert_eq!(check.state, Level::Warning);
+        assert!(
+            check
+                .summary
+                .contains("shares one public address among many homes")
+        );
+
+        let mut taken = healthy();
+        taken.tunnel.problem = Some("The port is taken.".into());
+        assert_eq!(remote_check(&taken, now()).state, Level::Problem);
+
+        let off = RemoteHealth {
+            on: false,
+            ..healthy()
+        };
+        assert!(
+            remote_check(&off, now())
+                .summary
+                .starts_with("Remote access is off")
         );
     }
 

@@ -14,6 +14,7 @@ pub mod modules;
 pub mod network;
 mod origin;
 mod people;
+pub mod remote;
 mod requests;
 mod session;
 pub mod setup;
@@ -62,6 +63,8 @@ pub struct AppState {
     pub events: Option<Events>,
     /// Live updates (decision 19), once the server is running.
     pub live: Option<Live>,
+    /// Remote access (decision 21), once the server is running.
+    pub remote: Option<remote::RemoteAccess>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -116,6 +119,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .merge(account::routes())
         .merge(log::account_routes())
         .merge(live::routes())
+        .merge(remote::routes())
         .merge(directory::routes())
         .merge(welcome::routes())
         .merge(web::routes(web_app_pages.into_iter()))
@@ -126,6 +130,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(people::routes())
                 .merge(updates::routes())
                 .merge(connections::routes())
+                .merge(remote::admin_routes())
                 .merge(log::admin_routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,

@@ -68,6 +68,7 @@ async fn start_with(
         web: None,
         thumbnails: None,
         search: None,
+        remote: None,
     };
     let app = router(
         AppState {
@@ -82,6 +83,7 @@ async fn start_with(
             switches: None,
             events: None,
             live: None,
+            remote: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),

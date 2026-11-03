@@ -24,5 +24,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [18](0018-the-event-log.md) | The event log | Accepted |
 | [19](0019-live-updates.md) | Live updates | Accepted |
 | [20](0020-search.md) | Search | Accepted |
+| [21](0021-remote-access.md) | Remote access | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.

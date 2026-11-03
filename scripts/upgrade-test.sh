@@ -182,6 +182,9 @@ cleanup() {
         journalctl -u accordion.service -u accordion-update.service -o short-iso -n 80 --no-pager >&2 || true
     fi
     [[ -z "${web_server:-}" ]] || kill "$web_server" 2> /dev/null || true
+    # The test device's tunnel, if a failed check left it up.
+    ip link delete acctest 2> /dev/null || true
+    rm -f /etc/wireguard/acctest.conf
     say "removing the test install."
     systemctl stop accordion-update.path accordion-update.service accordion.service 2> /dev/null || true
     DEBIAN_FRONTEND=noninteractive apt-get purge -y -q accordion > /dev/null 2>&1 || true
@@ -253,11 +256,13 @@ run() {
 
     # The update helper installs only Accordion's own package, as dpkg
     # does, so an admin installs LibreOffice from the release notes.
-    say "3. installing LibreOffice, which $new recommends, then updating to $new through the update helper."
+    # wg-quick brings up a test device's remote access setup, as a laptop
+    # would.
+    say "3. installing LibreOffice, which $new recommends, and WireGuard's tools, then updating to $new through the update helper."
     apt-get update -q > /dev/null
     DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
         libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui fonts-liberation2 \
-        > /dev/null
+        wireguard-tools > /dev/null
     python3 -I "$repo/scripts/upgrade-test.py" update "$state" "$new" installed "$new"
     [[ "$(installed_version)" == "$new" ]] || die "dpkg says $(installed_version) is installed, not $new."
     python3 -I "$repo/scripts/upgrade-test.py" check "$state" "$new" documents

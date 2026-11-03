@@ -16,7 +16,7 @@ use accordion_core::texts::{self, Texts};
 use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
-use accordion_gateway::dns::ProviderKind;
+use accordion_gateway::dns::{Provider, ProviderKind};
 use accordion_gateway::local_name::{LOCAL_NAME, LocalName, LocalNameStatus};
 use accordion_gateway::redirect::redirect_to_https;
 use accordion_gateway::tls::{self, CertStore};
@@ -25,6 +25,7 @@ use accordion_module::{Services, Stopping};
 use accordion_server::connections::Switches;
 use accordion_server::health::{Health, NameHealth};
 use accordion_server::network::AdminAccess;
+use accordion_server::remote::{RemoteAccess, Site as RemoteSite};
 use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
 use accordion_server::updates::{UpdateSource, Updates};
 use accordion_server::web::WebApp;
@@ -187,6 +188,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     )
     .await?;
     let switches = Switches::open(db.clone()).await?;
+    let remote = RemoteAccess::open(db.clone(), identity.clone()).await?;
     // Workers run in a sandbox that this program sets up (decision 14).
     let thumbnails = Thumbnails::open(
         db.clone(),
@@ -235,6 +237,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         web: web.clone(),
         thumbnails: Some(thumbnails.status()),
         search: Some(texts.status()),
+        remote: Some(remote.clone()),
         ..Health::default()
     };
     let mut background = JoinSet::new();
@@ -278,8 +281,9 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 web: web.clone(),
                 events: Some(events),
                 live: Some(live),
+                remote: Some(remote),
             },
-            until_stopped(),
+            until_stopped,
         )
         .await?;
         finish(background).await?;
@@ -289,6 +293,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
 
     let https = listen("ACCORDION_HTTPS_LISTEN", 443).await?;
     let http = listen("ACCORDION_HTTP_LISTEN", 80).await?;
+    let http_port = http.local_addr()?.port();
     notify_ready();
     let https_port = https.local_addr()?.port();
     let address = address_source()?;
@@ -319,6 +324,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         web: web.clone(),
         events: Some(events),
         live: Some(live),
+        remote: Some(remote),
     };
 
     let local_name = if local_name_on {
@@ -384,7 +390,15 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         (None, None) => unreachable!("a server without a name or owner runs the wizard"),
     };
 
-    serve_https(state, &gateway_dir, settings, address, https, until_stopped).await?;
+    serve_https(
+        state,
+        &gateway_dir,
+        settings,
+        address,
+        (https, http_port),
+        until_stopped,
+    )
+    .await?;
     port_80.await??;
     if let Some(local_name) = local_name {
         local_name.await?;
@@ -491,10 +505,12 @@ fn or_list(items: &[String]) -> String {
 }
 
 /// Serves plain HTTP, for development when there's an owner but no name.
-async fn serve_http(
-    state: AppState,
-    stopped: impl Future<Output = ()> + Send + 'static,
-) -> Result<(), Box<dyn Error>> {
+/// Remote access's tunnel serves the same routes, for testing it.
+async fn serve_http<F, S>(state: AppState, until_stopped: F) -> Result<(), Box<dyn Error>>
+where
+    F: Fn() -> S,
+    S: Future<Output = ()> + Send + 'static,
+{
     let listen = std::env::var("ACCORDION_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let listener = bind(&listen, "ACCORDION_LISTEN").await?;
     notify_ready();
@@ -503,21 +519,53 @@ async fn serve_http(
         listener.local_addr()?
     );
 
-    let app = router(state, &Site::Unnamed).into_make_service_with_connect_info::<Peer>();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(stopped)
-        .await?;
+    let port = listener.local_addr()?.port();
+    let (tunnel, remote_work) = match &state.remote {
+        Some(remote) => {
+            let (connections, work) = remote.start(
+                RemoteSite::Unnamed,
+                address_source()?,
+                &[port],
+                &until_stopped,
+            );
+            (connections.into_iter().next(), Some(work))
+        }
+        None => (None, None),
+    };
+    let app = router(state, &Site::Unnamed);
+    let tunnel_server = async {
+        if let Some(tunnel) = tunnel {
+            tls::serve_tunnel(tunnel, None, app.clone(), until_stopped()).await;
+        }
+    };
+    let remote_work = async {
+        if let Some(work) = remote_work {
+            work.await;
+        }
+    };
+    let (served, (), ()) = tokio::join!(
+        axum::serve(
+            listener,
+            app.clone().into_make_service_with_connect_info::<Peer>()
+        )
+        .with_graceful_shutdown(until_stopped())
+        .into_future(),
+        tunnel_server,
+        remote_work,
+    );
+    served?;
     Ok(())
 }
 
 /// Serves HTTPS for the server's name, and keeps the certificate and the
-/// name's address record current.
+/// name's address record current. Remote access's tunnel serves the same
+/// routes, and the redirect to HTTPS on `http_port`.
 async fn serve_https<F, S>(
     mut state: AppState,
     gateway_dir: &Path,
     settings: Settings,
     address: Option<AddressSource>,
-    https: TcpListener,
+    (https, http_port): (TcpListener, u16),
     until_stopped: F,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -556,15 +604,55 @@ where
             publisher.run(until_stopped()).await;
         }
     };
+    let remote = state.remote.clone();
+    let (tunnel, remote_work) = match &remote {
+        Some(remote) => {
+            let dns = Provider::new(settings.provider, settings.token.clone())
+                .map_err(|err| format!("Accordion couldn't set up the DNS provider: {err}"))?;
+            let (connections, work) = remote.start(
+                RemoteSite::Named {
+                    name: settings.name.clone(),
+                    dns: Box::new(dns),
+                },
+                address,
+                &[https_port, http_port],
+                &until_stopped,
+            );
+            (Some(connections), Some(work))
+        }
+        None => (None, None),
+    };
+    let tls_config = tls::server_config(certs);
+    let app = router(state, &site);
+    let tunnel_servers = async {
+        if let Some([https, http]) = tunnel.and_then(|tunnel| <[_; 2]>::try_from(tunnel).ok()) {
+            tokio::join!(
+                tls::serve_tunnel(
+                    https,
+                    Some(tls_config.clone()),
+                    app.clone(),
+                    until_stopped()
+                ),
+                tls::serve_tunnel(
+                    http,
+                    None,
+                    redirect_to_https(settings.name.clone(), https_port),
+                    until_stopped(),
+                ),
+            );
+        }
+    };
+    let remote_work = async {
+        if let Some(work) = remote_work {
+            work.await;
+        }
+    };
     tokio::join!(
-        tls::serve(
-            https,
-            tls::server_config(certs),
-            router(state, &site),
-            until_stopped(),
-        ),
+        tls::serve(https, tls_config.clone(), app.clone(), until_stopped()),
         renewer.run(until_stopped()),
         publish,
+        tunnel_servers,
+        remote_work,
     );
     Ok(())
 }

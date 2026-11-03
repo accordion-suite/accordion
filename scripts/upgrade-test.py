@@ -13,7 +13,9 @@ a backup to a folder. It saves what it added, with the test passwords, in the
 state file. check reads it all back, checks the thumbnails of a photo and a
 video on releases that make them, and of a Word document when it's told to
 with documents, checks that files are found by the words inside them on
-releases with search, and runs a backup and a restore test.
+releases with search, connects through remote access's tunnel with the
+kernel's WireGuard on releases with remote access, and runs a backup and a
+restore test.
 update installs a release from the Updates page's API, waits for the update
 helper, and checks how the update ended: installed or rolled-back.
 
@@ -27,6 +29,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -44,6 +47,10 @@ WEB_APP = "/usr/lib/accordion/web/index.html"
 # The web app's list of its files, with their hashes. Older releases don't
 # have it.
 WEB_FILES = "/usr/lib/accordion/web/files.json"
+# Remote access's UDP port, and the test device's WireGuard setup, whose
+# file name names the tunnel's network interface.
+REMOTE_PORT = 51820
+WIREGUARD_CONFIG = "/etc/wireguard/acctest.conf"
 
 
 def png(width, height):
@@ -370,6 +377,7 @@ def check(state_file, version=None, documents=False):
         check_web_app(token)
     check_thumbnails(token, documents)
     check_search(token)
+    check_remote_access(token)
 
     usernames = {person["username"] for person in call("GET", "/api/people", token)["people"]}
     if usernames != {"alex", "sam"}:
@@ -507,6 +515,56 @@ def check_search(token):
             piece["matched"] for piece in found[0]["snippet"] or []
         ):
             fail(f"{name} was found, but without the words it matched: {found[0]}")
+
+
+def check_remote_access(token):
+    """On releases with remote access, turns it on, adds a device, and
+    brings the device's setup up with the kernel's WireGuard, as wg-quick
+    does on a laptop. A request through the tunnel reaches the server, which
+    counts it as the home network, so an admin page answers. Then it removes
+    the device and turns remote access off again.
+
+    The server's home address is this machine's own, which the kernel never
+    sends through a tunnel, so the request goes to the server's tunnel
+    address instead."""
+    status, _, _ = request("GET", "/api/remote-access", token)
+    if status == 404:
+        return
+    call("PUT", "/api/remote-access", token, {"on": True, "port": REMOTE_PORT}, expect=204)
+    added = call("POST", "/api/remote-devices", token, {"name": "Upgrade test"}, expect=201)
+    access = call("GET", "/api/remote-access", token)
+    tunnel = access["network"].removesuffix(".0/24") + ".1"
+    with open(WIREGUARD_CONFIG, "w") as file:
+        file.write(added["config"])
+    os.chmod(WIREGUARD_CONFIG, 0o600)
+    subprocess.run(["wg-quick", "up", WIREGUARD_CONFIG], check=True, capture_output=True)
+    try:
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                connection = http.client.HTTPConnection(tunnel, PORT, timeout=5)
+                connection.request(
+                    "GET", "/api/remote-access", headers={"Authorization": f"Bearer {token}"}
+                )
+                response = connection.getresponse()
+                body = response.read()
+                connection.close()
+                break
+            except OSError as err:
+                if time.monotonic() > deadline:
+                    fail(f"nothing answered through the tunnel at {tunnel}:{PORT}: {err}")
+                time.sleep(1)
+        if response.status != 200:
+            fail(f"through the tunnel, the admin page answered {response.status}: {body!r}")
+        devices = json.loads(body)["devices"]
+        if [device["name"] for device in devices] != ["Upgrade test"]:
+            fail(f"through the tunnel, the devices are {devices}.")
+    finally:
+        subprocess.run(["wg-quick", "down", WIREGUARD_CONFIG], capture_output=True)
+        os.remove(WIREGUARD_CONFIG)
+    call("DELETE", f"/api/remote-devices/{added['device']['id']}", token, expect=204)
+    call("PUT", "/api/remote-access", token, {"on": False, "port": REMOTE_PORT}, expect=204)
+    say(f"a device reached the server through remote access's tunnel at {tunnel}.")
 
 
 def update(state_file, version, outcome, installed):

@@ -101,6 +101,7 @@ async fn start() -> Server {
             switches: None,
             events: Some(events),
             live: Some(live),
+            remote: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
