@@ -4,6 +4,7 @@
 use accordion_core::db::Database;
 use accordion_core::events::Events;
 use accordion_core::identity::{Identity, NewUser};
+use accordion_core::live::Live;
 use accordion_core::storage::Storage;
 use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::Peer;
@@ -48,7 +49,12 @@ async fn start() -> Server {
         .await
         .unwrap();
     let events = Events::open(db.clone()).await.unwrap();
+    let live = Live::new(db.clone(), &identity);
     let (stop, stopping) = watch::channel(false);
+    let mut live_stopping = stop.subscribe();
+    tokio::spawn(live.clone().run(async move {
+        let _ = live_stopping.wait_for(|&stopped| stopped).await;
+    }));
     let modules = modules::start(
         modules::all(),
         &Services {
@@ -56,6 +62,7 @@ async fn start() -> Server {
             identity: identity.clone(),
             storage: storage.clone(),
             events: events.clone(),
+            live: live.clone(),
             thumbnails: Thumbnails::open(
                 db,
                 storage,
@@ -82,6 +89,7 @@ async fn start() -> Server {
             updates: None,
             switches: None,
             events: Some(events),
+            live: Some(live),
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
@@ -343,4 +351,85 @@ async fn the_activity_log_shows_sign_ins_and_app_passwords() {
         )
         .await;
     assert_eq!(signed_out.status(), StatusCode::NO_CONTENT);
+}
+
+/// Reads the live stream until `wanted` turns up, and returns everything
+/// read so far.
+async fn read_until(body: &mut Body, wanted: &str) -> String {
+    let mut read = String::new();
+    while !read.contains(wanted) {
+        let frame = tokio::time::timeout(std::time::Duration::from_secs(5), body.frame())
+            .await
+            .unwrap_or_else(|_| panic!("no {wanted:?} in {read:?}"));
+        let Some(frame) = frame else {
+            panic!("the stream ended before {wanted:?}: {read:?}");
+        };
+        if let Ok(data) = frame.unwrap().into_data() {
+            read.push_str(std::str::from_utf8(&data).unwrap());
+        }
+    }
+    read
+}
+
+#[tokio::test]
+async fn live_updates_need_signing_in_and_end_with_the_session() {
+    let server = start().await;
+    let anonymous = server
+        .send(browser("GET", "/api/live"), Body::empty())
+        .await;
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+    let cookie = server.sign_in().await;
+    let response = server
+        .send(
+            browser("GET", "/api/live").header(header::COOKIE, &cookie),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "text/event-stream"
+    );
+    assert_eq!(response.headers()["x-accel-buffering"], "no");
+    let mut body = response.into_body();
+    read_until(&mut body, "retry:").await;
+
+    // A new folder in Alex's top folder is a hint naming it.
+    let top = json(
+        server
+            .send(
+                browser("GET", "/api/drive/top").header(header::COOKIE, &cookie),
+                Body::empty(),
+            )
+            .await,
+    )
+    .await;
+    let top = top["id"].as_str().unwrap().to_owned();
+    let created = server
+        .send(
+            browser("POST", &format!("/api/drive/items/{top}/children"))
+                .header(header::COOKIE, &cookie),
+            json_body(json!({ "name": "Recipes" })),
+        )
+        .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let read = read_until(&mut body, &top).await;
+    assert!(read.contains("event: drive.items"), "{read}");
+
+    // Signing out ends the stream.
+    let signed_out = server
+        .send(
+            browser("DELETE", "/api/session").header(header::COOKIE, &cookie),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(signed_out.status(), StatusCode::NO_CONTENT);
+    let ended = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while let Some(frame) = body.frame().await {
+            frame.unwrap();
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "the stream is still open");
 }

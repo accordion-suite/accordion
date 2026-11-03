@@ -8,6 +8,7 @@ mod device;
 mod directory;
 pub mod health;
 mod home;
+mod live;
 mod log;
 pub mod modules;
 pub mod network;
@@ -25,6 +26,7 @@ use std::sync::Arc;
 use accordion_core::backup::Backup;
 use accordion_core::events::Events;
 use accordion_core::identity::Identity;
+use accordion_core::live::Live;
 use accordion_core::storage::Storage;
 use accordion_gateway::host::reject_unknown_hosts;
 use accordion_gateway::{AllowedHosts, ServerName};
@@ -58,6 +60,8 @@ pub struct AppState {
     /// The event log, for the activity logs in Settings, once the server is
     /// running.
     pub events: Option<Events>,
+    /// Live updates (decision 19), once the server is running.
+    pub live: Option<Live>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -111,6 +115,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .merge(home::routes())
         .merge(account::routes())
         .merge(log::account_routes())
+        .merge(live::routes())
         .merge(directory::routes())
         .merge(welcome::routes())
         .merge(web::routes(web_app_pages.into_iter()))

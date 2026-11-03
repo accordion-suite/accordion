@@ -10,6 +10,7 @@ use accordion_core::backup::{self, Backup};
 use accordion_core::db::Database;
 use accordion_core::events::{Action, Actor, Events, NewEvent};
 use accordion_core::identity::{AppPasswords, Identity, NewUser};
+use accordion_core::live::Live;
 use accordion_core::storage::Storage;
 use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::address::{AddressPublisher, AddressSource};
@@ -162,6 +163,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     let identity = Identity::new(db.clone()).await?;
     let storage = Storage::open(db.clone(), identity.clone(), &data_dir.join("storage")).await?;
     let events = Events::open(db.clone()).await?;
+    let live = Live::new(db.clone(), &identity);
     if restored {
         events
             .record(Actor::SERVER, NewEvent::new(Action::BackupRestored))
@@ -223,6 +225,9 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     background.spawn(updates.clone().run(Some(backup.status()), until_stopped()));
     background.spawn(thumbnails.clone().run(until_stopped()));
     background.spawn(events.clone().maintain(until_stopped()));
+    // Ends every stream when the server stops, so clients reconnect to the
+    // next one as soon as it's up, and serving can stop without waiting.
+    background.spawn(live.clone().run(until_stopped()));
     let modules = modules::start(
         modules::all(),
         &Services {
@@ -231,6 +236,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             storage: storage.clone(),
             thumbnails,
             events: events.clone(),
+            live: live.clone(),
         },
         &Stopping::new(stopped.clone()),
         &mut background,
@@ -251,6 +257,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 switches: Some(switches),
                 web: web.clone(),
                 events: Some(events),
+                live: Some(live),
             },
             until_stopped(),
         )
@@ -291,6 +298,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         switches: Some(switches),
         web: web.clone(),
         events: Some(events),
+        live: Some(live),
     };
 
     let local_name = if local_name_on {

@@ -88,6 +88,7 @@ async fn start(client: &str) -> Server {
             updates: None,
             switches: None,
             events: None,
+            live: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),

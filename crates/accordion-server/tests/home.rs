@@ -43,6 +43,7 @@ async fn start(with_owner: bool) -> (tempfile::TempDir, Router) {
             updates: None,
             switches: None,
             events: None,
+            live: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),

@@ -22,5 +22,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [16](0016-sharing.md) | Sharing files and folders | Accepted |
 | [17](0017-office-previews.md) | Office previews | Accepted |
 | [18](0018-the-event-log.md) | The event log | Accepted |
+| [19](0019-live-updates.md) | Live updates | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.

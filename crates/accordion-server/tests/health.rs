@@ -80,6 +80,7 @@ async fn start_with(
             updates: None,
             switches: None,
             events: None,
+            live: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),

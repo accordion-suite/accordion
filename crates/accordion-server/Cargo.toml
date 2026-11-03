@@ -21,6 +21,7 @@ accordion-types = { git = "https://github.com/accordion-suite/accordion-core", v
 accordion-update = { path = "../accordion-update" }
 axum = "0.8.9"
 base64ct = { version = "1.8.3", features = ["alloc"] }
+futures-util = { version = "0.3.34", default-features = false }
 getrandom = "0.4.3"
 http-body-util = "0.1.5"
 # For checking for updates. The same versions and features as the gateway's

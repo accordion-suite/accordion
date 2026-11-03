@@ -7,6 +7,7 @@ use std::time::SystemTime;
 use accordion_core::db::Database;
 use accordion_core::events::Events;
 use accordion_core::identity::{Identity, NewUser};
+use accordion_core::live::Live;
 use accordion_core::storage::Storage;
 use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::Peer;
@@ -69,6 +70,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             identity: identity.clone(),
             storage: storage.clone(),
             events: events.clone(),
+            live: Live::new(db.clone(), &identity),
             thumbnails: Thumbnails::open(
                 db,
                 storage,
@@ -108,6 +110,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             updates: None,
             switches: None,
             events: None,
+            live: None,
             web: web.then(|| WebApp::new(build)),
         },
         &Site::named(HOST.parse().unwrap(), 443),
