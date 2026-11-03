@@ -29,7 +29,7 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#6b8c7f6141d7a823de931c0733854092f8c26929"
+source = "git+https://github.com/accordion-suite/accordion-drive#760ffb1dade7de51c6605321843467afb272e08b"
 dependencies = [
  "accordion-core",
  "accordion-module",
