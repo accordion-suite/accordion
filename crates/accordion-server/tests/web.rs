@@ -9,6 +9,7 @@ use accordion_core::events::Events;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::live::Live;
 use accordion_core::storage::Storage;
+use accordion_core::texts::{self, Texts};
 use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::Peer;
 use accordion_module::{Services, Stopping};
@@ -63,6 +64,14 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
         .unwrap();
     let events = Events::open(db.clone()).await.unwrap();
     let (stop, stopping) = watch::channel(false);
+    let thumbnails = Thumbnails::open(
+        db.clone(),
+        storage.clone(),
+        dir.path(),
+        Tools::installed(env!("CARGO_BIN_EXE_accordion")),
+    )
+    .await
+    .unwrap();
     let modules = modules::start(
         modules::all(),
         &Services {
@@ -71,11 +80,13 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             storage: storage.clone(),
             events: events.clone(),
             live: Live::new(db.clone(), &identity),
-            thumbnails: Thumbnails::open(
+            thumbnails: thumbnails.clone(),
+            texts: Texts::open(
                 db,
                 storage,
+                thumbnails,
                 dir.path(),
-                Tools::installed(env!("CARGO_BIN_EXE_accordion")),
+                texts::Tools::installed(env!("CARGO_BIN_EXE_accordion")),
             )
             .await
             .unwrap(),

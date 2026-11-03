@@ -12,7 +12,8 @@ upgrade-test.sh creates, then adds a person, files in Drive over WebDAV, and
 a backup to a folder. It saves what it added, with the test passwords, in the
 state file. check reads it all back, checks the thumbnails of a photo and a
 video on releases that make them, and of a Word document when it's told to
-with documents, and runs a backup and a restore test.
+with documents, checks that files are found by the words inside them on
+releases with search, and runs a backup and a restore test.
 update installs a release from the Updates page's API, waits for the update
 helper, and checks how the update ended: installed or rolled-back.
 
@@ -146,16 +147,45 @@ def docx():
     return buffer.getvalue()
 
 
+def pdf():
+    """A one-page PDF with a line of text, written by hand, for a file
+    that's found by its words."""
+    text = b"BT /F1 24 Tf 72 700 Td (Lighthouse tickets for Saturday) Tj ET"
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        b"/Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(text), text),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n%s\nendobj\n" % (number, body)
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    for offset in offsets:
+        out += b"%010d 00000 n \n" % offset
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (
+        len(objects) + 1,
+        xref,
+    )
+    return out
+
+
 # A non-ASCII name, so the test covers names that need encoding.
 FILES = {
     "Documents/Café notes.txt": "Pick up the bread.\n".encode(),
     "Documents/letter.docx": docx(),
+    "Documents/tickets.pdf": pdf(),
     "Photos/beach.bin": os.urandom(3 * 1024 * 1024),
     "Photos/sunset.png": png(640, 480),
     "Videos/clip.mp4": CLIP,
 }
 # Releases with thumbnails (decision 14) make them within this many
-# seconds.
+# seconds, and releases with search (decision 20) read files' text.
 THUMBNAIL_TIMEOUT = 120
 # The update helper waits up to 10 minutes for a new version to start, then
 # five more to see that it stays up.
@@ -339,6 +369,7 @@ def check(state_file, version=None, documents=False):
     if os.path.isfile(WEB_APP):
         check_web_app(token)
     check_thumbnails(token, documents)
+    check_search(token)
 
     usernames = {person["username"] for person in call("GET", "/api/people", token)["people"]}
     if usernames != {"alex", "sam"}:
@@ -446,6 +477,36 @@ def check_thumbnails(token, documents):
                 or not content.startswith(b"%PDF-")
             ):
                 fail(f"{name}'s preview answered {status} with {headers.get('Content-Type')}.")
+
+
+def check_search(token):
+    """On releases with search, the words inside a text file, a Word
+    document, and a PDF find them soon. None of them needs LibreOffice."""
+    checks = call("GET", "/api/health", token)["checks"]
+    health = next((check for check in checks if check["id"] == "search"), None)
+    if health is None:
+        return
+    if health["state"] != "ok":
+        fail(f"Server health says this about search: {health['summary']}")
+    for words, name in [
+        ("bread", "Café notes.txt"),
+        ("garden watering", "letter.docx"),
+        ("lighthouse saturday", "tickets.pdf"),
+    ]:
+        query = urllib.parse.quote(words)
+        deadline = time.monotonic() + THUMBNAIL_TIMEOUT
+        while True:
+            found = call("GET", f"/api/drive/search?words={query}", token)
+            if [item["name"] for item in found] == [name]:
+                break
+            if time.monotonic() > deadline:
+                names = [item["name"] for item in found]
+                fail(f"searching inside files for {words!r} found {names}, not {name}.")
+            time.sleep(2)
+        if found[0]["matched"] != "text" or not any(
+            piece["matched"] for piece in found[0]["snippet"] or []
+        ):
+            fail(f"{name} was found, but without the words it matched: {found[0]}")
 
 
 def update(state_file, version, outcome, installed):

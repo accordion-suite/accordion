@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2cb67cb3e63ec28eaeb38eca590c586733a75bec"
+source = "git+https://github.com/accordion-suite/accordion-core#b2959f7d53cd3748de00e064aeb5ecea06267003"
 dependencies = [
  "accordion-sandbox",
  "accordion-types",
@@ -14,6 +14,7 @@ dependencies = [
  "getrandom 0.4.3",
  "jiff",
  "libc",
+ "quick-xml",
  "rusqlite",
  "rustls",
  "serde_json",
@@ -23,13 +24,15 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tracing",
+ "unicode-normalization",
  "uuid",
+ "zip",
 ]
 
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#760ffb1dade7de51c6605321843467afb272e08b"
+source = "git+https://github.com/accordion-suite/accordion-drive#fd79b4be14658cd2d36386d39cfd6ae723e9bb21"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -75,7 +78,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2cb67cb3e63ec28eaeb38eca590c586733a75bec"
+source = "git+https://github.com/accordion-suite/accordion-core#b2959f7d53cd3748de00e064aeb5ecea06267003"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -89,7 +92,7 @@ dependencies = [
 [[package]]
 name = "accordion-sandbox"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2cb67cb3e63ec28eaeb38eca590c586733a75bec"
+source = "git+https://github.com/accordion-suite/accordion-core#b2959f7d53cd3748de00e064aeb5ecea06267003"
 dependencies = [
  "landlock",
  "libc",
@@ -133,7 +136,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2cb67cb3e63ec28eaeb38eca590c586733a75bec"
+source = "git+https://github.com/accordion-suite/accordion-core#b2959f7d53cd3748de00e064aeb5ecea06267003"
 dependencies = [
  "serde",
  "uuid",
@@ -748,6 +751,15 @@ name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
+
+[[package]]
+name = "flate2"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
+dependencies = [
+ "zlib-rs",
+]
 
 [[package]]
 name = "flume"
@@ -1800,6 +1812,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2627,6 +2648,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
+name = "unicode-normalization"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3074,6 +3104,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "848dad21639597378c3be94c59fd4de683f0f6d8a5387575896e1245737d4f37"
 dependencies = [
  "crc32fast",
+ "flate2",
  "getrandom 0.4.3",
  "indexmap",
  "memchr",
@@ -3081,6 +3112,12 @@ dependencies = [
  "typed-path",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
 name = "zmij"

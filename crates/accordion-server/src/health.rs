@@ -27,6 +27,7 @@ use tokio::sync::watch;
 use crate::AppState;
 use crate::updates::{CheckResult, UpdateStatus};
 use crate::web::WebApp;
+use accordion_core::texts::TextStatus;
 use accordion_core::thumbnails::ThumbnailStatus;
 use accordion_module::ApiError;
 use accordion_module::Authenticated;
@@ -57,6 +58,7 @@ pub struct Health {
     pub web: Option<WebApp>,
     /// Set once the thumbnail worker is running.
     pub thumbnails: Option<watch::Receiver<ThumbnailStatus>>,
+    pub search: Option<watch::Receiver<TextStatus>>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -138,6 +140,9 @@ impl Health {
         }
         if let Some(thumbnails) = &self.thumbnails {
             checks.push(thumbnails_check(&thumbnails.borrow()));
+        }
+        if let Some(search) = &self.search {
+            checks.push(search_check(&search.borrow()));
         }
         checks
     }
@@ -325,6 +330,61 @@ fn web_check(web: &WebApp) -> Check {
     Check {
         id: "web_app",
         title: "Web app",
+        state,
+        summary,
+    }
+}
+
+fn search_check(status: &TextStatus) -> Check {
+    let (state, summary) = if let Some(reason) = &status.unavailable {
+        (
+            Level::Warning,
+            format!(
+                "Drive searches names and plain text files, but not inside other files, because \
+                 {reason}"
+            ),
+        )
+    } else if let Some(error) = &status.last_error {
+        (
+            Level::Warning,
+            format!(
+                "Accordion ran into a problem reading files for search ({error}). It'll try again."
+            ),
+        )
+    } else {
+        let mut summary = if status.waiting > 0 {
+            let verb = if status.waiting == 1 { "is" } else { "are" };
+            format!(
+                "Accordion is reading files for search, and {} {verb} waiting. Until then, \
+                 they're found by name.",
+                count(status.waiting, "file")
+            )
+        } else {
+            "Drive can search inside every file it can read.".to_owned()
+        };
+        if status.failed > 0 {
+            summary.push_str(&format!(
+                " Accordion couldn't read {}, so {} found by name only. The server's log says why.",
+                count(status.failed, "file"),
+                if status.failed == 1 {
+                    "it's"
+                } else {
+                    "they're"
+                }
+            ));
+        }
+        // Not a warning: LibreOffice is optional.
+        if let Some(documents) = &status.documents {
+            summary.push_str(&format!(
+                " Older Office files, such as .doc files, are found by name only, because \
+                 {documents}"
+            ));
+        }
+        (Level::Ok, summary)
+    };
+    Check {
+        id: "search",
+        title: "Search",
         state,
         summary,
     }
@@ -761,6 +821,7 @@ mod tests {
             updates: None,
             web: None,
             thumbnails: None,
+            search: None,
         }
     }
 
@@ -1086,6 +1147,41 @@ mod tests {
             check.summary,
             "Every file that can have a thumbnail has one. Office documents show an icon \
              instead, because LibreOffice isn't installed."
+        );
+    }
+
+    #[test]
+    fn says_how_search_is_doing() {
+        let check = search_check(&TextStatus {
+            unavailable: Some("pdftotext isn't installed. Install poppler-utils with apt.".into()),
+            ..TextStatus::default()
+        });
+        assert_eq!(check.state, Level::Warning);
+        assert_eq!(
+            check.summary,
+            "Drive searches names and plain text files, but not inside other files, because \
+             pdftotext isn't installed. Install poppler-utils with apt."
+        );
+
+        let check = search_check(&TextStatus {
+            waiting: 1,
+            failed: 2,
+            documents: Some("LibreOffice isn't installed.".into()),
+            ..TextStatus::default()
+        });
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Accordion is reading files for search, and one file is waiting. Until then, they're \
+             found by name. Accordion couldn't read two files, so they're found by name only. The \
+             server's log says why. Older Office files, such as .doc files, are found by name \
+             only, because LibreOffice isn't installed."
+        );
+
+        let check = search_check(&TextStatus::default());
+        assert_eq!(
+            check.summary,
+            "Drive can search inside every file it can read."
         );
     }
 

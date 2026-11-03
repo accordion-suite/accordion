@@ -12,6 +12,7 @@ use accordion_core::events::{Action, Actor, Events, NewEvent};
 use accordion_core::identity::{AppPasswords, Identity, NewUser};
 use accordion_core::live::Live;
 use accordion_core::storage::Storage;
+use accordion_core::texts::{self, Texts};
 use accordion_core::thumbnails::{Thumbnails, Tools};
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
@@ -90,9 +91,17 @@ fn main() -> ExitCode {
     // it shuts itself in and runs the worker. Accordion runs it itself, so
     // the usage doesn't list it.
     let mut args = std::env::args_os().skip(1);
-    if args.next().is_some_and(|command| command == "sandbox") {
-        let code = accordion_sandbox::launch(args);
-        return ExitCode::from(u8::try_from(code).unwrap_or(1));
+    match args.next() {
+        Some(command) if command == "sandbox" => {
+            let code = accordion_sandbox::launch(args);
+            return ExitCode::from(u8::try_from(code).unwrap_or(1));
+        }
+        // Reads an Office file's text, inside the sandbox (decision 20).
+        Some(command) if command == texts::office::COMMAND => {
+            let code = texts::office::main(args, texts::MAX_TEXT);
+            return ExitCode::from(u8::try_from(code).unwrap_or(1));
+        }
+        _ => {}
     }
     run()
 }
@@ -186,6 +195,14 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         Tools::installed(std::env::current_exe()?),
     )
     .await?;
+    let texts = Texts::open(
+        db.clone(),
+        storage.clone(),
+        thumbnails.clone(),
+        &data_dir,
+        texts::Tools::installed(std::env::current_exe()?),
+    )
+    .await?;
     let web = WebApp::from_env()?;
     match &web {
         Some(web) => tracing::info!("serving the web app from {}", web.dir().display()),
@@ -217,6 +234,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         updates: Some(updates.status()),
         web: web.clone(),
         thumbnails: Some(thumbnails.status()),
+        search: Some(texts.status()),
         ..Health::default()
     };
     let mut background = JoinSet::new();
@@ -224,6 +242,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     background.spawn(backup.clone().maintain(until_stopped()));
     background.spawn(updates.clone().run(Some(backup.status()), until_stopped()));
     background.spawn(thumbnails.clone().run(until_stopped()));
+    background.spawn(texts.clone().run(until_stopped()));
     background.spawn(events.clone().maintain(until_stopped()));
     // Ends every stream when the server stops, so clients reconnect to the
     // next one as soon as it's up, and serving can stop without waiting.
@@ -235,6 +254,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             identity: identity.clone(),
             storage: storage.clone(),
             thumbnails,
+            texts,
             events: events.clone(),
             live: live.clone(),
         },

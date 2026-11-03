@@ -67,6 +67,7 @@ async fn start_with(
         updates: None,
         web: None,
         thumbnails: None,
+        search: None,
     };
     let app = router(
         AppState {
