@@ -6,6 +6,7 @@
 //! Every user can use it from anywhere, unlike the admin APIs.
 
 use accordion_core::identity::{self, AppPassword, AppPasswordUse};
+use accordion_module::auth::actor;
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::AppPasswordId;
 use axum::extract::{Path, State};
@@ -108,6 +109,7 @@ async fn create_app_password(
     }
     let (secret, created) = state
         .identity
+        .acting_as(actor(&me))
         .create_app_password(me.user.id, request.use_for.into(), &request.device_name)
         .await?;
     tracing::info!(
@@ -131,7 +133,12 @@ async fn delete_app_password(
     Authenticated(me): Authenticated,
     Path(id): Path<AppPasswordId>,
 ) -> Result<StatusCode, ApiError> {
-    if !state.identity.delete_app_password(me.user.id, id).await? {
+    if !state
+        .identity
+        .acting_as(actor(&me))
+        .delete_app_password(me.user.id, id)
+        .await?
+    {
         return Err(ApiError::not_found());
     }
     tracing::info!(user = %me.user.id, app_password = %id, "deleted an app password");
@@ -177,6 +184,7 @@ async fn change_password(
     check_current_password(&state, &me, &request.current_password, &connection).await?;
     state
         .identity
+        .acting_as(actor(&me))
         .set_password(me.user.id, request.new_password, Some(me.session.id))
         .await?;
     tracing::info!(user = %me.user.id, "changed their password");
@@ -206,6 +214,7 @@ async fn rename(
     }
     let user = state
         .identity
+        .acting_as(actor(&me))
         .rename_member(me.user.id, &request.username, &request.display_name)
         .await?;
     if user.username != me.user.username {

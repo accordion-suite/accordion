@@ -1,5 +1,6 @@
 //! `/api/session`: sign in, check who's signed in, and sign out.
 
+use accordion_core::events::{Actor, Via};
 use accordion_core::identity::{AuthMethod, Client, Session, SignedIn, User};
 use accordion_types::{Role, SessionId, UserId};
 use axum::Json;
@@ -77,17 +78,15 @@ pub async fn sign_in(
     headers: HeaderMap,
     Json(request): Json<SignInRequest>,
 ) -> Result<Response, ApiError> {
-    let user = state
+    let from = connection.sign_in_from();
+    let identity = state
         .identity
-        .check_password(
-            &request.username,
-            &request.password,
-            connection.sign_in_from(),
-        )
+        .acting_as(Actor::visitor(Via::Web, from.address));
+    let user = identity
+        .check_password(&request.username, &request.password, from)
         .await?;
     let user_agent = headers.get(USER_AGENT).and_then(|ua| ua.to_str().ok());
-    let (token, session) = state
-        .identity
+    let (token, session) = identity
         .create_session(
             user.id,
             Client::Browser,
@@ -151,9 +150,11 @@ pub async fn confirm(
 /// `DELETE /api/session`: signs out this browser or app.
 pub async fn sign_out(
     State(state): State<AppState>,
-    Authenticated(SignedIn { user, session, .. }): Authenticated,
+    me: Authenticated,
 ) -> Result<Response, ApiError> {
-    state.identity.end_session(user.id, session.id).await?;
+    let identity = state.identity.acting_as(me.actor());
+    let Authenticated(SignedIn { user, session, .. }) = me;
+    identity.sign_out(user.id, session.id).await?;
     tracing::info!(user = %user.id, session = %session.id, "signed out");
     Ok((
         StatusCode::NO_CONTENT,

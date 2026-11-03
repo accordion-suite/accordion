@@ -8,6 +8,7 @@ mod device;
 mod directory;
 pub mod health;
 mod home;
+mod log;
 pub mod modules;
 pub mod network;
 mod origin;
@@ -22,6 +23,7 @@ mod welcome;
 use std::sync::Arc;
 
 use accordion_core::backup::Backup;
+use accordion_core::events::Events;
 use accordion_core::identity::Identity;
 use accordion_core::storage::Storage;
 use accordion_gateway::host::reject_unknown_hosts;
@@ -53,6 +55,9 @@ pub struct AppState {
     pub switches: Option<connections::Switches>,
     /// The web app's files (decision 13), if this server has them.
     pub web: Option<web::WebApp>,
+    /// The event log, for the activity logs in Settings, once the server is
+    /// running.
+    pub events: Option<Events>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -105,6 +110,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .route("/api/session/confirm", post(session::confirm))
         .merge(home::routes())
         .merge(account::routes())
+        .merge(log::account_routes())
         .merge(directory::routes())
         .merge(welcome::routes())
         .merge(web::routes(web_app_pages.into_iter()))
@@ -115,6 +121,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(people::routes())
                 .merge(updates::routes())
                 .merge(connections::routes())
+                .merge(log::admin_routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,

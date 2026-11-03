@@ -22,7 +22,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
-use crate::AppState;
+use crate::{AppState, log};
 
 const MIGRATIONS: &[Migration] = &[Migration {
     version: 1,
@@ -371,7 +371,7 @@ async fn set_backup(
     Json(switch): Json<Switch>,
 ) -> Result<StatusCode, ApiError> {
     require_admin(&me)?;
-    let backup = state.backup.ok_or_else(|| {
+    let backup = state.backup.clone().ok_or_else(|| {
         ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "Backups aren't available on this server.",
@@ -387,6 +387,12 @@ async fn set_backup(
                 ApiError::server_problem()
             }
         })?;
+    log::record(
+        &state,
+        &me,
+        log::backup_changed(if switch.on { "resumed" } else { "paused" }),
+    )
+    .await;
     tracing::info!(
         user = %me.user.id,
         target = %id,

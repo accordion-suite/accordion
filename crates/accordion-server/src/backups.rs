@@ -21,7 +21,7 @@ use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::{AppState, log};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -251,6 +251,7 @@ async fn create_key(
     let backup = service(&state, &me)?;
     check_recent(&me)?;
     let key = backup.create_recovery_key().await.map_err(api_error)?;
+    log::record(&state, &me, log::backup_changed("key_created")).await;
     tracing::info!(user = %me.user.id, "created the backup recovery key");
     Ok(secret(
         KeyView {
@@ -403,6 +404,15 @@ async fn add_target(
         .add_target(&request.name, &request.place.into())
         .await
         .map_err(api_error)?;
+    log::record(
+        &state,
+        &me,
+        log::backup_changed("target_added").details(serde_json::json!({
+            "change": "target_added",
+            "name": request.name,
+        })),
+    )
+    .await;
     tracing::info!(user = %me.user.id, target = %target.id, "added a backup location");
     Ok(StatusCode::CREATED)
 }
@@ -416,6 +426,7 @@ async fn remove_target(
 ) -> Result<StatusCode, ApiError> {
     let backup = service(&state, &me)?;
     backup.remove_target(id).await.map_err(api_error)?;
+    log::record(&state, &me, log::backup_changed("target_removed")).await;
     tracing::info!(user = %me.user.id, target = %id, "removed a backup location");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -479,5 +490,14 @@ async fn settings(
 ) -> Result<StatusCode, ApiError> {
     let backup = service(&state, &me)?;
     backup.set_hour(request.hour).await.map_err(api_error)?;
+    log::record(
+        &state,
+        &me,
+        log::backup_changed("hour").details(serde_json::json!({
+            "change": "hour",
+            "hour": request.hour,
+        })),
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }

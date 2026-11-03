@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2b4c46418d90680574813f2a88859af74f7cb5da"
+source = "git+https://github.com/accordion-suite/accordion-core#ea934eb5aafdacd6b643b9ec40dcfc1b754c9576"
 dependencies = [
  "accordion-sandbox",
  "accordion-types",
@@ -29,7 +29,7 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#ccae5ff25c3359ade303b46208bba2b04055cdcd"
+source = "git+https://github.com/accordion-suite/accordion-drive#eb4e5dbf3f19a36865a7dd5e637b1282c1186d29"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -40,6 +40,7 @@ dependencies = [
  "dav-server",
  "futures-util",
  "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tracing",
@@ -74,7 +75,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2b4c46418d90680574813f2a88859af74f7cb5da"
+source = "git+https://github.com/accordion-suite/accordion-core#ea934eb5aafdacd6b643b9ec40dcfc1b754c9576"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -88,7 +89,7 @@ dependencies = [
 [[package]]
 name = "accordion-sandbox"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2b4c46418d90680574813f2a88859af74f7cb5da"
+source = "git+https://github.com/accordion-suite/accordion-core#ea934eb5aafdacd6b643b9ec40dcfc1b754c9576"
 dependencies = [
  "landlock",
  "libc",
@@ -131,7 +132,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#2b4c46418d90680574813f2a88859af74f7cb5da"
+source = "git+https://github.com/accordion-suite/accordion-core#ea934eb5aafdacd6b643b9ec40dcfc1b754c9576"
 dependencies = [
  "serde",
  "uuid",

@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use accordion_core::backup::{self, Backup};
 use accordion_core::db::Database;
+use accordion_core::events::{Action, Actor, Events, NewEvent};
 use accordion_core::identity::{AppPasswords, Identity, NewUser};
 use accordion_core::storage::Storage;
 use accordion_core::thumbnails::{Thumbnails, Tools};
@@ -160,6 +161,12 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     let db = open_database(&data_dir)?;
     let identity = Identity::new(db.clone()).await?;
     let storage = Storage::open(db.clone(), identity.clone(), &data_dir.join("storage")).await?;
+    let events = Events::open(db.clone()).await?;
+    if restored {
+        events
+            .record(Actor::SERVER, NewEvent::new(Action::BackupRestored))
+            .await?;
+    }
     let backup = Backup::open(db.clone(), storage.clone(), &data_dir, restic_program()?).await?;
     let updates = Updates::open(
         db.clone(),
@@ -215,6 +222,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     background.spawn(backup.clone().maintain(until_stopped()));
     background.spawn(updates.clone().run(Some(backup.status()), until_stopped()));
     background.spawn(thumbnails.clone().run(until_stopped()));
+    background.spawn(events.clone().maintain(until_stopped()));
     let modules = modules::start(
         modules::all(),
         &Services {
@@ -222,6 +230,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             identity: identity.clone(),
             storage: storage.clone(),
             thumbnails,
+            events: events.clone(),
         },
         &Stopping::new(stopped.clone()),
         &mut background,
@@ -241,6 +250,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 updates: Some(updates),
                 switches: Some(switches),
                 web: web.clone(),
+                events: Some(events),
             },
             until_stopped(),
         )
@@ -280,6 +290,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         updates: Some(updates),
         switches: Some(switches),
         web: web.clone(),
+        events: Some(events),
     };
 
     let local_name = if local_name_on {

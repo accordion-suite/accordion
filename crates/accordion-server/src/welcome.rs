@@ -6,6 +6,7 @@
 //! sends it in the request body instead. Anyone could be holding the link, so
 //! unlike the admin pages, this one opens from anywhere.
 
+use accordion_core::events::{Actor, Via};
 use accordion_core::identity::{AuthMethod, Client, LinkPurpose};
 use accordion_module::ApiError;
 use accordion_module::auth;
@@ -88,13 +89,14 @@ async fn set_password(
     headers: HeaderMap,
     Json(request): Json<SetPassword>,
 ) -> Result<Response, ApiError> {
-    let user = state
+    let identity = state
         .identity
+        .acting_as(Actor::visitor(Via::Web, connection.sign_in_from().address));
+    let user = identity
         .use_password_link(&request.token, request.password)
         .await?;
     let user_agent = headers.get(USER_AGENT).and_then(|ua| ua.to_str().ok());
-    let (token, session) = state
-        .identity
+    let (token, session) = identity
         .create_session(
             user.id,
             Client::Browser,

@@ -16,6 +16,7 @@ use accordion_core::identity::{
     AppPasswords, LinkPurpose, LinkToken, Member, PasswordLink, SignedIn, User,
 };
 use accordion_core::storage::LeaveFiles;
+use accordion_module::auth::actor;
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::{Role, UserId};
 use axum::extract::{Path, State};
@@ -221,6 +222,7 @@ async fn add(
     check_role_for(&me.user, request.role)?;
     let (user, token, link) = state
         .identity
+        .acting_as(actor(&me))
         .add_member(&request.username, &request.display_name, request.role)
         .await?;
     tracing::info!(user = %me.user.id, added = %user.id, role = %user.role, "added an account");
@@ -250,7 +252,11 @@ async fn password_link(
     } else {
         AppPasswords::Keep
     };
-    let (token, link) = state.identity.make_password_link(id, app_passwords).await?;
+    let (token, link) = state
+        .identity
+        .acting_as(actor(&me))
+        .make_password_link(id, app_passwords)
+        .await?;
     match link.purpose {
         LinkPurpose::Reset => {
             tracing::info!(
@@ -282,7 +288,11 @@ async fn set_role(
 ) -> Result<StatusCode, ApiError> {
     manageable(&state, &me, id).await?;
     check_role_for(&me.user, request.role)?;
-    let user = state.identity.set_role(id, request.role).await?;
+    let user = state
+        .identity
+        .acting_as(actor(&me))
+        .set_role(id, request.role)
+        .await?;
     tracing::info!(user = %me.user.id, target = %id, role = %user.role, "changed a role");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -295,7 +305,11 @@ async fn turn_off(
     Path(id): Path<UserId>,
 ) -> Result<StatusCode, ApiError> {
     manageable(&state, &me, id).await?;
-    state.identity.turn_off_member(id).await?;
+    state
+        .identity
+        .acting_as(actor(&me))
+        .turn_off_member(id)
+        .await?;
     tracing::info!(user = %me.user.id, target = %id, "turned off an account");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -307,7 +321,11 @@ async fn turn_on(
     Path(id): Path<UserId>,
 ) -> Result<StatusCode, ApiError> {
     manageable(&state, &me, id).await?;
-    state.identity.turn_on_member(id).await?;
+    state
+        .identity
+        .acting_as(actor(&me))
+        .turn_on_member(id)
+        .await?;
     tracing::info!(user = %me.user.id, target = %id, "turned on an account");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -328,6 +346,7 @@ async fn rename(
     let before = manageable(&state, &me, id).await?;
     let user = state
         .identity
+        .acting_as(actor(&me))
         .rename_member(id, &request.username, &request.display_name)
         .await?;
     if user.username != before.username {
@@ -408,9 +427,17 @@ async fn delete_person(
     // Off first: they're signed out everywhere, and nothing new arrives
     // while their files move. If a step fails, the account stays off, and
     // trying again picks up where it stopped.
-    state.identity.turn_off_member(id).await?;
+    state
+        .identity
+        .acting_as(actor(&me))
+        .turn_off_member(id)
+        .await?;
     let folder = storage.remove_owner(id, files).await?;
-    state.identity.delete_member(id).await?;
+    state
+        .identity
+        .acting_as(actor(&me))
+        .delete_member(id)
+        .await?;
     match given_to {
         Some(to) => tracing::info!(
             user = %me.user.id,

@@ -2,6 +2,7 @@
 //! Drive over WebDAV through the whole server.
 
 use accordion_core::db::Database;
+use accordion_core::events::Events;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
 use accordion_core::thumbnails::{Thumbnails, Tools};
@@ -46,6 +47,7 @@ async fn start() -> Server {
         })
         .await
         .unwrap();
+    let events = Events::open(db.clone()).await.unwrap();
     let (stop, stopping) = watch::channel(false);
     let modules = modules::start(
         modules::all(),
@@ -53,6 +55,7 @@ async fn start() -> Server {
             db: db.clone(),
             identity: identity.clone(),
             storage: storage.clone(),
+            events: events.clone(),
             thumbnails: Thumbnails::open(
                 db,
                 storage,
@@ -78,6 +81,7 @@ async fn start() -> Server {
             storage: None,
             updates: None,
             switches: None,
+            events: Some(events),
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
@@ -281,4 +285,62 @@ async fn module_routes_get_the_servers_checks() {
         )
         .await;
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_activity_log_shows_sign_ins_and_app_passwords() {
+    let server = start().await;
+    let wrong = server
+        .send(
+            browser("POST", "/api/session"),
+            json_body(json!({ "username": "alex", "password": "not it" })),
+        )
+        .await;
+    assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+    let cookie = server.sign_in().await;
+    let created = server
+        .send(
+            browser("POST", "/api/app-passwords").header(header::COOKIE, &cookie),
+            json_body(json!({ "device_name": "Laptop", "use_for": "dav" })),
+        )
+        .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let log = json(
+        server
+            .send(
+                browser("GET", "/api/account/activity").header(header::COOKIE, &cookie),
+                Body::empty(),
+            )
+            .await,
+    )
+    .await;
+    let events = log["events"].as_array().unwrap();
+    let actions: Vec<_> = events.iter().map(|event| &event["action"]).collect();
+    assert_eq!(
+        actions,
+        ["app_password_created", "signed_in", "sign_in_failed"]
+    );
+    assert_eq!(events[0]["details"]["device"], "Laptop");
+    assert_eq!(events[1]["actor"]["name"], "Alex Kim");
+    assert_eq!(events[1]["details"]["address"], "203.0.113.5");
+    assert_eq!(events[2]["actor"], Value::Null);
+    assert_eq!(events[2]["other"]["name"], "Alex Kim");
+
+    // The admin log is for the home network only.
+    let admin_log = server
+        .send(
+            browser("GET", "/api/admin/log").header(header::COOKIE, &cookie),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(admin_log.status(), StatusCode::FORBIDDEN);
+
+    let signed_out = server
+        .send(
+            browser("DELETE", "/api/session").header(header::COOKIE, &cookie),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(signed_out.status(), StatusCode::NO_CONTENT);
 }

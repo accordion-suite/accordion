@@ -25,7 +25,8 @@ pub use service::{
     CheckResult, Error, Installing, Release, UpdateSource, UpdateStatus, Updates, WAIT,
 };
 
-use crate::AppState;
+use crate::{AppState, log};
+use accordion_core::events::{Action, NewEvent};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -213,7 +214,19 @@ async fn install(
     Authenticated(me): Authenticated,
 ) -> Result<StatusCode, ApiError> {
     let updates = service(&state, &me)?;
+    let version = updates
+        .status()
+        .borrow()
+        .newest
+        .as_ref()
+        .map(|newest| newest.version.to_string());
     updates.install().await.map_err(api_error)?;
+    log::record(
+        &state,
+        &me,
+        NewEvent::new(Action::UpdateInstalled).details(serde_json::json!({ "version": version })),
+    )
+    .await;
     tracing::info!(user = %me.user.id, "started an update");
     Ok(StatusCode::ACCEPTED)
 }

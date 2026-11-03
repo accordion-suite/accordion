@@ -5,6 +5,7 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use accordion_core::db::Database;
+use accordion_core::events::Events;
 use accordion_core::identity::{Identity, NewUser};
 use accordion_core::storage::Storage;
 use accordion_core::thumbnails::{Thumbnails, Tools};
@@ -59,6 +60,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
     let storage = Storage::open(db.clone(), identity.clone(), &dir.path().join("storage"))
         .await
         .unwrap();
+    let events = Events::open(db.clone()).await.unwrap();
     let (stop, stopping) = watch::channel(false);
     let modules = modules::start(
         modules::all(),
@@ -66,6 +68,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             db: db.clone(),
             identity: identity.clone(),
             storage: storage.clone(),
+            events: events.clone(),
             thumbnails: Thumbnails::open(
                 db,
                 storage,
@@ -104,6 +107,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             storage: None,
             updates: None,
             switches: None,
+            events: None,
             web: web.then(|| WebApp::new(build)),
         },
         &Site::named(HOST.parse().unwrap(), 443),
