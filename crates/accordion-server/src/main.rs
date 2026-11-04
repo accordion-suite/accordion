@@ -24,6 +24,7 @@ use accordion_gateway::{Peer, ServerName};
 use accordion_module::{Services, Stopping};
 use accordion_server::connections::Switches;
 use accordion_server::health::{Health, NameHealth};
+use accordion_server::link_sharing::{self, LinkSharing, Site as LinkSite};
 use accordion_server::network::AdminAccess;
 use accordion_server::remote::{RemoteAccess, Site as RemoteSite};
 use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
@@ -72,6 +73,9 @@ Settings, from environment variables:
                           or VPN open the setup and admin pages. Use anywhere
                           for a server with no home network, such as a rented
                           one (default: home-network)
+  ACCORDION_LINKS_LISTEN  Address for link sharing's pages, which the router
+                          forwards to while link sharing is on
+                          (default: port 8443)
   ACCORDION_LOCAL_NAME    on announces accordion.local on the home network,
                           where people find the setup wizard and, later, the
                           redirect to the server's name (default: on)
@@ -189,6 +193,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     .await?;
     let switches = Switches::open(db.clone()).await?;
     let remote = RemoteAccess::open(db.clone(), identity.clone()).await?;
+    let link_sharing = LinkSharing::open(db.clone()).await?;
     // Workers run in a sandbox that this program sets up (decision 14).
     let thumbnails = Thumbnails::open(
         db.clone(),
@@ -238,6 +243,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         thumbnails: Some(thumbnails.status()),
         search: Some(texts.status()),
         remote: Some(remote.clone()),
+        link_sharing: Some(link_sharing.clone()),
         ..Health::default()
     };
     let mut background = JoinSet::new();
@@ -260,6 +266,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             texts,
             events: events.clone(),
             live: live.clone(),
+            link_origin: link_sharing.origin(),
         },
         &Stopping::new(stopped.clone()),
         &mut background,
@@ -282,6 +289,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 events: Some(events),
                 live: Some(live),
                 remote: Some(remote),
+                link_sharing: Some(link_sharing),
             },
             until_stopped,
         )
@@ -325,6 +333,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         events: Some(events),
         live: Some(live),
         remote: Some(remote),
+        link_sharing: Some(link_sharing),
     };
 
     let local_name = if local_name_on {
@@ -532,6 +541,21 @@ where
         }
         None => (None, None),
     };
+    let links_work = match (&state.link_sharing, state.modules.links()) {
+        (Some(sharing), Some(pages)) => Some(sharing.start(
+            LinkSite::Unnamed,
+            address_source()?,
+            links_listen(Some(listener.local_addr()?.ip()))?,
+            pages,
+            &until_stopped,
+        )),
+        _ => None,
+    };
+    let links_work = async {
+        if let Some(work) = links_work {
+            work.await;
+        }
+    };
     let app = router(state, &Site::Unnamed);
     let tunnel_server = async {
         if let Some(tunnel) = tunnel {
@@ -543,7 +567,7 @@ where
             work.await;
         }
     };
-    let (served, (), ()) = tokio::join!(
+    let (served, (), (), ()) = tokio::join!(
         axum::serve(
             listener,
             app.clone().into_make_service_with_connect_info::<Peer>()
@@ -552,6 +576,7 @@ where
         .into_future(),
         tunnel_server,
         remote_work,
+        links_work,
     );
     served?;
     Ok(())
@@ -622,6 +647,24 @@ where
         }
         None => (None, None),
     };
+    let links_work = match (&state.link_sharing, state.modules.links()) {
+        (Some(sharing), Some(pages)) => Some(sharing.start(
+            LinkSite::Named {
+                settings: Box::new(settings.clone()),
+                gateway_dir: gateway_dir.to_owned(),
+            },
+            address,
+            links_listen(None)?,
+            pages,
+            &until_stopped,
+        )),
+        _ => None,
+    };
+    let links_work = async {
+        if let Some(work) = links_work {
+            work.await;
+        }
+    };
     let tls_config = tls::server_config(certs);
     let app = router(state, &site);
     let tunnel_servers = async {
@@ -653,6 +696,7 @@ where
         publish,
         tunnel_servers,
         remote_work,
+        links_work,
     );
     Ok(())
 }
@@ -976,6 +1020,22 @@ fn address_source() -> Result<Option<AddressSource>, String> {
                 )
             }),
     }
+}
+
+/// Where link sharing's listener listens (decision 22): the setting, or
+/// port 8443 at every address, or at `unnamed`'s address on a server
+/// without a name, which serves plain HTTP only where its own does.
+fn links_listen(unnamed: Option<IpAddr>) -> Result<SocketAddr, String> {
+    if let Ok(value) = std::env::var("ACCORDION_LINKS_LISTEN") {
+        return value.trim().parse().map_err(|_| {
+            format!(
+                "ACCORDION_LINKS_LISTEN is \"{value}\", which isn't an address and port. Set it \
+                 to one, such as [::]:8443."
+            )
+        });
+    }
+    let ip = unnamed.unwrap_or(IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED));
+    Ok(SocketAddr::new(ip, link_sharing::DEFAULT_LISTEN_PORT))
 }
 
 /// Docker and Podman each leave a file at the root of the container.

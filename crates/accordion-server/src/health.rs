@@ -25,6 +25,7 @@ use serde::Serialize;
 use tokio::sync::watch;
 
 use crate::AppState;
+use crate::link_sharing::{LinkHealth, LinkSharing};
 use crate::remote::{RemoteAccess, RemoteHealth};
 use crate::updates::{CheckResult, UpdateStatus};
 use crate::web::WebApp;
@@ -62,6 +63,8 @@ pub struct Health {
     pub search: Option<watch::Receiver<TextStatus>>,
     /// Remote access, which reports once the server serves its name.
     pub remote: Option<RemoteAccess>,
+    /// Link sharing, which reports once the server serves its routes.
+    pub link_sharing: Option<LinkSharing>,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -150,8 +153,109 @@ impl Health {
         if let Some(remote) = self.remote.as_ref().and_then(RemoteAccess::health) {
             checks.push(remote_check(&remote, now));
         }
+        if let Some(links) = self.link_sharing.as_ref().and_then(LinkSharing::health) {
+            checks.push(link_check(&links, now));
+        }
         checks
     }
+}
+
+pub(crate) fn link_check(health: &LinkHealth, now: SystemTime) -> Check {
+    let check = |state, summary| Check {
+        id: "link_sharing",
+        title: "Link sharing",
+        state,
+        summary,
+    };
+    if !health.on {
+        return check(
+            Level::Ok,
+            "Link sharing is off, so files can be shared only with people who have an account. \
+             An admin can turn it on in Settings, under Remote access."
+                .to_owned(),
+        );
+    }
+    if let Some(problem) = &health.listener.problem {
+        return check(Level::Problem, problem.clone());
+    }
+    if !health.named {
+        return check(
+            Level::Ok,
+            format!(
+                "Link sharing is on for testing. This server doesn't have a name, so links work \
+                 only on this network, over plain HTTP on port {}.",
+                health.listen_port
+            ),
+        );
+    }
+    let mut state = Level::Ok;
+    let mut summary = String::from("Link sharing is on.");
+    let certificate = &health.certificate;
+    match (&certificate.validity, &certificate.last_error) {
+        (None, Some(error)) => {
+            state = Level::Problem;
+            let _ = write!(
+                summary,
+                " Accordion couldn't get the certificate for links, so they can't open yet. \
+                 {error}"
+            );
+        }
+        (None, None) => summary.push_str(" Accordion is getting the certificate for links."),
+        (Some(validity), error) => {
+            let left = validity.expires_at.duration_since(now).unwrap_or_default();
+            if left < EXPIRY_PROBLEM {
+                state = Level::Problem;
+                let _ = write!(
+                    summary,
+                    " The certificate for links expires in {}.",
+                    in_words(left)
+                );
+                if let Some(error) = error {
+                    let _ = write!(summary, " Renewing it didn't work. {error}");
+                }
+            }
+        }
+    }
+    let router = &health.router;
+    let port = health.port;
+    match router.mapping {
+        Some(_) if router.shared_address => {
+            state = state.max(Level::Warning);
+            summary.push_str(
+                " Your internet provider shares one public address among many homes, or the \
+                 router is behind another router, so links can't reach people outside the home.",
+            );
+        }
+        Some(mapping) => {
+            let _ = write!(
+                summary,
+                " The router forwards TCP port {port} to the server, through {}.",
+                mapping.method
+            );
+        }
+        None if router.problem.is_some() => {
+            state = state.max(Level::Warning);
+            let home = health
+                .home
+                .map_or_else(|| "the server".to_owned(), |home| home.to_string());
+            let _ = write!(
+                summary,
+                " The router didn't forward TCP port {port} by itself, so links may not reach \
+                 people outside the home. In your router's settings, forward TCP port {port} to \
+                 port {} on {home}.",
+                health.listen_port
+            );
+        }
+        None => summary.push_str(" Accordion is asking the router to forward the port."),
+    }
+    if let Some(problem) = &health.record.problem {
+        state = state.max(Level::Warning);
+        let _ = write!(
+            summary,
+            " Accordion couldn't update the address record for links. {problem}"
+        );
+    }
+    check(state, summary)
 }
 
 /// A device that connected this recently shows the port works, even if the
@@ -925,6 +1029,7 @@ mod tests {
             thumbnails: None,
             search: None,
             remote: None,
+            link_sharing: None,
         }
     }
 
@@ -1375,6 +1480,81 @@ mod tests {
             remote_check(&off, now())
                 .summary
                 .starts_with("Remote access is off")
+        );
+    }
+
+    #[test]
+    fn says_how_link_sharing_is_doing() {
+        use crate::link_sharing::ListenerStatus;
+        use accordion_gateway::acme::Validity;
+        use accordion_gateway::endpoint::EndpointStatus;
+        use accordion_gateway::port_mapping::{Mapping, Method, PortStatus};
+
+        let healthy = || LinkHealth {
+            on: true,
+            named: true,
+            port: 443,
+            listen_port: 8443,
+            home: Some("192.168.1.20".parse().unwrap()),
+            listener: ListenerStatus {
+                listening: true,
+                problem: None,
+            },
+            certificate: CertificateStatus {
+                validity: Some(Validity {
+                    expires_at: now() + Duration::from_secs(60 * 24 * 60 * 60),
+                    renew_at: now() + Duration::from_secs(30 * 24 * 60 * 60),
+                }),
+                ..CertificateStatus::default()
+            },
+            router: PortStatus {
+                port: Some(443),
+                mapping: Some(Mapping {
+                    method: Method::Upnp,
+                    external_address: Some("203.0.113.7".parse().unwrap()),
+                    external_port: 443,
+                    lifetime: Duration::from_secs(3600),
+                }),
+                ..PortStatus::default()
+            },
+            record: EndpointStatus::default(),
+        };
+        let check = link_check(&healthy(), now());
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Link sharing is on. The router forwards TCP port 443 to the server, through UPnP."
+        );
+
+        let mut refused = healthy();
+        refused.router = PortStatus {
+            port: Some(443),
+            problem: Some("The router said no.".into()),
+            ..PortStatus::default()
+        };
+        let check = link_check(&refused, now());
+        assert_eq!(check.state, Level::Warning);
+        assert!(
+            check
+                .summary
+                .contains("forward TCP port 443 to port 8443 on 192.168.1.20")
+        );
+
+        let mut no_certificate = healthy();
+        no_certificate.certificate = CertificateStatus {
+            last_error: Some("deSEC refused the change.".into()),
+            ..CertificateStatus::default()
+        };
+        assert_eq!(link_check(&no_certificate, now()).state, Level::Problem);
+
+        let off = LinkHealth {
+            on: false,
+            ..healthy()
+        };
+        assert!(
+            link_check(&off, now())
+                .summary
+                .starts_with("Link sharing is off")
         );
     }
 

@@ -33,7 +33,7 @@ Every module ships with the suite. The admin turns modules on or off, and users 
 ## Principles
 
 - **Local-first.** Your data lives on your box. Apps keep an offline copy and sync when they can reach it.
-- **Zero telemetry.** No analytics, crash reporting, or third-party fonts and CDNs. Accordion connects only to your DNS provider, Let's Encrypt, and your backup locations, plus GitHub once a day to check for updates. With remote access on, it also asks your router to forward its port. The admin **Network** page lists each connection and why, and turns off the ones that can be.
+- **Zero telemetry.** No analytics, crash reporting, or third-party fonts and CDNs. Accordion connects only to your DNS provider, Let's Encrypt, and your backup locations, plus GitHub once a day to check for updates. With remote access or link sharing on, it also asks your router to forward their ports. The admin **Network** page lists each connection and why, and turns off the ones that can be.
 - **Open formats.** Files stay as files, mail is Maildir, notes are Markdown, and contacts and calendars are vCard and iCal. Leaving Accordion should be as easy as joining.
 - **Standards over lock-in.** Accordion speaks WebDAV, IMAP, SMTP, JMAP, CalDAV, and CardDAV, so the apps you already use, such as Thunderbird, iOS Mail, and DAVx5, keep working.
 - **Boring to run.** Automatic updates on a schedule you choose, automatic encrypted backups, and a health page anyone can read.
@@ -137,6 +137,8 @@ Drive and Settings open in the web app, which is in its own repo. Build it in `a
 - For a different address, such as in a container, set `ACCORDION_ADDRESS`.
 
 **Remote access.** In Settings, under **Remote access**, turn it on. Then, under **Apps and devices**, add a device and scan its QR code with the WireGuard app. On a server without a name, it works for testing only: Accordion doesn't ask the router for the port, and devices reach the server at its home address.
+
+**Link sharing.** In Settings, under **Remote access**, turn on link sharing. Then, in Drive, open an item's **Share** dialog and select **Make a link**. On a server without a name, links open over plain HTTP at `http://127.0.0.1:8443`, or wherever `ACCORDION_LINKS_LISTEN` says.
 
 **The setup wizard.** Skip `create-owner`, and start with an empty data folder and `ACCORDION_CERTIFICATE_AUTHORITY=lets-encrypt-staging`. The log shows the wizard's address and setup code. Other devices on your network can also open it at `http://accordion.local`. The wizard gets the name and certificate, then moves to `https://<name>/setup` to create the owner account.
 

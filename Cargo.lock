@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#42f4caac1f8ba85096f4f8c4bd981018099806ff"
+source = "git+https://github.com/accordion-suite/accordion-core#fec22ec075d535d95a42ac9fd4ef13882d42686e"
 dependencies = [
  "accordion-sandbox",
  "accordion-types",
@@ -32,18 +32,21 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#86ad7bbc6f3d5becd4fc22266d75f2608c724da5"
+source = "git+https://github.com/accordion-suite/accordion-drive#4794fec0af306c56fd559447235173e2970919a2"
 dependencies = [
  "accordion-core",
  "accordion-module",
  "accordion-sandbox",
  "accordion-types",
  "axum",
+ "base64ct",
  "bytes",
  "dav-server",
  "futures-util",
+ "getrandom 0.4.3",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tokio-util",
  "tracing",
@@ -53,7 +56,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#e8321de9f36707c2416e3f3c57c7e9a119dd3966"
+source = "git+https://github.com/accordion-suite/accordion-gateway#4f16811ba2bad5e416da79c7cc653dcc85bb2247"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -84,7 +87,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#42f4caac1f8ba85096f4f8c4bd981018099806ff"
+source = "git+https://github.com/accordion-suite/accordion-core#fec22ec075d535d95a42ac9fd4ef13882d42686e"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -98,7 +101,7 @@ dependencies = [
 [[package]]
 name = "accordion-sandbox"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#42f4caac1f8ba85096f4f8c4bd981018099806ff"
+source = "git+https://github.com/accordion-suite/accordion-core#fec22ec075d535d95a42ac9fd4ef13882d42686e"
 dependencies = [
  "landlock",
  "libc",
@@ -143,7 +146,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#42f4caac1f8ba85096f4f8c4bd981018099806ff"
+source = "git+https://github.com/accordion-suite/accordion-core#fec22ec075d535d95a42ac9fd4ef13882d42686e"
 dependencies = [
  "serde",
  "uuid",

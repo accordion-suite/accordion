@@ -91,6 +91,15 @@ impl Mounted {
         router
     }
 
+    /// The link pages of the modules that have them, for the link sharing
+    /// listener (decision 22). Nothing else goes on that listener.
+    pub fn links(&self) -> Option<Router> {
+        self.0
+            .iter()
+            .filter_map(|(_, routes)| routes.links.clone())
+            .reduce(Router::merge)
+    }
+
     /// The modules whose pages are in the web app (decision 13), rather
     /// than routes of their own.
     pub fn in_web_app(&self) -> Vec<&'static str> {

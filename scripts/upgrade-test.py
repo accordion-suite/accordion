@@ -14,8 +14,8 @@ state file. check reads it all back, checks the thumbnails of a photo and a
 video on releases that make them, and of a Word document when it's told to
 with documents, checks that files are found by the words inside them on
 releases with search, connects through remote access's tunnel with the
-kernel's WireGuard on releases with remote access, and runs a backup and a
-restore test.
+kernel's WireGuard on releases with remote access, opens a link on releases
+with link sharing, and runs a backup and a restore test.
 update installs a release from the Updates page's API, waits for the update
 helper, and checks how the update ended: installed or rolled-back.
 
@@ -378,6 +378,7 @@ def check(state_file, version=None, documents=False):
     check_thumbnails(token, documents)
     check_search(token)
     check_remote_access(token)
+    check_link_sharing(token)
 
     usernames = {person["username"] for person in call("GET", "/api/people", token)["people"]}
     if usernames != {"alex", "sam"}:
@@ -566,6 +567,44 @@ def check_remote_access(token):
     call("DELETE", f"/api/remote-devices/{added['device']['id']}", token, expect=204)
     call("PUT", "/api/remote-access", token, {"on": False, "port": REMOTE_PORT}, expect=204)
     say(f"a device reached the server through remote access's tunnel at {tunnel}.")
+
+
+def check_link_sharing(token):
+    """On releases with link sharing, turns it on, makes a link to a folder,
+    and opens the link's page on the link listener, as someone without an
+    account would. The server has no name, so the listener serves plain
+    HTTP. Then it removes the link and turns link sharing off again."""
+    status, _, _ = request("GET", "/api/link-sharing", token)
+    if status == 404:
+        return
+    call("PUT", "/api/link-sharing", token, {"on": True}, expect=204)
+    top = call("GET", "/api/drive/top", token)["id"]
+    folder = next(
+        item for item in call("GET", f"/api/drive/items/{top}/children", token)
+        if item["kind"] == "folder"
+    )
+    made = call(
+        "POST", f"/api/drive/items/{folder['id']}/links", token, {"expires": "1d"}, expect=201
+    )
+    url = urllib.parse.urlsplit(made["url"])
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            connection = http.client.HTTPConnection(url.hostname, url.port, timeout=10)
+            connection.request("GET", url.path)
+            response = connection.getresponse()
+            page = response.read().decode()
+            connection.close()
+            break
+        except OSError as err:
+            if time.monotonic() > deadline:
+                fail(f"nothing answered at the link {made['url']}: {err}")
+            time.sleep(1)
+    if response.status != 200 or f"<h1>{folder['name']}</h1>" not in page:
+        fail(f"the link page for {folder['name']} answered {response.status}: {page[:300]}")
+    call("DELETE", f"/api/drive/links/{made['link']['id']}", token, expect=204)
+    call("PUT", "/api/link-sharing", token, {"on": False}, expect=204)
+    say(f"someone without an account opened a link to {folder['name']}.")
 
 
 def update(state_file, version, outcome, installed):

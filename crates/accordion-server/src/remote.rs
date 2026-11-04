@@ -23,7 +23,9 @@ use accordion_gateway::ServerName;
 use accordion_gateway::address::AddressSource;
 use accordion_gateway::dns::{Provider, ProviderKind};
 use accordion_gateway::endpoint::{EndpointInput, EndpointPublisher, EndpointStatus};
-use accordion_gateway::port_mapping::{PortMapper, PortStatus, Router as HomeRouter};
+use accordion_gateway::port_mapping::{
+    Forward, PortMapper, PortStatus, Protocol, Router as HomeRouter,
+};
 use accordion_gateway::tunnel::{
     Accepted, DEFAULT_PORT, DevicePeer, DeviceSetup, Key, Listeners, Network, PublicKey,
     RemoteTunnel, TunnelConfig, TunnelStatus,
@@ -278,7 +280,7 @@ impl RemoteAccess {
         let (name, endpoint, router, mapper, publisher) = match site {
             Site::Named { name, dns } => {
                 let router = HomeRouter::find();
-                let mapper = PortMapper::new(router, port_receiver);
+                let mapper = PortMapper::new(router, Protocol::Udp, port_receiver);
                 let provider = dns.kind();
                 let publisher = EndpointPublisher::new(*dns, endpoint_receiver);
                 (
@@ -455,7 +457,7 @@ struct Drive {
     home_source: Option<AddressSource>,
     config: watch::Sender<Option<TunnelConfig>>,
     peers: watch::Sender<Vec<DevicePeer>>,
-    port: watch::Sender<Option<u16>>,
+    port: watch::Sender<Option<Forward>>,
     endpoint: watch::Sender<Option<EndpointInput>>,
     tunnel: watch::Receiver<TunnelStatus>,
     router: watch::Receiver<PortStatus>,
@@ -512,7 +514,7 @@ impl Drive {
                     Err(err) => tracing::error!(%err, "couldn't load the remote access devices"),
                 }
             }
-            let port = on.map(|saved| saved.port);
+            let port = on.map(|saved| Forward::same(saved.port));
             self.port.send_if_modified(|current| {
                 let changed = *current != port;
                 *current = port;

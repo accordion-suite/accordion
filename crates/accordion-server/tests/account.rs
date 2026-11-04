@@ -72,6 +72,7 @@ async fn start() -> Server {
             storage: storage.clone(),
             events: events.clone(),
             live: live.clone(),
+            link_origin: tokio::sync::watch::channel(None).1,
             thumbnails: thumbnails.clone(),
             texts: Texts::open(
                 db,
@@ -102,6 +103,7 @@ async fn start() -> Server {
             events: Some(events),
             live: Some(live),
             remote: None,
+            link_sharing: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),

@@ -8,6 +8,7 @@ mod device;
 mod directory;
 pub mod health;
 mod home;
+pub mod link_sharing;
 mod live;
 mod log;
 pub mod modules;
@@ -65,6 +66,8 @@ pub struct AppState {
     pub live: Option<Live>,
     /// Remote access (decision 21), once the server is running.
     pub remote: Option<remote::RemoteAccess>,
+    /// Link sharing (decision 22), once the server is running.
+    pub link_sharing: Option<link_sharing::LinkSharing>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -131,6 +134,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(updates::routes())
                 .merge(connections::routes())
                 .merge(remote::admin_routes())
+                .merge(link_sharing::admin_routes())
                 .merge(log::admin_routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,

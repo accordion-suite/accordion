@@ -90,6 +90,7 @@ async fn start(client: &str) -> Server {
             events: None,
             live: None,
             remote: None,
+            link_sharing: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),

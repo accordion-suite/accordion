@@ -80,6 +80,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             storage: storage.clone(),
             events: events.clone(),
             live: Live::new(db.clone(), &identity),
+            link_origin: tokio::sync::watch::channel(None).1,
             thumbnails: thumbnails.clone(),
             texts: Texts::open(
                 db,
@@ -123,6 +124,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             events: None,
             live: None,
             remote: None,
+            link_sharing: None,
             web: web.then(|| WebApp::new(build)),
         },
         &Site::named(HOST.parse().unwrap(), 443),

@@ -125,6 +125,8 @@ struct NetworkView {
     backup_hour: u8,
     /// Remote access's connections, while it's on.
     remote: Option<crate::remote::RemoteNetwork>,
+    /// Link sharing's connections, while it's on.
+    links: Option<crate::link_sharing::LinkNetwork>,
 }
 
 /// The last time a connection was made, and whether it worked.
@@ -302,6 +304,10 @@ async fn status(
             .remote
             .as_ref()
             .and_then(crate::remote::RemoteAccess::network),
+        links: state
+            .link_sharing
+            .as_ref()
+            .and_then(crate::link_sharing::LinkSharing::network),
     }))
 }
 
