@@ -31,6 +31,24 @@ deps="$(grep -hE "^[a-z0-9-]+ = \{ git = \"$org_url/[a-z0-9-]+\"" "$workspace"/*
 
 output="# Written by accordion/scripts/link-workspace.sh. Run that script again
 # rather than editing this file.
+
+# Every repo here keeps its intermediate build files in one shared folder, so
+# a dependency used by several repos is compiled and stored once. Each repo's
+# target/ folder still gets its own binaries. Running cargo clean in any repo
+# empties the shared folder.
+[build]
+build-dir = \"$workspace/build-cache\"
+
+# Full debug info is most of the size of a debug build. Line tables keep file
+# names and line numbers in backtraces. Dependencies get none.
+[profile.dev]
+debug = \"line-tables-only\"
+
+[profile.dev.package.\"*\"]
+debug = false
+
+[profile.test]
+debug = \"line-tables-only\"
 "
 current_repo=""
 while read -r repo crate; do
