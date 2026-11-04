@@ -1,14 +1,16 @@
 //! The API behind the web app's Account and Apps and devices settings:
 //! app passwords, so standard clients such as File Explorer, Finder, and
-//! phone apps can reach Drive (decision 3 in `docs/decisions`), changing a
-//! password, and changing a name.
+//! phone apps can reach Drive (decision 3 in `docs/decisions`), codes that
+//! add Accordion's own apps (decision 23), changing a password, and changing
+//! a name.
 //!
 //! Every user can use it from anywhere, unlike the admin APIs.
 
-use accordion_core::identity::{self, AppPassword, AppPasswordUse};
+use accordion_core::events::{Actor, Via};
+use accordion_core::identity::{self, AppPassword, AppPasswordUse, Client, Session};
 use accordion_module::auth::actor;
 use accordion_module::{ApiError, Authenticated};
-use accordion_types::AppPasswordId;
+use accordion_types::{AppPasswordId, SessionId, UserId};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post, put};
@@ -25,6 +27,10 @@ pub fn routes() -> Router<AppState> {
             get(app_passwords).post(create_app_password),
         )
         .route("/api/app-passwords/{id}", delete(delete_app_password))
+        .route("/api/sessions", get(sessions))
+        .route("/api/sessions/{id}", delete(end_session))
+        .route("/api/app-codes", post(make_app_code))
+        .route("/api/app-codes/redeem", post(redeem_app_code))
         .route("/api/account/password", post(change_password))
         .route("/api/account/name", put(rename))
 }
@@ -143,6 +149,154 @@ async fn delete_app_password(
     }
     tracing::info!(user = %me.user.id, app_password = %id, "deleted an app password");
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+struct SessionView {
+    id: SessionId,
+    device_name: String,
+    /// "browser" or "app".
+    client: &'static str,
+    created_at: String,
+    last_used_at: String,
+    /// The session making this request.
+    current: bool,
+}
+
+impl SessionView {
+    fn new(session: Session, current: SessionId) -> Self {
+        Self {
+            current: session.id == current,
+            id: session.id,
+            device_name: session.device_name,
+            client: match session.client {
+                Client::Browser => "browser",
+                Client::App => "app",
+            },
+            created_at: session.created_at,
+            last_used_at: session.last_used_at,
+        }
+    }
+}
+
+/// `GET /api/sessions`: the browsers and apps the signed-in user is signed
+/// in on, most recently used first (decision 3).
+async fn sessions(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+) -> Result<Json<Vec<SessionView>>, ApiError> {
+    let sessions = state.identity.sessions(me.user.id).await?;
+    Ok(Json(
+        sessions
+            .into_iter()
+            .map(|session| SessionView::new(session, me.session.id))
+            .collect(),
+    ))
+}
+
+/// `DELETE /api/sessions/{id}`: signs out one of the signed-in user's
+/// browsers or apps. It stops working at once, and its live updates and
+/// syncing end.
+async fn end_session(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    Path(id): Path<SessionId>,
+) -> Result<StatusCode, ApiError> {
+    if !state
+        .identity
+        .acting_as(actor(&me))
+        .end_session(me.user.id, id)
+        .await?
+    {
+        return Err(ApiError::not_found());
+    }
+    tracing::info!(user = %me.user.id, session = %id, "signed out a device");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+struct MadeAppCode {
+    /// Shown once, in groups of four letters.
+    code: String,
+    expires_at: String,
+}
+
+/// `POST /api/app-codes`: makes a code that adds one of Accordion's apps
+/// for the signed-in user, replacing any code they made before. It works
+/// once, for 10 minutes. Adding a device is a sensitive action, so it needs
+/// a sign-in from the last 15 minutes, as for app passwords.
+async fn make_app_code(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+) -> Result<(StatusCode, Json<MadeAppCode>), ApiError> {
+    if !me.recently_authenticated {
+        return Err(ApiError::password_needed(
+            "For your security, enter your password again before you add an app.",
+        ));
+    }
+    let (code, expires_at) = state.identity.make_app_code(&me).await?;
+    tracing::info!(user = %me.user.id, "made a code to add an app");
+    Ok((
+        StatusCode::CREATED,
+        Json(MadeAppCode {
+            code: code.grouped(),
+            expires_at,
+        }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct RedeemAppCode {
+    code: String,
+    /// What the app calls the device, such as "Sam's laptop".
+    device_name: String,
+}
+
+#[derive(Serialize)]
+struct AppSignedIn {
+    /// The app's session token. Send it as `Authorization: Bearer <token>`,
+    /// and keep it in the system's keychain.
+    token: String,
+    session_id: SessionId,
+    user_id: UserId,
+    username: String,
+    display_name: String,
+}
+
+/// `POST /api/app-codes/redeem`: trades a code from **Apps and devices** for
+/// an app session. Nobody is signed in yet, since the code is the proof.
+async fn redeem_app_code(
+    State(state): State<AppState>,
+    connection: Connection,
+    Json(request): Json<RedeemAppCode>,
+) -> Result<Json<AppSignedIn>, ApiError> {
+    let from = connection.sign_in_from();
+    let identity = state
+        .identity
+        .acting_as(Actor::visitor(Via::App, from.address));
+    let Some((token, session)) = identity
+        .redeem_app_code(&request.code, &request.device_name)
+        .await?
+    else {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "That code doesn't work. It may have expired or been used already. Make a new one \
+             in Settings, under Apps and devices, then try again.",
+        ));
+    };
+    let user = state
+        .identity
+        .user(session.user_id)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
+    tracing::info!(user = %user.id, session = %session.id, "added an app with a code");
+    Ok(Json(AppSignedIn {
+        token: token.as_str().to_owned(),
+        session_id: session.id,
+        user_id: user.id,
+        username: user.username,
+        display_name: user.display_name,
+    }))
 }
 
 /// Checks the signed-in user's password, for changes that need it.

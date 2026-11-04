@@ -244,6 +244,107 @@ async fn an_app_password_opens_drive_over_webdav() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+/// A request from one of Accordion's apps, which sends no browser headers.
+fn app(method: &str, path: &str) -> axum::http::request::Builder {
+    Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::HOST, HOST)
+        .header(header::CONTENT_TYPE, "application/json")
+}
+
+#[tokio::test]
+async fn a_code_from_settings_signs_in_an_app() {
+    let server = start().await;
+    let cookie = server.sign_in().await;
+    let response = server
+        .send(
+            browser("POST", "/api/app-codes").header(header::COOKIE, &cookie),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let made = json(response).await;
+    let code = made["code"].as_str().unwrap().to_owned();
+    assert_eq!(code.len(), 14, "three groups of four");
+    assert!(made["expires_at"].is_string());
+
+    let response = server
+        .send(
+            app("POST", "/api/app-codes/redeem"),
+            json_body(json!({ "code": code, "device_name": "Alex's laptop" })),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let signed_in = json(response).await;
+    assert_eq!(signed_in["username"], "alex");
+    let token = signed_in["token"].as_str().unwrap().to_owned();
+
+    // The app's token works for Drive, and the app shows in the devices.
+    let response = server
+        .send(
+            app("GET", "/api/drive/sync/start")
+                .header(header::AUTHORIZATION, format!("Bearer {token}")),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(json(response).await["cursor"].is_string());
+
+    // It shows among the sessions, and signing it out stops its token.
+    let listed = json(
+        server
+            .send(
+                browser("GET", "/api/sessions").header(header::COOKIE, &cookie),
+                Body::empty(),
+            )
+            .await,
+    )
+    .await;
+    let laptop = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["device_name"] == "Alex's laptop")
+        .unwrap();
+    assert_eq!(laptop["client"], "app");
+    assert_eq!(laptop["current"], false);
+    let response = server
+        .send(
+            browser(
+                "DELETE",
+                &format!("/api/sessions/{}", laptop["id"].as_str().unwrap()),
+            )
+            .header(header::COOKIE, &cookie),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let response = server
+        .send(
+            app("GET", "/api/drive/sync/start")
+                .header(header::AUTHORIZATION, format!("Bearer {token}")),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // A code works once.
+    let response = server
+        .send(
+            app("POST", "/api/app-codes/redeem"),
+            json_body(json!({ "code": code, "device_name": "Someone else" })),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert!(
+        json(response).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("Apps and devices")
+    );
+}
+
 #[tokio::test]
 async fn confirming_the_password_needs_the_right_one() {
     let server = start().await;
