@@ -56,7 +56,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#4f16811ba2bad5e416da79c7cc653dcc85bb2247"
+source = "git+https://github.com/accordion-suite/accordion-gateway#47415a76de6d41c335ee7f0db6d62e3d91a95dbf"
 dependencies = [
  "axum",
  "base64 0.22.1",
