@@ -175,7 +175,8 @@ pub(crate) fn routes<'a>(pages: impl Iterator<Item = &'a str>) -> Router<AppStat
     for (from, to) in MOVED {
         router = router.route(from, get(move || async move { Redirect::permanent(to) }));
     }
-    for id in pages.chain(["settings"]) {
+    // `oauth` holds the page that signs in Accordion's apps (decision 3).
+    for id in pages.chain(["settings", "oauth"]) {
         router = router
             .route(&format!("/{id}"), get(page))
             .route(&format!("/{id}/"), get(page))

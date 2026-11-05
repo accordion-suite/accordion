@@ -548,3 +548,216 @@ async fn live_updates_need_signing_in_and_end_with_the_session() {
     .await;
     assert!(ended.is_ok(), "the stream is still open");
 }
+
+/// RFC 7636's example PKCE secret, and its challenge.
+const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+const CHALLENGE: &str = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+const REDIRECT: &str = "http://127.0.0.1:53412/callback";
+
+fn authorize_query(client_id: &str, redirect_uri: &str) -> String {
+    format!(
+        "response_type=code&client_id={client_id}&redirect_uri={}&code_challenge={CHALLENGE}\
+         &code_challenge_method=S256",
+        redirect_uri.replace(':', "%3A").replace('/', "%2F")
+    )
+}
+
+fn token_form(code: &str, verifier: &str) -> Body {
+    Body::from(format!(
+        "grant_type=authorization_code&code={code}&client_id=accordion-sync\
+         &redirect_uri={}&code_verifier={verifier}",
+        REDIRECT.replace(':', "%3A").replace('/', "%2F")
+    ))
+}
+
+#[tokio::test]
+async fn an_app_signs_in_through_the_browser() {
+    let server = start().await;
+
+    // The sign-in page is a page of the web app, which this test server
+    // doesn't have, so it says so.
+    let page = server
+        .send(
+            browser(
+                "GET",
+                &format!(
+                    "/oauth/authorize?{}",
+                    authorize_query("accordion-sync", REDIRECT)
+                ),
+            ),
+            Body::empty(),
+        )
+        .await;
+    let bytes = page.into_body().collect().await.unwrap().to_bytes();
+    assert!(String::from_utf8_lossy(&bytes).contains("doesn't have the web app"));
+
+    // The page checks the request once someone is signed in.
+    let check = format!(
+        "/api/oauth/check?{}",
+        authorize_query("accordion-sync", REDIRECT)
+    );
+    let response = server.send(browser("GET", &check), Body::empty()).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let cookie = server.sign_in().await;
+    let response = server
+        .send(
+            browser("GET", &check).header(header::COOKIE, &cookie),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // Requests from other apps, or for other addresses, never get a code.
+    for (client, redirect) in [
+        ("someone-else", REDIRECT),
+        ("accordion-sync", "https://evil.example/callback"),
+        ("accordion-sync", "http://localhost:53412/callback"),
+    ] {
+        let response = server
+            .send(
+                browser(
+                    "GET",
+                    &format!("/api/oauth/check?{}", authorize_query(client, redirect)),
+                )
+                .header(header::COOKIE, &cookie),
+                Body::empty(),
+            )
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "{client} {redirect}"
+        );
+        let response = server
+            .send(
+                browser("POST", "/api/oauth/approve").header(header::COOKIE, &cookie),
+                json_body(json!({
+                    "response_type": "code",
+                    "client_id": client,
+                    "redirect_uri": redirect,
+                    "code_challenge": CHALLENGE,
+                    "code_challenge_method": "S256",
+                    "device_name": "Alex's laptop",
+                })),
+            )
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "{client} {redirect}"
+        );
+    }
+
+    // Allowing the app sends the browser to it, with a code and its state.
+    let approve = || {
+        json_body(json!({
+            "response_type": "code",
+            "client_id": "accordion-sync",
+            "redirect_uri": REDIRECT,
+            "code_challenge": CHALLENGE,
+            "code_challenge_method": "S256",
+            "state": "xyz 1",
+            "device_name": "Alex's laptop",
+        }))
+    };
+    let response = server
+        .send(
+            browser("POST", "/api/oauth/approve").header(header::COOKIE, &cookie),
+            approve(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let redirect = json(response).await["redirect"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let rest = redirect
+        .strip_prefix(&format!("{REDIRECT}?code="))
+        .unwrap_or_else(|| panic!("{redirect}"));
+    let (code, state) = rest.split_once("&state=").unwrap();
+    assert_eq!(state, "xyz%201");
+
+    // The code needs the app's secret, and works once.
+    let token = |code: &str, verifier: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/oauth/token")
+            .header(header::HOST, HOST)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(token_form(code, verifier))
+            .unwrap()
+    };
+    let response = server
+        .app
+        .clone()
+        .oneshot(token(code, VERIFIER))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let signed_in = json(response).await;
+    assert_eq!(signed_in["token_type"], "Bearer");
+    assert_eq!(signed_in["username"], "alex");
+    let session = signed_in["access_token"].as_str().unwrap().to_owned();
+    let response = server
+        .send(
+            app("GET", "/api/drive/sync/start")
+                .header(header::AUTHORIZATION, format!("Bearer {session}")),
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = server
+        .app
+        .clone()
+        .oneshot(token(code, VERIFIER))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json(response).await["error"], "invalid_grant");
+
+    let response = server
+        .send(
+            browser("POST", "/api/oauth/approve").header(header::COOKIE, &cookie),
+            approve(),
+        )
+        .await;
+    let redirect = json(response).await["redirect"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let code = redirect
+        .split("code=")
+        .nth(1)
+        .unwrap()
+        .split('&')
+        .next()
+        .unwrap()
+        .to_owned();
+    let response = server
+        .app
+        .clone()
+        .oneshot(token(&code, &"a".repeat(43)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // It shows where Alex is signed in, as an app.
+    let listed = json(
+        server
+            .send(
+                browser("GET", "/api/sessions").header(header::COOKIE, &cookie),
+                Body::empty(),
+            )
+            .await,
+    )
+    .await;
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|session| session["device_name"] == "Alex's laptop" && session["client"] == "app"),
+        "{listed}"
+    );
+}

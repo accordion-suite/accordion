@@ -13,6 +13,7 @@ mod live;
 mod log;
 pub mod modules;
 pub mod network;
+mod oauth;
 mod origin;
 mod people;
 pub mod remote;
@@ -121,6 +122,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         .route("/api/session/confirm", post(session::confirm))
         .merge(home::routes())
         .merge(account::routes())
+        .merge(oauth::routes())
         .merge(log::account_routes())
         .merge(live::routes())
         .merge(remote::routes())

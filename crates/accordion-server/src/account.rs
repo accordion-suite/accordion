@@ -380,7 +380,7 @@ async fn redeem_app_code(
 
 /// Registers a new app's tunnel key. A problem doesn't stop the app being
 /// added, since it can still sync at home, so it's returned as a message.
-async fn app_tunnel(
+pub(crate) async fn app_tunnel(
     state: &AppState,
     session: &Session,
     key: &str,
