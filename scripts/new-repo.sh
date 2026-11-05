@@ -62,7 +62,8 @@ Next:
   1. Create an empty repo named $name at https://github.com/organizations/accordion-suite/repositories/new
      (don't add a README, license, or .gitignore).
   2. Push it:  git -C "$target" push -u origin main
-  3. Describe the repo in README.md.
+  3. Protect its main branch:  scripts/protect-main.sh $name
+  4. Describe the repo in README.md.
 
 EOF
 if [[ "$typescript" == yes ]]; then
