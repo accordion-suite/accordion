@@ -8,17 +8,20 @@
 
 use accordion_core::events::{Actor, Via};
 use accordion_core::identity::{self, AppPassword, AppPasswordUse, Client, Session};
+use accordion_gateway::tunnel::{Key, PublicKey};
 use accordion_module::auth::actor;
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::{AppPasswordId, SessionId, UserId};
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::header::{HOST, ORIGIN};
+use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::network::Connection;
+use crate::remote::AppTunnelView;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -216,33 +219,91 @@ async fn end_session(
 
 #[derive(Serialize)]
 struct MadeAppCode {
-    /// Shown once, in groups of four letters.
+    /// Shown once, in groups of four letters. Typing it works where the app
+    /// reaches the server directly, such as at home.
     code: String,
     expires_at: String,
+    /// With remote access on, the code with everything an app away from
+    /// home needs to reach the server, including a temporary tunnel key.
+    /// It's shown once, as a QR code and as text to copy.
+    setup: Option<String>,
+    /// The setup as a QR code, in SVG.
+    qr_code: Option<String>,
 }
 
 /// `POST /api/app-codes`: makes a code that adds one of Accordion's apps
 /// for the signed-in user, replacing any code they made before. It works
 /// once, for 10 minutes. Adding a device is a sensitive action, so it needs
 /// a sign-in from the last 15 minutes, as for app passwords.
+///
+/// With remote access on, the code also carries a temporary tunnel key
+/// (decision 23), which reaches only the address that redeems the code.
 async fn make_app_code(
     State(state): State<AppState>,
     Authenticated(me): Authenticated,
+    headers: HeaderMap,
 ) -> Result<(StatusCode, Json<MadeAppCode>), ApiError> {
     if !me.recently_authenticated {
         return Err(ApiError::password_needed(
             "For your security, enter your password again before you add an app.",
         ));
     }
-    let (code, expires_at) = state.identity.make_app_code(&me).await?;
-    tracing::info!(user = %me.user.id, "made a code to add an app");
+    let reach = state
+        .remote
+        .as_ref()
+        .and_then(|remote| remote.reachable().ok());
+    let key = reach.as_ref().map(|_| Key::generate());
+    let made = state
+        .identity
+        .make_app_code(&me, key.as_ref().map(|key| *key.public().as_bytes()))
+        .await?;
+    let setup = match (&reach, &key, made.tunnel_host) {
+        (Some(reach), Some(key), Some(host)) => {
+            Some(reach.code_setup(&origin_of(&headers), made.code.plain(), key, host))
+        }
+        _ => None,
+    };
+    let qr_code = setup
+        .as_deref()
+        .map(crate::remote::qr_svg)
+        .transpose()
+        .map_err(|err| {
+            tracing::error!(%err, "couldn't make an app code's QR code");
+            ApiError::server_problem()
+        })?;
+    tracing::info!(user = %me.user.id, tunnel = setup.is_some(), "made a code to add an app");
     Ok((
         StatusCode::CREATED,
         Json(MadeAppCode {
-            code: code.grouped(),
-            expires_at,
+            code: made.code.grouped(),
+            expires_at: made.expires_at,
+            setup,
+            qr_code,
         }),
     ))
+}
+
+/// The address the app should use for the server: the one the browser
+/// asking for the code used.
+fn origin_of(headers: &HeaderMap) -> String {
+    if let Some(origin) = headers.get(ORIGIN).and_then(|value| value.to_str().ok())
+        && origin != "null"
+    {
+        return origin.to_owned();
+    }
+    let host = headers
+        .get(HOST)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("localhost");
+    // A server with a name answers only to it, over HTTPS. One reached at
+    // an address is a development server, which serves plain HTTP.
+    let bare = host
+        .rsplit_once(':')
+        .filter(|(_, port)| port.parse::<u16>().is_ok())
+        .map_or(host, |(bare, _)| bare);
+    let bare = bare.trim_start_matches('[').trim_end_matches(']');
+    let unnamed = bare == "localhost" || bare.parse::<std::net::IpAddr>().is_ok();
+    format!("{}://{host}", if unnamed { "http" } else { "https" })
 }
 
 #[derive(Deserialize)]
@@ -250,6 +311,10 @@ struct RedeemAppCode {
     code: String,
     /// What the app calls the device, such as "Sam's laptop".
     device_name: String,
+    /// The app's own WireGuard public key, in base64, to register for its
+    /// new session.
+    #[serde(default)]
+    tunnel_key: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -261,6 +326,11 @@ struct AppSignedIn {
     user_id: UserId,
     username: String,
     display_name: String,
+    /// How the app reaches the server away from home, if it sent a tunnel
+    /// key and remote access is on.
+    tunnel: Option<AppTunnelView>,
+    /// Why it can't, if it sent a key.
+    tunnel_problem: Option<String>,
 }
 
 /// `POST /api/app-codes/redeem`: trades a code from **Apps and devices** for
@@ -290,13 +360,40 @@ async fn redeem_app_code(
         .await?
         .ok_or_else(ApiError::not_found)?;
     tracing::info!(user = %user.id, session = %session.id, "added an app with a code");
+    let (tunnel, tunnel_problem) = match request.tunnel_key {
+        None => (None, None),
+        Some(key) => match app_tunnel(&state, &session, &key).await {
+            Ok(tunnel) => (Some(tunnel), None),
+            Err(problem) => (None, Some(problem)),
+        },
+    };
     Ok(Json(AppSignedIn {
         token: token.as_str().to_owned(),
         session_id: session.id,
         user_id: user.id,
         username: user.username,
         display_name: user.display_name,
+        tunnel,
+        tunnel_problem,
     }))
+}
+
+/// Registers a new app's tunnel key. A problem doesn't stop the app being
+/// added, since it can still sync at home, so it's returned as a message.
+async fn app_tunnel(
+    state: &AppState,
+    session: &Session,
+    key: &str,
+) -> Result<AppTunnelView, String> {
+    let key = PublicKey::from_base64(key).map_err(|err| err.to_string())?;
+    let remote = state
+        .remote
+        .as_ref()
+        .ok_or("Remote access isn't available on this server.")?;
+    remote
+        .set_app_tunnel(&state.identity, session, key)
+        .await
+        .map_err(|err| err.message().to_owned())
 }
 
 /// Checks the signed-in user's password, for changes that need it.

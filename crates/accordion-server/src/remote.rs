@@ -6,8 +6,12 @@
 //! The admin's routes answer only on the home network, like the other admin
 //! APIs. Devices on the tunnel count as the home network. Each person adds
 //! and removes their own devices from anywhere they're signed in.
+//!
+//! Accordion's own apps register their own tunnel key for their session
+//! (decision 23), and a code that adds an app away from home carries a
+//! temporary key, which reaches only the address that redeems codes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, OnceLock};
@@ -17,7 +21,7 @@ use accordion_core::db::rusqlite::OptionalExtension;
 use accordion_core::db::{self, Database, Migration};
 use accordion_core::events::{Action, NewEvent};
 use accordion_core::identity::{
-    Identity, MAX_REMOTE_DEVICES, NewRemoteDevice, RemoteDevice, SignedIn,
+    Identity, MAX_REMOTE_DEVICES, NewRemoteDevice, RemoteDevice, Session, SignedIn,
 };
 use accordion_gateway::ServerName;
 use accordion_gateway::address::AddressSource;
@@ -33,9 +37,11 @@ use accordion_gateway::tunnel::{
 use accordion_module::auth::actor;
 use accordion_module::{ApiError, Authenticated};
 use accordion_types::{RemoteDeviceId, Role};
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::routing::{delete, get};
+use axum::extract::{Path, Request, State};
+use axum::http::{Method, StatusCode};
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, watch};
@@ -74,6 +80,13 @@ const CONNECTED_PRECISION: Duration = Duration::from_secs(10 * 60);
 /// Room for connections waiting for the gateway's servers.
 const WAITING_CONNECTIONS: usize = 64;
 
+/// How often the tunnel's keys are loaded again, so a code's temporary key
+/// stops working soon after the code expires.
+const PEERS_CHECK: Duration = Duration::from_secs(30);
+
+/// The only address a code's temporary key reaches.
+pub(crate) const REDEEM_PATH: &str = "/api/app-codes/redeem";
+
 /// The saved settings.
 #[derive(Clone, Debug, PartialEq)]
 struct Saved {
@@ -92,6 +105,9 @@ pub struct RemoteAccess {
     identity: Identity,
     saved: Arc<watch::Sender<Option<Saved>>>,
     running: Arc<OnceLock<Running>>,
+    /// The tunnel addresses of devices and apps, as opposed to codes'
+    /// temporary keys. Anything else on the tunnel may only redeem a code.
+    trusted: Arc<watch::Sender<HashSet<Ipv4Addr>>>,
 }
 
 /// What runs once the server serves its routes.
@@ -195,6 +211,7 @@ impl RemoteAccess {
             identity,
             saved: Arc::new(watch::channel(saved).0),
             running: Arc::default(),
+            trusted: Arc::new(watch::channel(HashSet::new()).0),
         })
     }
 
@@ -408,6 +425,156 @@ impl RemoteAccess {
                 .map_or(port, |mapping| mapping.external_port),
         )
     }
+
+    /// How an app reaches the server through the tunnel, while remote
+    /// access is on and the server knows its home address.
+    pub(crate) fn reachable(&self) -> Result<Reachable, ApiError> {
+        let unavailable = |message: &str| ApiError::new(StatusCode::CONFLICT, message);
+        let off = "Remote access is off. Ask your admin to turn it on.";
+        let (Some(running), Some(saved)) = (self.running.get(), self.saved.borrow().clone()) else {
+            return Err(unavailable(off));
+        };
+        if !saved.on {
+            return Err(unavailable(off));
+        }
+        let Some(home) = running.home.borrow().address() else {
+            return Err(unavailable(
+                "Accordion doesn't know the server's address on the home network, so it can't \
+                 set up a device. Ask your admin to check Server health.",
+            ));
+        };
+        Ok(Reachable {
+            port: self.endpoint_port(running).unwrap_or(saved.port),
+            network: saved.network,
+            server: saved.key.public(),
+            endpoint_host: running.endpoint.clone(),
+            home,
+        })
+    }
+
+    /// Registers the tunnel key of the app signed in as `session`, and says
+    /// how it reaches the server.
+    pub(crate) async fn set_app_tunnel(
+        &self,
+        identity: &Identity,
+        session: &Session,
+        public_key: PublicKey,
+    ) -> Result<AppTunnelView, ApiError> {
+        let reach = self.reachable()?;
+        let device = identity
+            .set_app_tunnel(
+                session,
+                *public_key.as_bytes(),
+                &reach.home.to_string(),
+                reach.port,
+            )
+            .await?;
+        Ok(AppTunnelView {
+            server_key: reach.server.to_base64(),
+            endpoint: reach.endpoint(),
+            address: reach.network.host(device.host).to_string(),
+            gateway: reach.network.server().to_string(),
+        })
+    }
+
+    /// Whether `address` is on the tunnel without being a device or an
+    /// app, so it's a code's temporary key.
+    fn temporary(&self, address: IpAddr) -> bool {
+        let IpAddr::V4(address) = address.to_canonical() else {
+            return false;
+        };
+        let Some(network) = self.saved.borrow().as_ref().map(|saved| saved.network) else {
+            return false;
+        };
+        Network::containing(address) == Some(network)
+            && address != network.server()
+            && !self.trusted.borrow().contains(&address)
+    }
+}
+
+/// How an app reaches the server through the tunnel.
+pub(crate) struct Reachable {
+    pub port: u16,
+    pub network: Network,
+    pub server: PublicKey,
+    /// Where apps find home, such as `k3x9q2wm7f.ourhome.dedyn.io`.
+    pub endpoint_host: String,
+    pub home: Ipv4Addr,
+}
+
+impl Reachable {
+    /// The endpoint with its port, such as `k3x9q2wm7f.ourhome.dedyn.io:51820`.
+    pub fn endpoint(&self) -> String {
+        if self.endpoint_host.contains(':') {
+            format!("[{}]:{}", self.endpoint_host, self.port)
+        } else {
+            format!("{}:{}", self.endpoint_host, self.port)
+        }
+    }
+
+    /// What a code carries for an app away from home: everything its
+    /// temporary tunnel needs, and the code. Apps read it from the QR code,
+    /// or from the text copied into them.
+    pub fn code_setup(&self, origin: &str, code: &str, key: &Key, host: u8) -> String {
+        format!(
+            "accordion:add?server={origin}&code={code}&key={key}&peer={peer}&endpoint={endpoint}\
+             &address={address}&gateway={gateway}",
+            origin = encode(origin),
+            key = encode(&key.to_base64()),
+            peer = encode(&self.server.to_base64()),
+            endpoint = encode(&self.endpoint()),
+            address = self.network.host(host),
+            gateway = self.network.server(),
+        )
+    }
+}
+
+/// Percent-encodes what isn't a letter, digit, or one of `-._~:/`.
+fn encode(text: &str) -> String {
+    let mut out = String::new();
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~:/".contains(&byte) {
+            out.push(char::from(byte));
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// What an app needs to reach the server through its own tunnel.
+#[derive(Serialize)]
+pub(crate) struct AppTunnelView {
+    /// The server's WireGuard public key, in base64.
+    server_key: String,
+    /// Where the app finds home, such as `k3x9q2wm7f.ourhome.dedyn.io:51820`.
+    endpoint: String,
+    /// The app's own address in the tunnel.
+    address: String,
+    /// The server's address in the tunnel, which the app connects to.
+    gateway: String,
+}
+
+/// Middleware that lets a code's temporary key reach only the address that
+/// redeems codes. Outside every other check, so nothing else sees it.
+pub async fn limit_temporary_keys(
+    State(remote): State<Option<RemoteAccess>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let temporary = remote.as_ref().is_some_and(|remote| {
+        crate::network::peer(request.extensions())
+            .is_some_and(|peer| remote.temporary(peer.remote.ip()))
+    });
+    if temporary && !(request.method() == Method::POST && request.uri().path() == REDEEM_PATH) {
+        return ApiError::new(
+            StatusCode::FORBIDDEN,
+            "This connection can only add an Accordion app. Finish adding the app, then try \
+             again.",
+        )
+        .into_response();
+    }
+    next.run(request).await
 }
 
 /// How remote access is doing, as of now.
@@ -474,6 +641,8 @@ impl Drive {
         home_check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut recorded: HashMap<PublicKey, SystemTime> = HashMap::new();
         let mut load_devices = true;
+        let mut peers_check = tokio::time::interval(PEERS_CHECK);
+        peers_check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             let settings = saved.borrow_and_update().clone();
             let on = settings.as_ref().filter(|saved| saved.on);
@@ -492,19 +661,35 @@ impl Drive {
             if load_devices {
                 load_devices = false;
                 devices.mark_unchanged();
-                match self.access.identity.connectable_remote_devices().await {
+                match self.access.identity.tunnel_peers().await {
                     Ok(list) => {
                         let network = settings.as_ref().map(|saved| saved.network);
                         let wanted: Vec<DevicePeer> = network
                             .map(|network| {
                                 list.iter()
-                                    .map(|device| DevicePeer {
-                                        public_key: PublicKey::from_bytes(device.public_key),
-                                        address: network.host(device.host),
+                                    .map(|peer| DevicePeer {
+                                        public_key: PublicKey::from_bytes(peer.public_key),
+                                        address: network.host(peer.host),
                                     })
                                     .collect()
                             })
                             .unwrap_or_default();
+                        // Before the tunnel lets anyone new in, so a new
+                        // device is trusted by the time it connects, and an
+                        // address a code takes over isn't.
+                        let trusted: HashSet<Ipv4Addr> = network
+                            .map(|network| {
+                                list.iter()
+                                    .filter(|peer| !peer.temporary)
+                                    .map(|peer| network.host(peer.host))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        self.access.trusted.send_if_modified(|current| {
+                            let changed = *current != trusted;
+                            *current = trusted;
+                            changed
+                        });
                         self.peers.send_if_modified(|peers| {
                             let changed = *peers != wanted;
                             *peers = wanted;
@@ -545,6 +730,7 @@ impl Drive {
                     load_devices = true;
                 }
                 Ok(()) = devices.changed() => load_devices = true,
+                _ = peers_check.tick() => load_devices = true,
                 Ok(()) = self.router.changed() => {}
                 _ = home_check.tick() => {
                     let home = Home::find(self.home_source);
@@ -592,6 +778,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/remote-devices", get(my_devices).post(add_device))
         .route("/api/remote-devices/{id}", delete(remove_mine))
+        .route("/api/app-tunnel", post(register_app_tunnel))
 }
 
 fn require_admin(user: &SignedIn) -> Result<(), ApiError> {
@@ -929,29 +1116,17 @@ async fn add_device(
     Json(request): Json<NewDevice>,
 ) -> Result<(StatusCode, Json<AddedDevice>), ApiError> {
     let remote = remote(&state)?;
-    let unavailable = |message: &str| ApiError::new(StatusCode::CONFLICT, message);
+    let reach = remote.reachable()?;
     let (Some(running), Some(saved)) = (remote.running.get(), remote.saved.borrow().clone()) else {
-        return Err(unavailable(
-            "Remote access is off. Ask your admin to turn it on.",
-        ));
+        return Err(ApiError::server_problem());
     };
-    if !saved.on {
-        return Err(unavailable(
-            "Remote access is off. Ask your admin to turn it on.",
-        ));
-    }
-    let Some(home) = running.home.borrow().address() else {
-        return Err(unavailable(
-            "Accordion doesn't know the server's address on the home network, so it can't \
-             set up a device. Ask your admin to check Server health.",
-        ));
-    };
+    let home = reach.home;
     if !me.recently_authenticated {
         return Err(ApiError::password_needed(
             "For your security, enter your password again before you add a device.",
         ));
     }
-    let port = remote.endpoint_port(running).unwrap_or(saved.port);
+    let port = reach.port;
     let key = Key::generate();
     let added = state
         .identity
@@ -1016,9 +1191,41 @@ async fn remove_mine(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+struct NewAppTunnel {
+    /// The app's WireGuard public key, in base64. The app made the key
+    /// pair, and its private key never leaves the device.
+    public_key: String,
+}
+
+/// `POST /api/app-tunnel`: registers the tunnel key of the Accordion app
+/// that's signed in, replacing any key it registered before, and says how
+/// it reaches the server. Apps call it whenever they start, so their setup
+/// follows the server's address and port.
+async fn register_app_tunnel(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    Json(request): Json<NewAppTunnel>,
+) -> Result<Json<AppTunnelView>, ApiError> {
+    if me.session.client != accordion_core::identity::Client::App {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "Only Accordion's apps can register a tunnel key. To reach Accordion from a \
+             browser away from home, add a device under Apps and devices.",
+        ));
+    }
+    let key = PublicKey::from_base64(&request.public_key)
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
+    let tunnel = remote(&state)?
+        .set_app_tunnel(&state.identity, &me.session, key)
+        .await?;
+    tracing::info!(user = %me.user.id, session = %me.session.id, "registered an app's tunnel key");
+    Ok(Json(tunnel))
+}
+
 /// A QR code of `text`, in SVG, black on white so every camera reads it in
 /// either theme.
-fn qr_svg(text: &str) -> Result<String, qrcode::types::QrError> {
+pub(crate) fn qr_svg(text: &str) -> Result<String, qrcode::types::QrError> {
     use qrcode::render::svg;
     let code = qrcode::QrCode::with_error_correction_level(text, qrcode::EcLevel::L)?;
     Ok(code

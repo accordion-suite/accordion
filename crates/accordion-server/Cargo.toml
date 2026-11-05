@@ -39,6 +39,9 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
+# The sync client, to connect through its tunnel to real servers in the
+# tunnel's tests (decision 23).
+accordion-sync = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
 ring = "0.17.14"
 tempfile = "3.27.0"

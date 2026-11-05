@@ -106,6 +106,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
         Site::Named { origin, .. } => Some(Arc::<str>::from(origin.as_str())),
     };
     let web_app_pages = state.modules.in_web_app();
+    let remote_access = state.remote.clone();
     // Module routes sit inside the same host and cross-site checks as the
     // server's own (decision 7).
     let router = state
@@ -146,6 +147,12 @@ pub fn router(state: AppState, site: &Site) -> Router {
             origin::reject_cross_origin,
         ))
         .with_state(state);
+    // Outside the checks below, so a code's temporary tunnel key reaches
+    // nothing but the address that redeems the code (decision 23).
+    let router = router.layer(from_fn_with_state(
+        remote_access,
+        remote::limit_temporary_keys,
+    ));
     let router = match site {
         Site::Unnamed => router,
         // Outside every other check, so requests for other names never reach
