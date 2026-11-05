@@ -27,5 +27,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [21](0021-remote-access.md) | Remote access | Accepted |
 | [22](0022-link-sharing.md) | Link sharing | Accepted |
 | [23](0023-sync.md) | How devices sync files | Accepted |
+| [24](0024-signing-the-apps.md) | How the Windows and macOS apps are signed | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
