@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#9885007fcf9641ff5cc5b6f07daafcec83f0d9eb"
+source = "git+https://github.com/accordion-suite/accordion-core#89ed7d178462a38747f8e205c52af67fa74d203d"
 dependencies = [
  "accordion-sandbox",
  "accordion-types",
@@ -32,7 +32,7 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#b0344be22c6348d52bf4f28b86a5a742363e2d87"
+source = "git+https://github.com/accordion-suite/accordion-drive#ee72e0c98ce9bb0b645578083adbf476843caab1"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -87,7 +87,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#9885007fcf9641ff5cc5b6f07daafcec83f0d9eb"
+source = "git+https://github.com/accordion-suite/accordion-core#89ed7d178462a38747f8e205c52af67fa74d203d"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -101,7 +101,7 @@ dependencies = [
 [[package]]
 name = "accordion-sandbox"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#9885007fcf9641ff5cc5b6f07daafcec83f0d9eb"
+source = "git+https://github.com/accordion-suite/accordion-core#89ed7d178462a38747f8e205c52af67fa74d203d"
 dependencies = [
  "landlock",
  "libc",
@@ -147,7 +147,7 @@ dependencies = [
 [[package]]
 name = "accordion-sync"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#9885007fcf9641ff5cc5b6f07daafcec83f0d9eb"
+source = "git+https://github.com/accordion-suite/accordion-core#89ed7d178462a38747f8e205c52af67fa74d203d"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -175,7 +175,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#9885007fcf9641ff5cc5b6f07daafcec83f0d9eb"
+source = "git+https://github.com/accordion-suite/accordion-core#89ed7d178462a38747f8e205c52af67fa74d203d"
 dependencies = [
  "serde",
  "uuid",
