@@ -18,6 +18,7 @@ mod origin;
 mod people;
 pub mod remote;
 mod requests;
+mod retention;
 mod session;
 pub mod setup;
 pub mod updates;
@@ -139,6 +140,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(remote::admin_routes())
                 .merge(link_sharing::admin_routes())
                 .merge(log::admin_routes())
+                .merge(retention::admin_routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,

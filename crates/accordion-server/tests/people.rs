@@ -889,3 +889,44 @@ async fn everyone_signed_in_can_find_people_to_share_with() {
     let (status, _) = send(&server.away, "GET", "/api/directory", None, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn admins_choose_how_long_trash_and_versions_are_kept() {
+    let server = start().await;
+    let sam = server.add(&server.owner, "sam", "user").await;
+    let path = "/api/admin/storage/retention";
+
+    let (status, kept) = server.send("GET", path, Some(&server.owner), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(kept, json!({ "trash_days": 30, "version_days": 30 }));
+
+    let chosen = json!({ "trash_days": 90, "version_days": 7 });
+    let (status, _) = server
+        .send("PUT", path, Some(&sam), Some(chosen.clone()))
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, body) = server
+        .send(
+            "PUT",
+            path,
+            Some(&server.owner),
+            Some(json!({ "trash_days": 3, "version_days": 7 })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(error(&body).contains("7, 30, 90, or 365 days"));
+
+    let (status, _) = server
+        .send("PUT", path, Some(&server.owner), Some(chosen.clone()))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, kept) = server.send("GET", path, Some(&server.owner), None).await;
+    assert_eq!(kept, chosen);
+    assert_eq!(
+        server.storage.retention().await.unwrap(),
+        accordion_core::storage::Retention {
+            trash_days: 90,
+            version_days: 7
+        }
+    );
+}
