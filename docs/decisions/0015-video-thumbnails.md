@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** November 1, 2026
 - **Updated:** November 1, 2026, while building it: ffprobe's audio decoders, small videos, leaving ffmpeg out, and how servers get it
+- **Partly replaced:** November 9, 2026, by [decision 26](0026-a-thumbnail-and-preview-for-every-file.md), which drops the rule of only the formats and codecs families have
 
 ## Context
 

@@ -29,5 +29,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [23](0023-sync.md) | How devices sync files | Accepted |
 | [24](0024-signing-the-apps.md) | How the Windows and macOS apps are signed | Accepted |
 | [25](0025-the-browser-away-from-home.md) | The browser away from home | Accepted |
+| [26](0026-a-thumbnail-and-preview-for-every-file.md) | A thumbnail and a preview for every file | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
