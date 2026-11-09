@@ -625,8 +625,8 @@ fn thumbnails_check(status: &ThumbnailStatus) -> Check {
                 if status.failed == 1 { "it shows" } else { "they show" }
             ));
         }
-        // Not warnings: ffmpeg and LibreOffice are optional, and an admin
-        // may leave them out.
+        // Not warnings: ffmpeg, LibreOffice, LibRaw, librsvg, and djvulibre
+        // are optional, and an admin may leave them out.
         if let Some(videos) = &status.videos {
             summary.push_str(&format!(" Videos show an icon instead, because {videos}"));
         }
@@ -634,6 +634,9 @@ fn thumbnails_check(status: &ThumbnailStatus) -> Check {
             summary.push_str(&format!(
                 " Office documents show an icon instead, because {documents}"
             ));
+        }
+        if let Some(pictures) = &status.pictures {
+            summary.push_str(&format!(" {pictures}"));
         }
         (Level::Ok, summary)
     };
@@ -1355,6 +1358,16 @@ mod tests {
             check.summary,
             "Every file that can have a thumbnail has one. Office documents show an icon \
              instead, because LibreOffice isn't installed."
+        );
+
+        let check = thumbnails_check(&ThumbnailStatus {
+            pictures: Some("DjVu books show an icon instead.".into()),
+            ..ThumbnailStatus::default()
+        });
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Every file that can have a thumbnail has one. DjVu books show an icon instead."
         );
     }
 
