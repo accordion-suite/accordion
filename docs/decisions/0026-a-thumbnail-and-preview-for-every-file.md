@@ -36,7 +36,7 @@ A browser can't show most of these formats, so a preview means Accordion convert
   | `.prc` | Mobipocket e-books (E-books) | Psion voice notes |
   | `.paf` | Personal Ancestral File family trees (no type yet) | Ensoniq PARIS audio |
   | `.hdr` | Radiance HDR pictures (Photos) | Science data headers |
-  | `.pes` | Brother embroidery patterns (no type yet) | |
+  | `.pes` | Brother embroidery patterns (Design files) | |
 
   Where the most common use isn't clear, the extension keeps the generic icon until someone reports what their files are.
 - **The contents can overrule the name** when the server knows better. A `.ts` file with a video thumbnail is a video, and one with a text thumbnail is TypeScript. The web app already does this for the viewer.
@@ -47,7 +47,7 @@ A browser can't show most of these formats, so a preview means Accordion convert
   | Code | `.js`, `.py`, `.rs`, `.sln`, `.sh`, `.bat` |
   | Fonts | `.ttf`, `.otf`, `.woff2`, `.pfm` |
   | E-books | `.epub`, `.mobi`, `.azw3`, `.fb2` |
-  | Design files | `.psd`, `.ai`, `.xcf`, `.sketch` |
+  | Design files | `.psd`, `.ai`, `.xcf`, `.sketch`, and embroidery patterns such as `.pes` |
 
 - **The server's and the web app's lists become one list.** Today they're two copies kept in step by hand. The web app gets the list from the server instead, once when it starts.
 
@@ -61,11 +61,15 @@ The worker gains these, each in the sandbox with only the reader it needs:
 | Camera raw (Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, Samsung) | LibRaw (`libraw-bin`) | The full-size JPEG preview the camera embeds, which libvips then shrinks. Nearly every raw file has one. |
 | SVG | librsvg (`librsvg2-bin`) | Drawn as a picture. librsvg never runs an SVG's scripts. |
 | DjVu | djvulibre (`djvulibre-bin`) | The first page |
+| Radiance HDR and FITS | libvips | Only the one loader for that format, named by the worker. libvips doesn't trust these loaders with hostile files, so it blocks them by default, but nothing else reads these formats, and the sandbox contains them as it does ffmpeg's older decoders. |
+| MNG that starts with a PNG | libvips | The PNG picture, whose chunks MNG keeps as they are. The worker only finds where they start and end. |
 | Songs with cover art | ffmpeg | The picture embedded in MP3, M4A, and FLAC files |
 | Windows TV recordings, MXF, RealMedia | ffmpeg | A frame, as for other video |
 | Fonts | FreeType, through ffmpeg's `drawtext` | "Aa" and a line of sample text in the font |
 
-Formats with no decoder, such as MNG, keep their icon.
+Formats with no decoder, such as MNG that starts with a JPEG, keep their icon. So do embroidery patterns for now: no packaged program reads them, so a thumbnail would need a stitch reader of Accordion's own.
+
+HEIC files go up to 64 megapixels, from decision 14's 24, since a 51-megapixel HEIC took about 540 MB, within a worker's 1 GB. AVIF stays at 24 until its decoder is measured.
 
 ## Previews
 
@@ -75,6 +79,7 @@ A preview is a copy for the viewer. The file itself never changes:
 - **Downloads, sync, link sharing, export, and backups always use the original.** Only the viewer shows or plays the preview.
 - **Previews are named by the hash of the contents they show,** as thumbnails are, so each version has its own and copies share one.
 - **Previews are cache.** Backups leave them out, and a removed one is made again the next time someone opens the file.
+- **A thumbnail made again gets a new address.** Browsers keep thumbnails for a year, so the address names the thumbnail's version as well as the contents. A better thumbnail from a newer worker shows at once, instead of the one the browser kept.
 
 The worker makes a preview after the thumbnail, in the same sandbox, and keeps it in `cache/previews/`:
 
@@ -150,7 +155,7 @@ Option C can come later if waiting turns out to matter more than expected.
 
 - **Every new reader runs in the sandbox** with decision 14's limits, except video conversion, which gets more time (up to an hour), since a long video takes minutes.
 - **ffmpeg is still told the one format to read** and the decoders it may use. The lists grow from decision 15's, but each file still reaches only one demuxer.
-- **Older decoders have had more security bugs,** especially JPEG 2000, EXR, Photoshop, and the Windows Media codecs. The sandbox contains a compromised one: it can't read other files, write anything, or reach the network.
+- **Older decoders have had more security bugs,** especially JPEG 2000, EXR, Photoshop, FITS, and the Windows Media codecs. The sandbox contains a compromised one: it can't read other files, write anything, or reach the network.
 
 ## Without the tools
 
