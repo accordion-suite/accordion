@@ -35,6 +35,9 @@ A browser can't show most of these formats, so a preview means Accordion convert
   | `.pfm` | Windows printer font metrics (Fonts) | Portable FloatMap pictures |
   | `.prc` | Mobipocket e-books (E-books) | Psion voice notes |
   | `.paf` | Personal Ancestral File family trees (no type yet) | Ensoniq PARIS audio |
+  | `.ima` | Floppy disk images | IMA ADPCM audio |
+  | `.wve` | Wondershare video editor projects | Psion voice notes |
+  | `.vox` | Dialogic telephone audio (Audio) | MagicaVoxel 3D models |
   | `.hdr` | Radiance HDR pictures (Photos) | Science data headers |
   | `.pes` | Brother embroidery patterns (Design files) | |
 
@@ -63,11 +66,11 @@ The worker gains these, each in the sandbox with only the reader it needs:
 | DjVu | djvulibre (`djvulibre-bin`) | The first page |
 | Radiance HDR and FITS | libvips | Only the one loader for that format, named by the worker. libvips doesn't trust these loaders with hostile files, so it blocks them by default, but nothing else reads these formats, and the sandbox contains them as it does ffmpeg's older decoders. |
 | MNG that starts with a PNG | libvips | The PNG picture, whose chunks MNG keeps as they are. The worker only finds where they start and end. |
-| Songs with cover art | ffmpeg | The picture embedded in MP3, M4A, and FLAC files |
+| Songs with cover art | ffmpeg | The picture embedded in the song, as MP3, M4A, FLAC, WMA, Matroska, and other formats keep it. ffprobe first says whether there is one, so a song without cover art keeps its icon. |
 | Windows TV recordings, MXF, RealMedia | ffmpeg | A frame, as for other video |
 | Fonts | FreeType, through ffmpeg's `drawtext` | "Aa" and a line of sample text in the font |
 
-Formats with no decoder, such as MNG that starts with a JPEG, keep their icon. So do embroidery patterns for now: no packaged program reads them, so a thumbnail would need a stitch reader of Accordion's own.
+Formats with no decoder, such as MNG that starts with a JPEG, keep their icon. So do MIDI files, which need a synthesizer to play. So do embroidery patterns for now: no packaged program reads them, so a thumbnail would need a stitch reader of Accordion's own.
 
 HEIC files go up to 64 megapixels, from decision 14's 24, since a 51-megapixel HEIC took about 540 MB, within a worker's 1 GB. AVIF stays at 24 until its decoder is measured.
 
@@ -75,7 +78,7 @@ HEIC files go up to 64 megapixels, from decision 14's 24, since a 51-megapixel H
 
 A preview is a copy for the viewer. The file itself never changes:
 
-- **The worker only reads the file.** The sandbox lets it write nothing, so it sends the preview back on its output, and the server keeps it.
+- **The worker only reads the file.** The sandbox lets it write only in an empty scratch folder, or nowhere, so it sends the preview back on its output or leaves it in that folder, and the server keeps it.
 - **Downloads, sync, link sharing, export, and backups always use the original.** Only the viewer shows or plays the preview.
 - **Previews are named by the hash of the contents they show,** as thumbnails are, so each version has its own and copies share one.
 - **Previews are cache.** Backups leave them out, and a removed one is made again the next time someone opens the file.
@@ -88,7 +91,8 @@ The worker makes a preview after the thumbnail, in the same sandbox, and keeps i
 | Pictures the browser can't show | A WebP, at most 2560 pixels on its longer side |
 | SVG | A WebP, drawn as above, so an SVG's scripts never reach the browser |
 | DjVu, Apple Pages, Numbers, and Keynote | A PDF of the first 50 pages, as decision 17 does for Office documents |
-| Audio the browser can't play | AAC in MP4, at 128 kbit/s, which every browser plays |
+| Audio the browser can't play | AAC in MP4, at 128 kbit/s and at most stereo, which every browser plays. ffmpeg reads each format with only its own demuxer, and tracker music (`.mod`, `.xm`, `.s3m`, and `.it`) through libopenmpt. The worker decides by the codec, not the name, so Apple Lossless in an M4A and MP2 named as an MP3 are converted too. Sound over 3 hours isn't converted. |
+| Older sound formats only SoX reads: CD audio (`.cdda`), CVSD (`.cvsd`, `.cvs`, `.cvu`, `.dvms`, and `.vms`), raw 8-bit sound (`.fssd` and `.sou`), Grandstream ringtones (`.gsrt`), Sounder and SoundTool (`.sndr` and `.sndt`), Yamaha TX16W (`.txw`), Ensoniq PARIS (`.paf` and `.fap`), SampleVision (`.smp`), Psion voice notes (`.wve`), HTK speech (`.htk`), Dialogic telephone sound (`.vox`), and Sound Designer II (`.sd2`) | The same AAC. SoX (`sox`) reads each with only its own reader and writes WAV to the worker's scratch folder, which ffmpeg converts. Formats with a signature are known by their first bytes, since SoundTool files are often named `.snd`, TX16W sounds `.w01`, and other programs use `.paf`, `.smp`, and `.wve`. Drive calls such a file audio once its sound is converted. Formats without a header play at the rate SoX assumes for the format, which may not be the rate they were made at. Sound Designer II keeps its rate in a Mac resource fork, which an upload leaves behind, so it plays as 16-bit stereo at 44.1 kHz. These formats can't hold cover art, so they keep their icon in the grid. |
 | Video in a container the browser can't open, with codecs it can play | The same video and audio, repackaged as MP4 without re-encoding. Fast, and the picture is unchanged. |
 | Video with audio the browser can't play, such as AC-3 from a camcorder | The video repackaged, and only the audio converted |
 | Video with codecs the browser can't play, such as Windows Media or MPEG-2 | Converted to H.264 and AAC, at most 1080p (see the options below) |
@@ -153,13 +157,14 @@ Option C can come later if waiting turns out to matter more than expected.
 
 ## Security
 
-- **Every new reader runs in the sandbox** with decision 14's limits, except video conversion, which gets more time (up to an hour), since a long video takes minutes.
+- **Every new reader runs in the sandbox** with decision 14's limits, except conversions, which get more time, since a long file takes minutes: up to 15 minutes of processor time for audio, and up to an hour for video.
 - **ffmpeg is still told the one format to read** and the decoders it may use. The lists grow from decision 15's, but each file still reaches only one demuxer.
-- **Older decoders have had more security bugs,** especially JPEG 2000, EXR, Photoshop, FITS, and the Windows Media codecs. The sandbox contains a compromised one: it can't read other files, write anything, or reach the network.
+- **SoX is told the one format to read, too.** It reads the stored file by its full path, which never starts with `|` or an address, so SoX never takes it for a command to run or a file to download.
+- **Older decoders have had more security bugs,** especially JPEG 2000, EXR, Photoshop, FITS, the Windows Media codecs, and SoX's format readers. The sandbox contains a compromised one: it can't read other files, write anywhere but its own empty scratch folder, or reach the network.
 
 ## Without the tools
 
-- **libraw-bin, librsvg2-bin, and djvulibre-bin are recommended packages,** like ffmpeg. Removing one leaves its formats with an icon and a download, and **Server health** says so without a warning.
+- **libraw-bin, librsvg2-bin, djvulibre-bin, and sox are recommended packages,** like ffmpeg. Removing one leaves its formats with an icon and a download, and **Server health** says so without a warning.
 
 ## Steps
 
