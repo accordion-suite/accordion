@@ -658,12 +658,14 @@ pub(crate) const SETUP_CSS: &str = include_str!("setup/setup.css");
 /// opens before the web app is there, so the server keeps its own.
 pub(crate) const ICON_SVG: &str = include_str!("setup/icon.svg");
 
-/// Scripts, styles, frames, and videos come only from the server itself, and
-/// no other site can show these pages in a frame. Drive's web pages show
-/// PDFs in a frame, in the browser's own PDF viewer, and play videos.
+/// Scripts, styles, frames, videos, and fonts come only from the server
+/// itself, and no other site can show these pages in a frame. Drive's web
+/// pages show PDFs in a frame, in the browser's own PDF viewer, play videos,
+/// and draw sample text in a stored font.
 pub(crate) const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'none'; script-src 'self'; \
-     style-src 'self'; connect-src 'self'; img-src 'self'; media-src 'self'; frame-src 'self'; \
-     manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+     style-src 'self'; connect-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; \
+     frame-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; \
+     base-uri 'none'";
 
 pub(crate) fn asset(body: &'static str, content_type: &'static str) -> Response {
     (
