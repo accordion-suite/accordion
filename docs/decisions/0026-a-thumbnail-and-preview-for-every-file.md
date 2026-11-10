@@ -69,8 +69,9 @@ The worker gains these, each in the sandbox with only the reader it needs:
 | Songs with cover art | ffmpeg | The picture embedded in the song, as MP3, M4A, FLAC, WMA, Matroska, and other formats keep it. ffprobe first says whether there is one, so a song without cover art keeps its icon. |
 | Windows TV recordings, MXF, RealMedia | ffmpeg | A frame, as for other video |
 | Fonts | FreeType, through ffmpeg's `drawtext` | "Aa" and a line of sample text in the font |
+| E-books: EPUB (`.epub`, `.kepub`, and `.ibooks`), Mobipocket and Kindle (`.mobi`, `.azw`, `.azw3`, and `.prc`), and FictionBook (`.fb2`) | Accordion's own reader | The cover the book keeps, which libvips then shrinks. The reader runs in the sandbox as `<server> book`, as the reader for Office files' text does. It passes on only a JPEG, PNG, GIF, or WebP cover. A book without one keeps its icon. |
 
-Formats with no decoder, such as MNG that starts with a JPEG, keep their icon. So do MIDI files, which need a synthesizer to play. So do embroidery patterns for now: no packaged program reads them, so a thumbnail would need a stitch reader of Accordion's own.
+Formats with no decoder, such as MNG that starts with a JPEG, keep their icon. So do Kindle's newer KFX books, Microsoft Reader (`.lit`), and Sony's BBeB (`.lrf`) e-books. So do MIDI files, which need a synthesizer to play. So do embroidery patterns for now: no packaged program reads them, so a thumbnail would need a stitch reader of Accordion's own.
 
 HEIC files go up to 64 megapixels, from decision 14's 24, since a 51-megapixel HEIC took about 540 MB, within a worker's 1 GB. AVIF stays at 24 until its decoder is measured.
 
@@ -97,6 +98,7 @@ The worker makes a preview after the thumbnail, in the same sandbox, and keeps i
 | Video with audio the browser can't play, such as AC-3 from a camcorder | The video repackaged, and only the audio converted: to AAC in MP4, or Opus in WebM |
 | Video with codecs the browser can't play, such as Windows Media, MPEG-2, DivX, or HEVC | Converted to H.264 and AAC, at most 1080p on the longer side and 60 frames a second, deinterlaced, and with HDR turned into ordinary colors (see the options below) |
 | Fonts | A page of sample text in the font, drawn in the browser from the font file itself |
+| E-books | The cover beside the book's title, authors, and description, and its table of contents, which the viewer and the book's link page show. The reader keeps them as plain text, at most 500 entries in the table of contents and 5,000 characters of description, so a book's HTML and scripts never reach the browser. Kindle books keep their table of contents inside their compressed text, so theirs show the rest. Reading the whole book in Drive may come later. |
 
 On this x86 test PC, repackaging a 3-minute MKV took 3 seconds, and converting a minute of 960×400 Windows Media video to H.264 took 2.5 seconds. Both need measuring on the Minimum tier, such as a Raspberry Pi 5, and with a hardware encoder.
 
@@ -159,6 +161,7 @@ Option C can come later if waiting turns out to matter more than expected.
 
 - **Every new reader runs in the sandbox** with decision 14's limits, except conversions, which get more time, since a long file takes minutes: up to 15 minutes of processor time for audio, 30 minutes for repackaging a video, and 6 hours for converting one, since a feature film takes hours on a small server. A conversion uses at most 4 threads for decoding and 4 for x264, which keeps a 4K HDR phone video at about 850 MB, within its 1.5 GB.
 - **ffmpeg is still told the one format to read** and the decoders it may use. The lists grow from decision 15's, but each file still reaches only one demuxer.
+- **Accordion's e-book reader is Rust, with no unsafe code of its own,** and runs in the sandbox like the others. It reads at most 16 MB of each part of an EPUB, so a small file that expands to a huge one stops there, 32 MB of a cover, and 64 MB of a FictionBook.
 - **SoX is told the one format to read, too.** It reads the stored file by its full path, which never starts with `|` or an address, so SoX never takes it for a command to run or a file to download.
 - **Older decoders have had more security bugs,** especially JPEG 2000, EXR, Photoshop, FITS, the Windows Media codecs, and SoX's format readers. The sandbox contains a compromised one: it can't read other files, write anywhere but its own empty scratch folder, or reach the network.
 

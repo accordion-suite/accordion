@@ -13,7 +13,7 @@ use accordion_core::identity::{AppPasswords, Identity, NewUser};
 use accordion_core::live::Live;
 use accordion_core::storage::Storage;
 use accordion_core::texts::{self, Texts};
-use accordion_core::thumbnails::{Thumbnails, Tools};
+use accordion_core::thumbnails::{self, Thumbnails, Tools};
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::{Provider, ProviderKind};
@@ -104,6 +104,12 @@ fn main() -> ExitCode {
         // Reads an Office file's text, inside the sandbox (decision 20).
         Some(command) if command == texts::office::COMMAND => {
             let code = texts::office::main(args, texts::MAX_TEXT);
+            return ExitCode::from(u8::try_from(code).unwrap_or(1));
+        }
+        // Reads an e-book's cover and details, inside the sandbox (decision
+        // 26).
+        Some(command) if command == thumbnails::book::COMMAND => {
+            let code = thumbnails::book::main(args);
             return ExitCode::from(u8::try_from(code).unwrap_or(1));
         }
         _ => {}
