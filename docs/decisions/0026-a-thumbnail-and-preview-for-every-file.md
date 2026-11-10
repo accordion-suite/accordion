@@ -93,9 +93,9 @@ The worker makes a preview after the thumbnail, in the same sandbox, and keeps i
 | DjVu, Apple Pages, Numbers, and Keynote | A PDF of the first 50 pages, as decision 17 does for Office documents |
 | Audio the browser can't play | AAC in MP4, at 128 kbit/s and at most stereo, which every browser plays. ffmpeg reads each format with only its own demuxer, and tracker music (`.mod`, `.xm`, `.s3m`, and `.it`) through libopenmpt. The worker decides by the codec, not the name, so Apple Lossless in an M4A and MP2 named as an MP3 are converted too. Sound over 3 hours isn't converted. |
 | Older sound formats only SoX reads: CD audio (`.cdda`), CVSD (`.cvsd`, `.cvs`, `.cvu`, `.dvms`, and `.vms`), raw 8-bit sound (`.fssd` and `.sou`), Grandstream ringtones (`.gsrt`), Sounder and SoundTool (`.sndr` and `.sndt`), Yamaha TX16W (`.txw`), Ensoniq PARIS (`.paf` and `.fap`), SampleVision (`.smp`), Psion voice notes (`.wve`), HTK speech (`.htk`), Dialogic telephone sound (`.vox`), and Sound Designer II (`.sd2`) | The same AAC. SoX (`sox`) reads each with only its own reader and writes WAV to the worker's scratch folder, which ffmpeg converts. Formats with a signature are known by their first bytes, since SoundTool files are often named `.snd`, TX16W sounds `.w01`, and other programs use `.paf`, `.smp`, and `.wve`. Drive calls such a file audio once its sound is converted. Formats without a header play at the rate SoX assumes for the format, which may not be the rate they were made at. Sound Designer II keeps its rate in a Mac resource fork, which an upload leaves behind, so it plays as 16-bit stereo at 44.1 kHz. These formats can't hold cover art, so they keep their icon in the grid. |
-| Video in a container the browser can't open, with codecs it can play | The same video and audio, repackaged as MP4 without re-encoding. Fast, and the picture is unchanged. |
-| Video with audio the browser can't play, such as AC-3 from a camcorder | The video repackaged, and only the audio converted |
-| Video with codecs the browser can't play, such as Windows Media or MPEG-2 | Converted to H.264 and AAC, at most 1080p (see the options below) |
+| Video in a container the browser can't open, with codecs it can play | The same video and audio, repackaged without re-encoding: H.264 as MP4, and VP8, VP9, and AV1 as WebM. Fast, and the picture is unchanged. A file whose picture can't be copied, such as H.264 in some older AVI files, is converted instead. |
+| Video with audio the browser can't play, such as AC-3 from a camcorder | The video repackaged, and only the audio converted: to AAC in MP4, or Opus in WebM |
+| Video with codecs the browser can't play, such as Windows Media, MPEG-2, DivX, or HEVC | Converted to H.264 and AAC, at most 1080p on the longer side and 60 frames a second, deinterlaced, and with HDR turned into ordinary colors (see the options below) |
 | Fonts | A page of sample text in the font, drawn in the browser from the font file itself |
 
 On this x86 test PC, repackaging a 3-minute MKV took 3 seconds, and converting a minute of 960×400 Windows Media video to H.264 took 2.5 seconds. Both need measuring on the Minimum tier, such as a Raspberry Pi 5, and with a hardware encoder.
@@ -144,20 +144,20 @@ Cons:
 
 - **Option A on a server with a hardware video encoder, or 6 or more cores** (the Small team tier and up). Conversions run at low priority, one at a time, so people using the server don't notice.
 - **Option B on smaller servers,** such as the Minimum and Recommended tiers.
-- **Settings, under Storage,** has **Convert videos for playback** with **After upload**, **When first opened**, and **Never**. The default comes from the rule above, and the page says why it was chosen.
-- **A hardware encoder is used when the server has one.** ffmpeg finds it, and falls back to x264 when it fails. The sandbox then allows the GPU's render device (`/dev/dri/renderD*` or NVIDIA's devices), and nothing else new. That adds the GPU driver to what a crafted video can reach, so the encoder only ever reads frames ffmpeg has already decoded in software, never the file itself.
+- **Settings, under Previews,** has **Convert videos for playback** with **After upload**, **When first opened**, and **Never**. The default comes from the rule above, and the page says why it was chosen. Choosing the recommended one follows the server's hardware, so it changes if the hardware does.
+- **A hardware encoder is used when the server has one** (planned for step 6, which can test one; until then every conversion uses x264, and the rule counts only cores). ffmpeg finds it, and falls back to x264 when it fails. The sandbox then allows the GPU's render device (`/dev/dri/renderD*` or NVIDIA's devices), and nothing else new. That adds the GPU driver to what a crafted video can reach, so the encoder only ever reads frames ffmpeg has already decoded in software, never the file itself.
 
 Option C can come later if waiting turns out to matter more than expected.
 
 ### Cache limits
 
-- **Previews share one limit,** 10% of the data disk by default, which an admin can change in **Settings** under **Storage**.
-- **Past the limit, the least recently opened previews go first.** Thumbnails don't count toward it, since they're small.
+- **Previews share one limit,** 10% of the data disk by default, which an admin can change to 5, 20, or 30% in **Settings** under **Previews**.
+- **Past the limit, the least recently watched videos' previews go first.** Pictures' and sounds' previews count toward it but stay, since they're small and quick to make again. Thumbnails don't count. A removed video's preview is made again when someone next opens it, whichever setting the server has, except **Never** for a video that needs converting.
 - **Files over 4 GB get no converted video preview.** They still get a thumbnail and the download.
 
 ## Security
 
-- **Every new reader runs in the sandbox** with decision 14's limits, except conversions, which get more time, since a long file takes minutes: up to 15 minutes of processor time for audio, and up to an hour for video.
+- **Every new reader runs in the sandbox** with decision 14's limits, except conversions, which get more time, since a long file takes minutes: up to 15 minutes of processor time for audio, 30 minutes for repackaging a video, and 6 hours for converting one, since a feature film takes hours on a small server. A conversion uses at most 4 threads for decoding and 4 for x264, which keeps a 4K HDR phone video at about 850 MB, within its 1.5 GB.
 - **ffmpeg is still told the one format to read** and the decoders it may use. The lists grow from decision 15's, but each file still reaches only one demuxer.
 - **SoX is told the one format to read, too.** It reads the stored file by its full path, which never starts with `|` or an address, so SoX never takes it for a command to run or a file to download.
 - **Older decoders have had more security bugs,** especially JPEG 2000, EXR, Photoshop, FITS, the Windows Media codecs, and SoX's format readers. The sandbox contains a compromised one: it can't read other files, write anywhere but its own empty scratch folder, or reach the network.
@@ -171,6 +171,6 @@ Option C can come later if waiting turns out to matter more than expected.
 1. Types: the shared list from the server, the new types, and the most-common-use rule.
 2. Picture thumbnails and previews: ffmpeg's image formats, camera raw, SVG, and DjVu.
 3. Audio: cover art thumbnails, and converted previews.
-4. Video: repackaging, audio conversion, then full conversion when first opened.
+4. Video: repackaging, audio conversion, and full conversion, after upload or when first opened, and the cache limit.
 5. Fonts and e-books.
 6. Measure each on the Minimum tier (a Raspberry Pi 5) and on a server with a hardware encoder, and adjust the defaults.

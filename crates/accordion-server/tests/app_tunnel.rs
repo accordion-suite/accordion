@@ -149,6 +149,7 @@ async fn start(name: &'static str, username: &str, serve: Serve) -> Server {
             live: None,
             remote: Some(remote.clone()),
             link_sharing: None,
+            thumbnails: None,
             web: None,
         },
         &Site::Unnamed,

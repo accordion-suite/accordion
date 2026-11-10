@@ -275,6 +275,7 @@ async fn the_owner_step_creates_one_owner_and_signs_them_in() {
             live: None,
             remote: None,
             link_sharing: None,
+            thumbnails: None,
             web: None,
         },
         &site,

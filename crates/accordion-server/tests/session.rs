@@ -63,6 +63,7 @@ async fn start_server(site: &Site) -> (tempfile::TempDir, Router) {
                 live: None,
                 remote: None,
                 link_sharing: None,
+                thumbnails: None,
                 web: None,
             },
             site,

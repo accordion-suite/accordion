@@ -34,9 +34,18 @@ async fn start() -> Server {
     let data = tempfile::tempdir().unwrap();
     let db = Database::open(&data.path().join("accordion.db")).unwrap();
     let identity = Identity::new(db.clone()).await.unwrap();
-    let storage = Storage::open(db, identity.clone(), &data.path().join("storage"))
+    let storage = Storage::open(db.clone(), identity.clone(), &data.path().join("storage"))
         .await
         .unwrap();
+    // Without its programs, it keeps its settings but makes nothing.
+    let thumbnails = accordion_core::thumbnails::Thumbnails::open(
+        db,
+        storage.clone(),
+        data.path(),
+        accordion_core::thumbnails::Tools::installed("/nonexistent/accordion"),
+    )
+    .await
+    .unwrap();
     let alex = identity
         .create_user(NewUser {
             username: "alex".into(),
@@ -61,6 +70,7 @@ async fn start() -> Server {
             live: None,
             remote: None,
             link_sharing: None,
+            thumbnails: Some(thumbnails),
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
@@ -929,4 +939,52 @@ async fn admins_choose_how_long_trash_and_versions_are_kept() {
             version_days: 7
         }
     );
+}
+
+#[tokio::test]
+async fn admins_choose_when_videos_are_converted() {
+    let server = start().await;
+    let sam = server.add(&server.owner, "sam", "user").await;
+    let path = "/api/admin/previews";
+    let automatic = accordion_core::thumbnails::VideoConversion::automatic().as_str();
+
+    let (status, previews) = server.send("GET", path, Some(&server.owner), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(previews["convert_videos"], Value::Null);
+    assert_eq!(previews["automatic"], automatic);
+    assert!(previews["cores"].as_u64().unwrap() >= 1);
+    assert_eq!(previews["space_percent"], 10);
+    assert!(previews["limit"].as_u64().unwrap() > 0);
+
+    let chosen = json!({ "convert_videos": "never", "space_percent": 20 });
+    let (status, _) = server
+        .send("PUT", path, Some(&sam), Some(chosen.clone()))
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    for wrong in [
+        json!({ "convert_videos": "always", "space_percent": 20 }),
+        json!({ "convert_videos": null, "space_percent": 15 }),
+    ] {
+        let (status, _) = server
+            .send("PUT", path, Some(&server.owner), Some(wrong))
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    let (status, previews) = server
+        .send("PUT", path, Some(&server.owner), Some(chosen))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(previews["convert_videos"], "never");
+    assert_eq!(previews["space_percent"], 20);
+    // Back to what the hardware suits.
+    let (_, previews) = server
+        .send(
+            "PUT",
+            path,
+            Some(&server.owner),
+            Some(json!({ "convert_videos": null, "space_percent": 20 })),
+        )
+        .await;
+    assert_eq!(previews["convert_videos"], Value::Null);
 }

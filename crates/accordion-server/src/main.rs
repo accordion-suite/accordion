@@ -262,7 +262,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             db,
             identity: identity.clone(),
             storage: storage.clone(),
-            thumbnails,
+            thumbnails: thumbnails.clone(),
             texts,
             events: events.clone(),
             live: live.clone(),
@@ -290,6 +290,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 live: Some(live),
                 remote: Some(remote),
                 link_sharing: Some(link_sharing),
+                thumbnails: Some(thumbnails.clone()),
             },
             until_stopped,
         )
@@ -334,6 +335,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         live: Some(live),
         remote: Some(remote),
         link_sharing: Some(link_sharing),
+        thumbnails: Some(thumbnails),
     };
 
     let local_name = if local_name_on {

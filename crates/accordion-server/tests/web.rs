@@ -125,6 +125,7 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             live: None,
             remote: None,
             link_sharing: None,
+            thumbnails: None,
             web: web.then(|| WebApp::new(build)),
         },
         &Site::named(HOST.parse().unwrap(), 443),

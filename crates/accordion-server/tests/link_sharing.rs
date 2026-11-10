@@ -84,6 +84,7 @@ async fn start() -> Server {
             setup: None,
             health: Health {
                 link_sharing: Some(sharing.clone()),
+                thumbnails: None,
                 ..Health::default()
             },
             admin_access: AdminAccess::HomeNetwork,
@@ -96,6 +97,7 @@ async fn start() -> Server {
             live: None,
             remote: None,
             link_sharing: Some(sharing.clone()),
+            thumbnails: None,
             web: None,
         },
         &Site::Unnamed,

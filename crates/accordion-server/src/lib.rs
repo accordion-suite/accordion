@@ -16,6 +16,7 @@ pub mod network;
 mod oauth;
 mod origin;
 mod people;
+mod previews;
 pub mod remote;
 mod requests;
 mod retention;
@@ -70,6 +71,9 @@ pub struct AppState {
     pub remote: Option<remote::RemoteAccess>,
     /// Link sharing (decision 22), once the server is running.
     pub link_sharing: Option<link_sharing::LinkSharing>,
+    /// Thumbnails and previews, for their settings, once the server is
+    /// running.
+    pub thumbnails: Option<accordion_core::thumbnails::Thumbnails>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -141,6 +145,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(link_sharing::admin_routes())
                 .merge(log::admin_routes())
                 .merge(retention::admin_routes())
+                .merge(previews::admin_routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,
