@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#fa713b4baeb7534dba6671721ed729f6c6483023"
+source = "git+https://github.com/accordion-suite/accordion-core#ccb4fcdd336d23215731ccd27a879fd16a94627d"
 dependencies = [
  "accordion-sandbox",
  "accordion-types",
@@ -32,7 +32,7 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#78dedc6dc3a75e39cb0a86c766ccc187ac961d37"
+source = "git+https://github.com/accordion-suite/accordion-drive#9e435a8c7de0bddc4e304d58a6c0e4e5a4e3cb62"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -87,7 +87,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#fa713b4baeb7534dba6671721ed729f6c6483023"
+source = "git+https://github.com/accordion-suite/accordion-core#ccb4fcdd336d23215731ccd27a879fd16a94627d"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -101,7 +101,7 @@ dependencies = [
 [[package]]
 name = "accordion-sandbox"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#fa713b4baeb7534dba6671721ed729f6c6483023"
+source = "git+https://github.com/accordion-suite/accordion-core#ccb4fcdd336d23215731ccd27a879fd16a94627d"
 dependencies = [
  "landlock",
  "libc",
@@ -147,7 +147,7 @@ dependencies = [
 [[package]]
 name = "accordion-sync"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#fa713b4baeb7534dba6671721ed729f6c6483023"
+source = "git+https://github.com/accordion-suite/accordion-core#ccb4fcdd336d23215731ccd27a879fd16a94627d"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -175,7 +175,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#fa713b4baeb7534dba6671721ed729f6c6483023"
+source = "git+https://github.com/accordion-suite/accordion-core#ccb4fcdd336d23215731ccd27a879fd16a94627d"
 dependencies = [
  "serde",
  "uuid",
@@ -2821,7 +2821,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
