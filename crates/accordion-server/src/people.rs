@@ -8,7 +8,9 @@
 //!
 //! Admins manage standard accounts. Only the owner manages admins, so an
 //! admin can't lock the owner out or give themselves more power. Nobody
-//! changes their own role or the owner's account here.
+//! changes their own role or the owner's account here. Only the owner sets
+//! how much space someone's files can take, since it shares out the
+//! server's disk.
 //!
 //! Like the other admin APIs, it answers only on the home network.
 
@@ -35,6 +37,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/people/{id}/name", put(rename))
         .route("/api/people/{id}/password-link", post(password_link))
         .route("/api/people/{id}/role", put(set_role))
+        .route("/api/people/{id}/storage-limit", put(set_storage_limit))
         .route("/api/people/{id}/turn-off", post(turn_off))
         .route("/api/people/{id}/turn-on", post(turn_on))
 }
@@ -106,6 +109,9 @@ struct PeopleView {
     people: Vec<PersonView>,
     /// Whether the signed-in admin may make admins, so the page offers it.
     can_add_admins: bool,
+    /// Whether the signed-in admin may set storage limits, so the page
+    /// offers it.
+    can_set_storage_limits: bool,
     /// The signed-in admin, whom the page suggests for a deleted account's
     /// files.
     you: UserId,
@@ -124,6 +130,16 @@ struct PersonView {
     password_link: Option<LinkView>,
     /// Whether the signed-in admin may change this account.
     can_manage: bool,
+    /// How much space their files take, and their limit. `None` if storage
+    /// couldn't say.
+    storage: Option<StorageView>,
+}
+
+#[derive(Serialize)]
+struct StorageView {
+    used: u64,
+    /// `None` when there's no limit.
+    limit: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -144,7 +160,7 @@ impl From<&PasswordLink> for LinkView {
     }
 }
 
-fn person(member: Member, me: &User) -> PersonView {
+fn person(member: Member, me: &User, storage: Option<StorageView>) -> PersonView {
     let state = if member.turned_off {
         "turned_off"
     } else if member.has_password {
@@ -161,6 +177,7 @@ fn person(member: Member, me: &User) -> PersonView {
         created_at: member.created_at,
         state,
         password_link: member.password_link.as_ref().map(Into::into),
+        storage,
     }
 }
 
@@ -171,12 +188,23 @@ async fn list(
 ) -> Result<Json<PeopleView>, ApiError> {
     check_admin(&me)?;
     let members = state.identity.members().await?;
+    let mut people = Vec::with_capacity(members.len());
+    for member in members {
+        // The page still lists someone whose usage can't be read, without it.
+        let usage = match &state.storage {
+            Some(storage) => storage.usage(member.user.id).await.ok(),
+            None => None,
+        };
+        let storage = usage.map(|usage| StorageView {
+            used: usage.used,
+            limit: usage.quota,
+        });
+        people.push(person(member, &me.user, storage));
+    }
     Ok(Json(PeopleView {
-        people: members
-            .into_iter()
-            .map(|member| person(member, &me.user))
-            .collect(),
+        people,
         can_add_admins: me.user.role == Role::Owner,
+        can_set_storage_limits: me.user.role == Role::Owner,
         you: me.user.id,
     }))
 }
@@ -294,6 +322,46 @@ async fn set_role(
         .set_role(id, request.role)
         .await?;
     tracing::info!(user = %me.user.id, target = %id, role = %user.role, "changed a role");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct NewStorageLimit {
+    /// In bytes, or `None` for no limit.
+    bytes: Option<u64>,
+}
+
+/// `PUT /api/people/{id}/storage-limit`: limits how much space someone's
+/// files can take, or lifts the limit. A limit below what they already use
+/// keeps their files, but stops new ones until they make room.
+async fn set_storage_limit(
+    State(state): State<AppState>,
+    Authenticated(me): Authenticated,
+    Path(id): Path<UserId>,
+    Json(request): Json<NewStorageLimit>,
+) -> Result<StatusCode, ApiError> {
+    manageable(&state, &me, id).await?;
+    if me.user.role != Role::Owner {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "Only the owner can set storage limits.",
+        ));
+    }
+    if request.bytes == Some(0) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Choose a limit above zero, or no limit.",
+        ));
+    }
+    let storage = state
+        .storage
+        .as_ref()
+        .ok_or_else(ApiError::server_problem)?;
+    storage
+        .acting_as(actor(&me))
+        .set_quota(id, request.bytes)
+        .await?;
+    tracing::info!(user = %me.user.id, target = %id, bytes = ?request.bytes, "set a storage limit");
     Ok(StatusCode::NO_CONTENT)
 }
 

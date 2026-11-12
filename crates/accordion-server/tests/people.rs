@@ -214,6 +214,7 @@ async fn new_people_set_their_own_password_from_a_link() {
         .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(people["can_add_admins"], true);
+    assert_eq!(people["can_set_storage_limits"], true);
     let sam = &people["people"][1];
     assert_eq!(
         (&sam["username"], &sam["state"], &sam["can_manage"]),
@@ -294,6 +295,7 @@ async fn admins_manage_standard_accounts_and_only_the_owner_manages_admins() {
 
     let (_, people) = server.send("GET", "/api/people", Some(&admin), None).await;
     assert_eq!(people["can_add_admins"], false);
+    assert_eq!(people["can_set_storage_limits"], false);
     let manageable: Vec<_> = people["people"]
         .as_array()
         .unwrap()
@@ -765,6 +767,84 @@ async fn deleting_someone_can_delete_their_files() {
     assert_eq!(body["folder"], Value::Null);
     assert_eq!(server.storage.item(top).await.unwrap(), None);
     assert!(server.top_names("alex").await.is_empty());
+}
+
+#[tokio::test]
+async fn only_the_owner_sets_storage_limits() {
+    let server = start().await;
+    let admin = server.add(&server.owner, "jo", "admin").await;
+    server.add(&server.owner, "sam", "user").await;
+    server.give_file("sam", "notes.txt").await;
+    let sam_id = server.id_of("sam").await;
+    let path = format!("/api/people/{sam_id}/storage-limit");
+    let sam_storage = || async {
+        let (_, list) = server
+            .send("GET", "/api/people", Some(&server.owner), None)
+            .await;
+        list["people"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|person| person["username"] == "sam")
+            .unwrap()["storage"]
+            .clone()
+    };
+    assert_eq!(sam_storage().await, json!({ "used": 8, "limit": null }));
+
+    let (status, body) = server
+        .send("PUT", &path, Some(&admin), Some(json!({ "bytes": 1000 })))
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(error(&body), "Only the owner can set storage limits.");
+    let (status, _) = server
+        .send(
+            "PUT",
+            &path,
+            Some(&server.owner),
+            Some(json!({ "bytes": 0 })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, _) = server
+        .send(
+            "PUT",
+            &path,
+            Some(&server.owner),
+            Some(json!({ "bytes": 1000 })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(sam_storage().await, json!({ "used": 8, "limit": 1000 }));
+    let usage = server
+        .storage
+        .usage(server.user_id("sam").await)
+        .await
+        .unwrap();
+    assert_eq!(usage.quota, Some(1000));
+
+    let (status, _) = server
+        .send(
+            "PUT",
+            &path,
+            Some(&server.owner),
+            Some(json!({ "bytes": null })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(sam_storage().await, json!({ "used": 8, "limit": null }));
+
+    // Nobody limits the owner, not even the owner here.
+    let owner_id = server.id_of("alex").await;
+    let (status, _) = server
+        .send(
+            "PUT",
+            &format!("/api/people/{owner_id}/storage-limit"),
+            Some(&server.owner),
+            Some(json!({ "bytes": 1000 })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]
