@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** November 3, 2026
+- **Updated:** November 12, 2026, after measuring on a Raspberry Pi 5: lines of text come from one pass over the matches, and the last word matches as a start only from three letters.
 
 ## Context
 
@@ -146,7 +147,32 @@ On the development computer, an AMD Ryzen 5 3600 under WSL, with 150,000 made-up
 
 - **Keeping the text** is what lets results show the words in context. FTS5 keeps it uncompressed, so it's the larger.
 - **The made-up words compress better than real text,** so Tantivy's real size would be larger. A family's real files, most of them photos with no text, would make a much smaller index than this test.
-- **A Raspberry Pi 5 is slower.** If it's four times slower, FTS5's worst case is about 120 ms, well under the spec's 500 ms. These figures join the Raspberry Pi measurements already planned.
+- **A Raspberry Pi 5 is slower,** and the search as built does more than this test did. See the next section.
+
+### On a Raspberry Pi 5
+
+Measured November 12, 2026 on a Raspberry Pi 5 with 8 GB, booted from an SD card, with core's schema and SQL and the same SQLite. The made-up text was built the same way: 150,000 documents with 56.5 million words, a 602 MB index. Building it took 225 seconds.
+
+The search as built differs from the test above in two ways. It ranks every match, not the best 50, because storage applies the access check and filters afterward. It also gets a line of text for each result shown, up to 200.
+
+The first build got each line with its own query. FTS5 read every match again for each one, and again merged every word for a start such as "st". One pass over the matches, keeping the lines for the results shown, fixed most of it:
+
+| Search | Matches | Each line on its own | One pass |
+|---|---|---|---|
+| A rare word | 21 | 1.1 ms | 1.1 ms |
+| A word in 1.6% of documents | 2,401 | 58 ms | about 15 ms |
+| Two words | 237 | 13 ms | about 5 ms |
+| The start of a word, "stea" | 1,507 | 58 ms | 16 ms |
+| A phrase of the two most common words | 96,513 | 420 ms | 510 ms |
+| Three letters, "ste" | 41,602 | 1.5 s | 86 ms |
+| A word in nearly every document | 149,462 | 5.3 s | 410 ms |
+| Two letters, "st" | 94,570 | 11 s | 300 ms |
+| One letter, "s", in 50,000 documents | 49,912 | 65 s | 1.7 s |
+
+- **One letter is still too slow,** because "s" matches most of the words in the index. So the last word matches as a start only from three letters, and "s" alone finds the word "s".
+- **The first search after a restart is slower.** With nothing cached, finding the matches for a common word took 1.0–1.4 s, reading the index from the SD card. An SSD reads it faster, and a family's real files make a much smaller index, since most are photos.
+- **Memory stayed under 40 MB** for every search.
+- **This is made-up text.** Real words share starts more than these, so "the" or "con" may match more. The figures still need checking with a family's real files, as the revisit list below says.
 
 ## Recommendation
 
@@ -172,7 +198,7 @@ Every search was far under the spec's 500 ms with FTS5, in a seventh of Tantivy'
 
 ### Matching
 
-- **Every word has to match,** in the name or the text. The last word also matches words that start with it, so results appear while someone is still typing "budg".
+- **Every word has to match,** in the name or the text. The last word also matches words that start with it, so results appear while someone is still typing "budg". It needs three letters or digits for that: a shorter start, such as "s", matches only that whole word, because it would match most of the index.
 - **Case and accents are ignored,** so "resume" finds "Résumé".
 - **Quotes match a phrase,** such as `"tax return"`.
 - **Words are taken as words, never as commands.** The server quotes each one before giving it to FTS5, so typing `AND`, `NEAR`, or a stray `*` can't cause an error.
@@ -181,7 +207,7 @@ Every search was far under the spec's 500 ms with FTS5, in a seventh of Tantivy'
 ### Results
 
 - **Best matches first,** using FTS5's own measure of how well text matches. Matches in names come before matches in text. The list's sort menu can still sort by name or date.
-- **Matches in text show a line around the words,** with the words in bold, under the item's name.
+- **Matches in text show a line around the words,** with the words in bold, under the item's name. The lines come from one pass over the matches, keeping those for the results shown.
 - **Up to 200 results,** as now. Every filter is applied on the server before the limit, so none of them miss matches.
 
 ### Who sees what
