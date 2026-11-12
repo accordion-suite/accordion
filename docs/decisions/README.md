@@ -30,5 +30,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [24](0024-signing-the-apps.md) | How the Windows and macOS apps are signed | Accepted |
 | [25](0025-the-browser-away-from-home.md) | The browser away from home | Accepted |
 | [26](0026-a-thumbnail-and-preview-for-every-file.md) | A thumbnail and a preview for every file | Accepted |
+| [27](0027-running-on-umbrelos.md) | Running on umbrelOS | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
