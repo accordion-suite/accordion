@@ -32,7 +32,7 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#1eb8ddc39189a619ab8b6a117bed94daf4729f62"
+source = "git+https://github.com/accordion-suite/accordion-drive#89a410edc872d61a725e41f6806a4287b6c1aa5a"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -56,10 +56,10 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#47415a76de6d41c335ee7f0db6d62e3d91a95dbf"
+source = "git+https://github.com/accordion-suite/accordion-gateway#0a732bc4ea74a95af4a5cc298b54c7ef795dbf1b"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "gotatun",
  "hickory-resolver",
@@ -555,6 +555,15 @@ name = "constant_time_eq"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eb6feb175df65d0a3ccd3e73484e940d0ac664e8034f0519fd49a93db3071d9"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "core-foundation"
@@ -1107,7 +1116,7 @@ dependencies = [
  "blake2 0.10.6",
  "bytes",
  "chacha20poly1305",
- "constant_time_eq",
+ "constant_time_eq 0.4.2",
  "duplicate",
  "either",
  "eyre",
@@ -1849,9 +1858,9 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mdns-sd"
-version = "0.21.6"
+version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8562654710f72a9cbce4b0d5b7c366a2f94330ba1ce3740f15e932ea2d37b161"
+checksum = "e6743ed743ff2bada2b8651ef298d3f98addb0b74844f19cdd57137d8bd0219e"
 dependencies = [
  "fastrand",
  "flume",
@@ -3636,18 +3645,21 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.2.1"
+version = "9.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "848dad21639597378c3be94c59fd4de683f0f6d8a5387575896e1245737d4f37"
+checksum = "0700e6c427aff64acdbf02e85fbfd946c2ee12319d1af013092f3a2178914ff8"
 dependencies = [
+ "constant_time_eq 0.6.1",
  "crc32fast",
  "flate2",
  "getrandom 0.4.3",
  "indexmap",
+ "libc",
  "memchr",
  "nix",
  "typed-path",
  "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
