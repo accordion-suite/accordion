@@ -25,6 +25,7 @@ repos=(
     accordion-desktop
     accordion-android
     accordion-ios
+    accordion-umbrel
 )
 
 workspace="$(cd "$(dirname "$0")/../.." && pwd)"
