@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** November 4, 2026
+- **Updated:** November 13, 2026, by [decision 28](0028-carrier-grade-nat.md): the rented relay for homes behind carrier-grade NAT is dropped.
 
 ## Context
 

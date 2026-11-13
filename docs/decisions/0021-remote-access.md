@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** November 3, 2026
+- **Updated:** November 13, 2026, by [decision 28](0028-carrier-grade-nat.md): homes behind carrier-grade NAT get a plain message, and the admin guide no longer suggests a tailnet or a rented relay.
 
 ## Context
 
