@@ -222,8 +222,9 @@ pub(crate) fn link_check(health: &LinkHealth, now: SystemTime) -> Check {
         Some(_) if router.shared_address => {
             state = state.max(Level::Warning);
             summary.push_str(
-                " Your internet provider shares one public address among many homes, or the \
-                 router is behind another router, so links can't reach people outside the home.",
+                " Links can't reach people outside the home through this internet connection, \
+                 because it doesn't have a public address of its own. Ask your internet \
+                 provider for a public IP address of your own.",
             );
         }
         Some(mapping) => {
@@ -297,16 +298,15 @@ pub(crate) fn remote_check(health: &RemoteHealth, now: SystemTime) -> Check {
         Some(_) if router.shared_address => {
             state = Level::Warning;
             summary.push_str(
-                " Your internet provider shares one public address among many homes, or the \
-                 router is behind another router, so devices away from home can't reach the \
-                 server through it.",
+                " Devices away from home can't reach the server through this internet \
+                 connection, because it doesn't have a public address of its own.",
             );
             if health.record.ipv6.is_some() {
                 summary.push_str(" Devices on networks with IPv6 can still reach it.");
             }
             summary.push_str(
-                " Other ways in are asking your provider for your own public address, a \
-                 tailnet such as Tailscale, or a small server you rent as a relay.",
+                " Ask your internet provider for a public IP address of your own, or for IPv6. \
+                 Settings, under Remote access, has more.",
             );
         }
         Some(mapping) => {
@@ -1478,8 +1478,9 @@ mod tests {
         assert!(
             check
                 .summary
-                .contains("shares one public address among many homes")
+                .contains("doesn't have a public address of its own")
         );
+        assert!(!check.summary.contains("forwards"));
 
         let mut taken = healthy();
         taken.tunnel.problem = Some("The port is taken.".into());
@@ -1552,6 +1553,17 @@ mod tests {
                 .summary
                 .contains("forward TCP port 443 to port 8443 on 192.168.1.20")
         );
+
+        let mut shared = healthy();
+        shared.router.shared_address = true;
+        let check = link_check(&shared, now());
+        assert_eq!(check.state, Level::Warning);
+        assert!(
+            check
+                .summary
+                .contains("Links can't reach people outside the home")
+        );
+        assert!(!check.summary.contains("forwards"));
 
         let mut no_certificate = healthy();
         no_certificate.certificate = CertificateStatus {
