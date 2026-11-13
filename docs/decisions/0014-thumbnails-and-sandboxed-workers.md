@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** October 31, 2026
 - **Updated:** November 1, 2026, after measuring libvips in the sandbox: the memory limit, PDFs, and the package's dependencies changed. Later the same day, text files gained thumbnails of their first lines.
+- **Updated:** November 13, 2026, by [decision 29](0029-sandboxing-workers-without-landlock.md): workers run in a worker service, each job as its own user, and Landlock is no longer required.
 
 ## Context
 

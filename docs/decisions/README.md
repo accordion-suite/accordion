@@ -32,5 +32,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [26](0026-a-thumbnail-and-preview-for-every-file.md) | A thumbnail and a preview for every file | Accepted |
 | [27](0027-running-on-umbrelos.md) | Running on umbrelOS | Accepted |
 | [28](0028-carrier-grade-nat.md) | Reaching a home behind carrier-grade NAT | Accepted |
+| [29](0029-sandboxing-workers-without-landlock.md) | Sandboxing workers without Landlock | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
