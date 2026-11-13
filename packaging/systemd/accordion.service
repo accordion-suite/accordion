@@ -8,6 +8,10 @@ Documentation=https://github.com/accordion-suite/accordion
 # DNS updates need the internet, so start once the network is up.
 Wants=network-online.target
 After=network-online.target
+# The worker service runs the programs that read people's files (decision
+# 29). Its socket is ready before Accordion starts.
+Wants=accordion-workers.socket
+After=accordion-workers.socket
 
 [Service]
 # Accordion tells systemd when it's ready: after its database is up to date
@@ -23,6 +27,7 @@ Environment=ACCORDION_DATA_DIR=/var/lib/accordion
 # restic, the program that makes backups, in the version Accordion is tested
 # with. It's kept apart from any restic the distribution installs.
 Environment=ACCORDION_RESTIC=/usr/lib/accordion/restic
+Environment=ACCORDION_WORKERS=/run/accordion-workers.sock
 # systemd creates the data folder, owned by the accordion user, and only that
 # user can open it. It holds the database, the DNS token, and private keys.
 StateDirectory=accordion
@@ -65,10 +70,8 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
-# The sandbox that workers run in, such as the one that makes thumbnails,
-# needs Landlock and seccomp to shut a worker in, and lowers the worker's
-# priority (decision 14). A process can only lower its own priority.
-SystemCallFilter=@sandbox setpriority ioprio_set
+# Workers, such as the ones that make thumbnails, run in the worker service,
+# so Accordion itself needs nothing to sandbox them.
 SystemCallErrorNumber=EPERM
 
 [Install]

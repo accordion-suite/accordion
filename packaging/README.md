@@ -5,6 +5,7 @@ Files for installing Accordion on a Linux machine as a system service, and the D
 | File | Installed as | What it does |
 |---|---|---|
 | `systemd/accordion.service` | `/usr/lib/systemd/system/accordion.service` | Starts Accordion when the machine starts, and restarts it if it stops unexpectedly |
+| `systemd/accordion-workers.socket`, `accordion-workers.service` | `/usr/lib/systemd/system/` | The worker service, which runs the programs that read people's files, each job as a user of its own ([decision 29](../docs/decisions/0029-sandboxing-workers-without-landlock.md)) |
 | `systemd/accordion.sysusers` | `/usr/lib/sysusers.d/accordion.conf` | Creates the `accordion` user that Accordion runs as |
 | `debian/postinst`, `prerm`, `postrm` | Package scripts | Create the user, start the service when installed, stop it when removed, and turn it off when purged |
 | `debian/copyright` | `/usr/share/doc/accordion/copyright` | Accordion's and restic's licenses |
@@ -23,6 +24,7 @@ The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi 
 - **Accordion runs as its own user,** `accordion`, never as root. Its data lives in `/var/lib/accordion`, which only that user can open, because it holds the database, the DNS token, and private keys.
 - **It can use ports 80 and 443.** Ports below 1024 normally need root. The service grants only the one capability that allows them, `CAP_NET_BIND_SERVICE`, and Accordion can't gain any other.
 - **It can't touch the rest of the machine.** The service sees the system as read-only, can't see home folders, and can't load kernel modules, change the clock, or use most system calls. If Accordion were ever compromised, this limits what an attacker could reach.
+- **Programs that read people's files run in a separate service,** `accordion-workers`. Each job runs as a user ID of its own, which owns nothing, sees only its own folder of the data folder, and has no network ([decision 29](../docs/decisions/0029-sandboxing-workers-without-landlock.md)).
 - **It can write backups to disks mounted under `/media` or `/mnt`,** such as a USB disk, and nowhere else outside its data folder. Mount backup disks there, and make the backup folder writable by the `accordion` user.
 
 ## Building the packages

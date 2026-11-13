@@ -186,7 +186,8 @@ for arch in "${arches[@]}"; do
     chmod -R u=rwX,go=rX "$root/usr/lib/accordion/web"
     install -m 0755 "target/${RUST_TARGET[$arch]}/release/accordion-update" \
         "$root/usr/lib/accordion/accordion-update"
-    for unit in accordion.service accordion-update.path accordion-update.service; do
+    for unit in accordion.service accordion-update.path accordion-update.service \
+        accordion-workers.socket accordion-workers.service; do
         install -D -m 0644 "packaging/systemd/$unit" "$root/usr/lib/systemd/system/$unit"
     done
     install -D -m 0644 packaging/systemd/accordion.sysusers "$root/usr/lib/sysusers.d/accordion.conf"

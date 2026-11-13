@@ -1,0 +1,18 @@
+# The worker service's socket (decision 29). systemd listens on it and
+# starts accordion-workers.service when the server first connects. The .deb
+# installs it as /usr/lib/systemd/system/accordion-workers.socket.
+
+[Unit]
+Description=Accordion's worker service socket
+Documentation=https://github.com/accordion-suite/accordion
+
+[Socket]
+ListenSequentialPacket=/run/accordion-workers.sock
+# Only the server's group can connect, and the worker service checks that
+# it's the server's user.
+SocketUser=root
+SocketGroup=accordion
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

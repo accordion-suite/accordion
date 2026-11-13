@@ -186,7 +186,8 @@ cleanup() {
     ip link delete acctest 2> /dev/null || true
     rm -f /etc/wireguard/acctest.conf
     say "removing the test install."
-    systemctl stop accordion-update.path accordion-update.service accordion.service 2> /dev/null || true
+    systemctl stop accordion-update.path accordion-update.service accordion.service \
+        accordion-workers.socket accordion-workers.service 2> /dev/null || true
     DEBIAN_FRONTEND=noninteractive apt-get purge -y -q accordion > /dev/null 2>&1 || true
     rm -rf /etc/systemd/system/accordion.service.d /var/lib/accordion /var/lib/accordion-update \
         /mnt/accordion-upgrade-test

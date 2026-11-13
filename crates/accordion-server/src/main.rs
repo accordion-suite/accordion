@@ -88,6 +88,10 @@ Settings, from environment variables:
   ACCORDION_WEB_DIR       A build of the web app to serve, such as
                           accordion-web's dist folder during development
                           (default: /usr/lib/accordion/web)
+  ACCORDION_WORKERS       The socket of the worker service, which runs the
+                          programs that read people's files, each job as a user
+                          of its own. Without it, Accordion runs them itself,
+                          which needs Landlock (default: none)
   RUST_LOG                Log detail, such as info or debug (default: info)";
 
 fn main() -> ExitCode {
@@ -101,6 +105,9 @@ fn main() -> ExitCode {
             let code = accordion_sandbox::launch(args);
             return ExitCode::from(u8::try_from(code).unwrap_or(1));
         }
+        // The worker service (decision 29), which systemd or a container
+        // starts beside the server. It needs no async runtime.
+        Some(command) if command == "workers" => return run_workers(),
         // Reads an Office file's text, inside the sandbox (decision 20).
         Some(command) if command == texts::office::COMMAND => {
             let code = texts::office::main(args, texts::MAX_TEXT);
@@ -200,12 +207,17 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     let switches = Switches::open(db.clone()).await?;
     let remote = RemoteAccess::open(db.clone(), identity.clone()).await?;
     let link_sharing = LinkSharing::open(db.clone()).await?;
-    // Workers run in a sandbox that this program sets up (decision 14).
+    // Workers run in a sandbox that this program sets up (decision 14),
+    // through the worker service when there is one (decision 29).
+    let workers = workers(&data_dir)?;
     let thumbnails = Thumbnails::open(
         db.clone(),
         storage.clone(),
         &data_dir,
-        Tools::installed(std::env::current_exe()?),
+        Tools {
+            workers: workers.clone(),
+            ..Tools::installed(std::env::current_exe()?)
+        },
     )
     .await?;
     let texts = Texts::open(
@@ -213,7 +225,10 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         storage.clone(),
         thumbnails.clone(),
         &data_dir,
-        texts::Tools::installed(std::env::current_exe()?),
+        texts::Tools {
+            workers,
+            ..texts::Tools::installed(std::env::current_exe()?)
+        },
     )
     .await?;
     let web = WebApp::from_env()?;
@@ -891,6 +906,68 @@ fn data_dir() -> Result<PathBuf, Box<dyn Error>> {
         )
     })?;
     Ok(data_dir)
+}
+
+/// The worker service from `ACCORDION_WORKERS`, if it's set, with `jobs/`
+/// in the data folder ready for its jobs.
+fn workers(data_dir: &Path) -> Result<Option<accordion_sandbox::Workers>, Box<dyn Error>> {
+    let Some(socket) = std::env::var_os("ACCORDION_WORKERS").filter(|path| !path.is_empty()) else {
+        return Ok(None);
+    };
+    let jobs = data_dir.join("jobs");
+    // Folders left from before a restart. A job's user may have left files
+    // the server can't remove, which only cost a little space.
+    if let Ok(entries) = std::fs::read_dir(&jobs) {
+        for entry in entries.flatten() {
+            if let Err(err) = std::fs::remove_dir_all(entry.path()) {
+                tracing::warn!("couldn't remove {}: {err}", entry.path().display());
+            }
+        }
+    }
+    std::fs::create_dir_all(&jobs)?;
+    // Jobs' users pass through it to their own folders, without listing it.
+    std::fs::set_permissions(&jobs, std::os::unix::fs::PermissionsExt::from_mode(0o711))?;
+    tracing::info!(
+        "workers run through the worker service at {}",
+        Path::new(&socket).display()
+    );
+    Ok(Some(accordion_sandbox::Workers {
+        socket: socket.into(),
+        jobs,
+    }))
+}
+
+/// Runs the worker service until it fails.
+fn run_workers() -> ExitCode {
+    use accordion_sandbox::service::{self, Config, JOB_UIDS};
+    let run = || -> Result<(), Box<dyn Error>> {
+        let data_dir = data_dir()?;
+        let listener = match service::from_systemd() {
+            Some(listener) => listener,
+            None => {
+                let socket = std::env::var_os("ACCORDION_WORKERS")
+                    .filter(|path| !path.is_empty())
+                    .ok_or("Set ACCORDION_WORKERS to the socket the worker service listens on.")?;
+                service::listen(Path::new(&socket))?
+            }
+        };
+        let launcher = std::env::current_exe()?;
+        service::serve(Config {
+            listener,
+            jobs: data_dir.join("jobs"),
+            uids: Some(JOB_UIDS),
+            programs: vec![PathBuf::from("/usr"), launcher.clone()],
+            launcher,
+        })?;
+        Ok(())
+    };
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("The worker service stopped: {err}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// The gateway keeps the server's name, DNS token, and certificate here.

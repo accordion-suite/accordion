@@ -638,6 +638,9 @@ fn thumbnails_check(status: &ThumbnailStatus) -> Check {
         if let Some(pictures) = &status.pictures {
             summary.push_str(&format!(" {pictures}"));
         }
+        if let Some(sandbox) = &status.sandbox {
+            summary.push_str(&format!(" {sandbox}"));
+        }
         (Level::Ok, summary)
     };
     Check {

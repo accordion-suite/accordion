@@ -1,0 +1,58 @@
+# The worker service (decision 29): runs the programs that read people's
+# files, such as image decoders, for the server. Each connection's jobs run
+# as a user ID of their own, which owns nothing, can't see the data folder
+# beyond its own job's folder, and has no network. The .deb installs it as
+# /usr/lib/systemd/system/accordion-workers.service.
+
+[Unit]
+Description=Accordion's worker service
+Documentation=https://github.com/accordion-suite/accordion
+Requires=accordion-workers.socket
+
+[Service]
+ExecStart=/usr/bin/accordion workers
+Environment=ACCORDION_DATA_DIR=/var/lib/accordion
+# A user of its own, made when it starts, with only the two privileges it
+# needs to switch to each job's user. Jobs give them up before they start.
+DynamicUser=yes
+AmbientCapabilities=CAP_SETUID CAP_SETGID
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+NoNewPrivileges=yes
+UMask=0077
+Restart=on-failure
+RestartSec=5s
+
+# Of the data folder, only jobs/ is there. The server makes a folder in it
+# for each piece of work, and lets that job's user in.
+TemporaryFileSystem=/var/lib/accordion:ro
+BindPaths=/var/lib/accordion/jobs
+# No network at all, not even the loopback's other services.
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+# All workers together, so a large photo or video can't push out the rest
+# of the machine, such as other apps on the same server.
+MemoryMax=50%
+
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# Switching to a job's user and dropping privileges, then the sandbox each
+# job shuts itself in, at a lower priority (decision 14).
+SystemCallFilter=@setuid capset @sandbox setpriority ioprio_set
+SystemCallErrorNumber=EPERM

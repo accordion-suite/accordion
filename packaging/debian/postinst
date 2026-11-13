@@ -10,8 +10,9 @@ if [ "$1" = configure ]; then
     if [ -z "$2" ]; then
         systemctl enable accordion.service
     fi
-    # The update helper waits for the server to ask for an update.
-    systemctl enable accordion-update.path
+    # The update helper waits for the server to ask for an update, and the
+    # worker service for the server's first job.
+    systemctl enable accordion-update.path accordion-workers.socket
     # Without a running systemd, such as while an image is being built, the
     # service starts on the next boot instead. Otherwise start it now, or
     # restart into the new version, unless the admin turned it off. A
@@ -20,7 +21,10 @@ if [ "$1" = configure ]; then
     # reports it either way.
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload
-        systemctl start accordion-update.path
+        systemctl start accordion-update.path accordion-workers.socket
+        # A running worker service is the old version. The socket starts
+        # the new one at the next job.
+        systemctl stop accordion-workers.service || true
         if systemctl is-enabled --quiet accordion.service; then
             systemctl restart accordion.service || true
         fi

@@ -6,5 +6,6 @@ set -e
 # Removing stops the service but leaves it turned on, so installing again
 # starts it again. Purging turns it off, in postrm.
 if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
-    systemctl stop accordion-update.path accordion.service || true
+    systemctl stop accordion-update.path accordion.service accordion-workers.socket \
+        accordion-workers.service || true
 fi

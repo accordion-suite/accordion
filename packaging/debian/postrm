@@ -9,6 +9,7 @@ set -e
 if [ "$1" = purge ]; then
     rm -f /etc/systemd/system/multi-user.target.wants/accordion.service
     rm -f /etc/systemd/system/multi-user.target.wants/accordion-update.path
+    rm -f /etc/systemd/system/sockets.target.wants/accordion-workers.socket
 fi
 
 if [ -d /run/systemd/system ]; then
