@@ -1,6 +1,6 @@
 # 31. Notes
 
-- **Status:** Accepted
+- **Status:** Accepted. Where notes live is replaced by [decision 32](0032-a-place-for-each-apps-files.md).
 - **Date:** November 14, 2026
 
 ## Context

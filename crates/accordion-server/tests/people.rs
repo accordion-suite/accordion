@@ -649,7 +649,7 @@ async fn admins_rename_people() {
     );
     // Their folder in the plain view follows the new username.
     let view = server.data.path().join("storage/files");
-    assert!(view.join("samuel/notes.txt").exists());
+    assert!(view.join("samuel/My Drive/notes.txt").exists());
     assert!(!view.join("sam").exists());
 
     let (status, body) = server
