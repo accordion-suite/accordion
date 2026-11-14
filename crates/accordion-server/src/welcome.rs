@@ -108,6 +108,7 @@ async fn set_password(
     Ok((
         [(SET_COOKIE, auth::session_cookie(&token))],
         Json(SessionResponse::new(
+            &state,
             user,
             session,
             state.admin_access.allows(Some(connection.0)),

@@ -33,7 +33,7 @@ async fn home(State(state): State<AppState>) -> Result<Response, ApiError> {
         return Ok(Redirect::temporary("/setup").into_response());
     }
     // Temporary, so browsers ask again once other apps can be chosen here.
-    if state.web.is_some() && state.modules.in_web_app().contains(&"drive") {
+    if state.web.is_some() && state.modules.mounted().in_web_app().contains(&"drive") {
         // The app opens the person's start page from here, Home or My Drive.
         return Ok(Redirect::temporary("/drive/start").into_response());
     }

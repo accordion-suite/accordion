@@ -50,8 +50,8 @@ pub struct AppState {
     pub health: health::Health,
     /// Who can open the setup and admin pages.
     pub admin_access: network::AdminAccess,
-    /// The routes of the modules that are running, such as Drive.
-    pub modules: modules::Mounted,
+    /// The modules, such as Drive and Notes, and which are running.
+    pub modules: modules::Modules,
     /// Backups, once the server is running with an owner.
     pub backup: Option<Backup>,
     /// Everyone's files, for the People page when it deletes an account.
@@ -105,18 +105,26 @@ impl Site {
     }
 }
 
-/// Builds the server's routes.
+/// Builds the server's routes. They're built again each time a module is
+/// turned on or off, so requests reach only the modules that are running.
 pub fn router(state: AppState, site: &Site) -> Router {
+    let site = site.clone();
+    modules::swapping(state.modules.changes(), move |mounted| {
+        routes(state.clone(), &site, mounted)
+    })
+}
+
+/// The server's routes, with the modules in `mounted`.
+fn routes(state: AppState, site: &Site, mounted: &modules::Mounted) -> Router {
     let expected_origin = match site {
         Site::Unnamed => None,
         Site::Named { origin, .. } => Some(Arc::<str>::from(origin.as_str())),
     };
-    let web_app_pages = state.modules.in_web_app();
+    let web_app_pages = mounted.in_web_app();
     let remote_access = state.remote.clone();
     // Module routes sit inside the same host and cross-site checks as the
     // server's own (decision 7).
-    let router = state
-        .modules
+    let router = mounted
         .mount(Router::new())
         .route(
             "/api/session",
@@ -146,6 +154,7 @@ pub fn router(state: AppState, site: &Site) -> Router {
                 .merge(log::admin_routes())
                 .merge(retention::admin_routes())
                 .merge(previews::admin_routes())
+                .merge(modules::admin_routes())
                 .route_layer(from_fn_with_state(
                     state.admin_access,
                     network::only_home_network,

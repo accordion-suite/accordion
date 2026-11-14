@@ -29,6 +29,9 @@ pub struct SessionResponse {
     /// Whether the admin pages open for this user on this connection, so the
     /// web app links to them only where they'd work.
     admin_pages: bool,
+    /// The modules that are on and live in the web app, such as `drive`
+    /// and `notes`, so it shows only those.
+    modules: Vec<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -50,10 +53,16 @@ struct SessionView {
 impl SessionResponse {
     /// `admin_pages_open` is whether the admin pages open on the request's
     /// connection, whoever's signed in.
-    pub(crate) fn new(user: User, session: Session, admin_pages_open: bool) -> Self {
+    pub(crate) fn new(
+        state: &AppState,
+        user: User,
+        session: Session,
+        admin_pages_open: bool,
+    ) -> Self {
         let admin_pages = admin_pages_open && matches!(user.role, Role::Owner | Role::Admin);
         Self {
             admin_pages,
+            modules: state.modules.mounted().in_web_app(),
             user: UserView {
                 id: user.id,
                 username: user.username,
@@ -98,6 +107,7 @@ pub async fn sign_in(
     Ok((
         [(SET_COOKIE, auth::session_cookie(&token))],
         Json(SessionResponse::new(
+            &state,
             user,
             session,
             state.admin_access.allows(Some(connection.0)),
@@ -113,6 +123,7 @@ pub async fn current(
     connection: Connection,
 ) -> Json<SessionResponse> {
     Json(SessionResponse::new(
+        &state,
         user,
         session,
         state.admin_access.allows(Some(connection.0)),
