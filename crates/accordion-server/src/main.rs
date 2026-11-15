@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use accordion_core::backup::{self, Backup};
+use accordion_core::coedit::{self, CoEditing};
 use accordion_core::db::Database;
 use accordion_core::events::{Action, Actor, Events, NewEvent};
 use accordion_core::identity::{AppPasswords, Identity, NewUser};
@@ -277,10 +278,25 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     // Ends every stream when the server stops, so clients reconnect to the
     // next one as soon as it's up, and serving can stop without waiting.
     background.spawn(live.clone().run(until_stopped()));
+    // Co-editing saves every open document before the server stops.
+    let coediting = CoEditing::open(
+        db.clone(),
+        storage.clone(),
+        identity.clone(),
+        coedit::Timing::default(),
+    )
+    .await?;
+    let saving = coediting.clone();
+    let stopping_coediting = until_stopped();
+    background.spawn(async move {
+        stopping_coediting.await;
+        saving.stop().await;
+    });
     let modules = modules::start(
         modules::all(),
         &Services {
             db,
+            coediting,
             identity: identity.clone(),
             storage: storage.clone(),
             thumbnails: thumbnails.clone(),

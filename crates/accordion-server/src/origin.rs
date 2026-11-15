@@ -5,7 +5,9 @@
 //! those before any handler runs. It follows the same rules as Go's
 //! `http.CrossOriginProtection`:
 //!
-//! 1. Requests that only read (GET, HEAD, and OPTIONS) are allowed.
+//! 1. Requests that only read (GET, HEAD, and OPTIONS) are allowed, except
+//!    WebSocket upgrades. An upgrade is a GET, but the connection it opens
+//!    can change things, such as a shared note (decision 30).
 //! 2. If the browser sent `Sec-Fetch-Site`, only `same-origin` and `none`
 //!    (typed into the address bar or opened from a bookmark) are allowed.
 //! 3. Otherwise, if it sent `Origin`, it must be the server's own origin,
@@ -14,13 +16,13 @@
 //! 4. Requests with neither header aren't from a browser, so they can't carry
 //!    a stolen cookie by accident. They're allowed.
 //!
-//! WebSocket upgrades are GET requests, so they need their own `Origin` check
-//! when Docs adds them.
+//! Browsers always send `Origin` with a WebSocket upgrade, and recent ones
+//! send `Sec-Fetch-Site` too, so another site's page can't open one.
 
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::header::{HOST, ORIGIN};
+use axum::http::header::{HOST, ORIGIN, UPGRADE};
 use axum::http::{Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -45,13 +47,18 @@ pub async fn reject_cross_origin(
 }
 
 fn is_cross_origin(request: &Request, expected: Option<&str>) -> bool {
-    if matches!(
-        *request.method(),
-        Method::GET | Method::HEAD | Method::OPTIONS
-    ) {
+    let headers = request.headers();
+    let upgrade = headers
+        .get(UPGRADE)
+        .is_some_and(|upgrade| upgrade.as_bytes().eq_ignore_ascii_case(b"websocket"));
+    if !upgrade
+        && matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS
+        )
+    {
         return false;
     }
-    let headers = request.headers();
     if let Some(site) = headers.get("sec-fetch-site") {
         return !(site == "same-origin" || site == "none");
     }
@@ -102,6 +109,40 @@ mod tests {
     fn reads_are_always_allowed() {
         let req = request(Method::GET, &[("sec-fetch-site", "cross-site")]);
         assert!(!is_cross_origin(&req, None));
+    }
+
+    #[test]
+    fn websocket_upgrades_are_checked_like_changes() {
+        let upgrade = ("upgrade", "websocket");
+        let host = ("host", "accordion.local:8443");
+        for (headers, blocked) in [
+            (vec![upgrade, ("sec-fetch-site", "same-origin")], false),
+            (vec![upgrade, ("sec-fetch-site", "cross-site")], true),
+            (
+                vec![upgrade, host, ("origin", "https://accordion.local:8443")],
+                false,
+            ),
+            (
+                vec![upgrade, host, ("origin", "https://evil.example")],
+                true,
+            ),
+            (
+                vec![
+                    ("upgrade", "WebSocket"),
+                    host,
+                    ("origin", "https://evil.example"),
+                ],
+                true,
+            ),
+            // A program that isn't a browser sends neither header.
+            (vec![upgrade, host], false),
+        ] {
+            let req = request(Method::GET, &headers);
+            assert_eq!(is_cross_origin(&req, None), blocked, "{headers:?}");
+        }
+        let expected = Some("https://accordion.example.com");
+        let req = request(Method::GET, &[upgrade, ("origin", "https://evil.example")]);
+        assert!(is_cross_origin(&req, expected));
     }
 
     #[test]

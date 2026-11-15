@@ -1,6 +1,7 @@
 //! Turning modules on and off from the Modules page, without a restart
 //! (decisions 7 and 31).
 
+use accordion_core::coedit::{CoEditing, Timing};
 use accordion_core::db::Database;
 use accordion_core::events::Events;
 use accordion_core::identity::{Identity, NewUser};
@@ -67,6 +68,14 @@ async fn start() -> Server {
         modules::all(),
         &Services {
             db: db.clone(),
+            coediting: CoEditing::open(
+                db.clone(),
+                storage.clone(),
+                identity.clone(),
+                Timing::default(),
+            )
+            .await
+            .unwrap(),
             identity: identity.clone(),
             storage: storage.clone(),
             events: events.clone(),
