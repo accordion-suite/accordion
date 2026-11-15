@@ -172,8 +172,8 @@ reminder: 2026-11-20T09:00:00Z
 ### Editing
 
 - **The editor is plain text,** with Markdown shown as formatted on the cards. Checklist notes edit as a list of items with checkboxes. ProseMirror isn't needed, so Notes' code stays small.
-- **A note saves as someone types,** a second after they stop, with `write_version`.
-- **Notes shared with someone use the co-editing service** from decision 30, with Yjs text for the body and a map for the front matter. When the last person leaves, the service writes the Markdown file, with no data block, since notes have no comments. Changes from Obsidian or another app reach the note as edits, as decision 30 describes.
+- **A note saves as someone types,** a second after they stop, with `write_version`. A shared note saves through the co-editing service instead.
+- **Notes shared with someone use the co-editing service** from decision 30, with one Yjs text for the body and another for the front matter, kept exactly as the file has it, so Obsidian's properties keep their order and spelling. The web app never edits the front matter: a color, a title, or a label changes through Notes' API, which first saves what people typed, then changes the file, and the change reaches everyone as edits. When the last person leaves, the service writes the Markdown file, with no data block, since notes have no comments. Changes from Obsidian or another app reach the note as edits, as decision 30 describes.
 - **Viewers see the note but can't change it,** and editors edit, as in Drive.
 
 ### Sharing

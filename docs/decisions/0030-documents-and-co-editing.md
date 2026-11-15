@@ -247,7 +247,7 @@ The state is about 1.6 times the text, and loading is cheap enough to do each ti
 A document's file can change without Docs: someone restores an older version, a computer syncs an edited copy back, or it's saved over WebDAV.
 
 - **If the file's state already contains everything Docs has,** Docs adopts it. This covers a server restored from a backup.
-- **Otherwise, Docs makes the document match the file's body.** It works out the difference and applies it as edits, so anyone in the document sees the change happen. Comments stay wherever their text survives. This is what makes restoring an old version work: merging an older state would bring nothing back.
+- **Otherwise, Docs takes in the change to the file's body.** It works out the difference between the body as it was last saved and the file, and applies it as edits amid any edits made since, as a three-way merge would. Anyone in the document sees the change happen, typing that wasn't saved yet isn't lost, and comments stay wherever their text survives. This is what makes restoring an old version work: merging an older state would bring nothing back, but the difference from the saved body takes the later text out.
 - **The file's body always wins over its state,** since the body is what another program edited.
 
 ### Safety
