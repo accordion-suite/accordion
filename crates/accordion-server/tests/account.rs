@@ -487,6 +487,15 @@ async fn read_until(body: &mut Body, wanted: &str) -> String {
     read
 }
 
+/// Reads on until `read` holds a whole message, which ends with a blank
+/// line.
+async fn read_until_line_end(body: &mut Body, mut read: String) -> String {
+    if !read.contains("\n\n") {
+        read.push_str(&read_until(body, "\n\n").await);
+    }
+    read
+}
+
 #[tokio::test]
 async fn live_updates_need_signing_in_and_end_with_the_session() {
     let server = start().await;
@@ -530,8 +539,12 @@ async fn live_updates_need_signing_in_and_end_with_the_session() {
         )
         .await;
     assert_eq!(created.status(), StatusCode::CREATED);
-    let read = read_until(&mut body, &top).await;
-    assert!(read.contains("event: drive.items"), "{read}");
+    // Its activity hint names the top folder too, so this waits for the
+    // folder list's own.
+    let read = read_until(&mut body, "event: drive.items").await;
+    let items = read.split("event: drive.items").nth(1).unwrap();
+    let items = read_until_line_end(&mut body, items.to_owned()).await;
+    assert!(items.contains(&top), "{read}{items}");
 
     // Signing out ends the stream.
     let signed_out = server
