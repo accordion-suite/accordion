@@ -150,7 +150,7 @@ reminder: 2026-11-20T09:00:00Z
 - **Labels are `tags`,** the property Obsidian shows as tags.
 - **Color is one of Keep's names,** such as `yellow` or `teal`, so Takeout's colors carry over. Each color has a light and a dark shade in the web app.
 - **`archived: true`** archives a note. Archiving is a state, not a folder, so a note doesn't move on someone's computer when it's archived.
-- **Checklists are Markdown task lists.** Keep moves checked items to the bottom, and Notes shows them that way without moving them in the file.
+- **Checklists are Markdown task lists.** Keep moves checked items to the bottom, and Notes shows them that way without moving them in the file. As in Keep, each person's Notes settings can leave checked items where they are instead, and put new items at the top. The settings change only how lists show and where **Add item** puts an item.
 - **Front matter Notes doesn't know is kept,** in its order, so Obsidian's own properties survive.
 - **A file without front matter is a plain note,** with nothing set.
 - **Deleting a note moves its file to Drive's trash,** where Notes' Trash shows it.
