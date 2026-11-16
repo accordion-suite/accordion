@@ -131,7 +131,7 @@ Cons:
 - **Notes makes a folder called Notes** in someone's My Drive the first time they open Notes, and remembers it by its ID. Renaming or moving it is fine.
 - **If it's deleted,** Notes makes a new one when it's next opened, and the old notes are in Drive's trash as usual.
 - **Notes reads Markdown files in subfolders too,** since Obsidian users make them. New notes go at the top.
-- **Images go in an `Attachments` subfolder,** as regular Drive files, linked from the note with ordinary Markdown, such as `![](Attachments/receipt.jpg)`. Obsidian follows these links.
+- **Images go beside their note,** as regular Drive files, linked from the note with ordinary Markdown. The section on images says how.
 
 ### A note's file
 
@@ -179,7 +179,21 @@ tags: [Home, Groceries]
 
 - **Sharing a note shares its file,** with decision 16's Viewer and Editor.
 - **Notes shared with someone show in their Notes,** with the owner's picture on the card, as in Keep.
-- **A shared note's attachments are shared with it,** since its images are separate files.
+- **A shared note's images show to everyone who can open the note,** through the note, without sharing each image. The section on images says how.
+
+### Images
+
+This section changed on November 16, 2026, from an `Attachments` folder. A folder Notes makes on its own is the problem [decision 32](0032-a-place-for-each-apps-files.md) solved for notes themselves: people don't know what it is, and it can clash with a folder they already have.
+
+- **An image goes beside its note,** in the same folder, named after the note and numbered, such as `Groceries 1.jpg` beside `Groceries.md`. Notes never makes a folder of its own. In Drive's Notes tab, images sort next to the notes they belong to. Notes' own list shows only notes.
+- **The link holds the image's path from the top of the Notes place,** such as `![](Garden/Groceries%201.jpg)`, so moving the note anywhere leaves it working. It's Obsidian's "Absolute path in vault" setting, and the synced Notes folder is the vault. Plain Markdown viewers, such as VS Code's preview, read a link from the note's own folder, so they find only the images of notes at the top. Notes also reads links written from the note's own folder, and Obsidian's `![[Groceries 1.jpg]]`.
+- **Notes repairs links when an image moves.** Its tables keep each file's ID and path in the Notes place, and the links in each note. When an image moves or is renamed anywhere, in Drive, over WebDAV, on a synced computer, or in Obsidian, Notes rewrites the links to it in the owner's notes as a new version of each note. A computer that's offline catches up once it syncs.
+- **Moving a note in Notes brings the images beside it,** so they stay side by side, in the same move and the same question about sharing. Other apps move only the note, and its images stay where they are, with the link still working.
+- **Images go at the top of the note,** one to a line, as Keep shows them, so Obsidian shows them there too. The editor shows them above the text, each with a button to remove it, and a card shows the first one across its top, from the thumbnail Drive already makes. An image elsewhere in the text, such as one placed in Obsidian, shows where it is.
+- **Adding an image:** choose a file, drag it in, or paste it. Notes takes JPEG, PNG, GIF, WebP, AVIF, and HEIC photos, up to 50 MB each. The browser shows a HEIC photo through the large picture Drive makes of it.
+- **Anyone who can open a note sees its images,** through Notes' address for the note's images, and nobody else. Notes serves only images the note links to, from its owner's Notes place, so a link can't reach the owner's other files. The images are never shared themselves, so they stay out of everyone's **Shared with me**, and unsharing the note hides them at once.
+- **The note's owner stores an image an editor adds,** and it counts against the owner's storage, as a file an editor adds to a shared folder in Drive does.
+- **Images go to the trash with their note,** when it's deleted in Notes, unless another of the owner's notes uses them. Restoring the note brings them back, and deleting it forever deletes them too. Removing an image from a note moves it to the trash on the same terms. A note deleted in Drive goes alone, as any file does there.
 
 ### Reminders
 
@@ -206,7 +220,7 @@ Notes is the first module an admin could turn off, so the **Modules** page that 
 
 ### Later steps
 
-- **Voice memos** record in the browser, save as an audio file in `Attachments`, and get a transcript in the note if the server runs the optional local speech model.
+- **Voice memos** record in the browser, save as an audio file beside the note, as images do, and get a transcript in the note if the server runs the optional local speech model.
 - **Keep's Takeout import,** which reads Keep's JSON for each note: title, text or checklist, color, pinned, archived, labels, images, and dates.
 - **Offline editing** in the web app waits for its service worker, as Docs' does. Phones come with the phone app.
 
@@ -225,6 +239,7 @@ Notes is the first module an admin could turn off, so the **Modules** page that 
 - **Access:** every address for the owner, an editor, a viewer, and someone with no access, as Drive's access test does. Another person's pins and labels never reach the owner's file.
 - **Co-editing:** two editors typing in one note end up with the same file.
 - **Reminders** fire once, at their time, after a restart too.
+- **Images:** an added image lands beside its note with a link from the top of the place. Moving or renaming it in Drive rewrites the link, and so does moving its folder. Moving a note in Notes brings its images. Someone a note is shared with sees its images and nothing else in the owner's place, and someone with no access sees none. Deleting and restoring a note takes and brings back the images only it uses.
 
 ### Revisit this decision if
 

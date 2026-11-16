@@ -91,7 +91,7 @@ Notes asks the first time which folder in My Drive to use, and suggests a new on
 
 ### Notes
 
-- **Notes keeps its notes at the top of the Notes place.** It reads Markdown files in subfolders, and keeps images in an `Attachments` folder, as decision 31 says.
+- **Notes keeps its notes at the top of the Notes place.** It reads Markdown files in subfolders, and keeps each image beside the note it belongs to, as decision 31 says, so Notes never makes a folder of its own.
 - **Folders in Notes.** Notes' sidebar lists the place's folders under a **Folders** heading, last, after **Trash**. Selecting one shows only the notes inside it and the folders below it, and a note taken there is saved there. Folders can be made, renamed, moved, and deleted in Notes as well as in Drive, and notes moved between them from a note's menu, the note itself, or by dragging it onto a folder. Notes moves things through Drive's API, so a move that shares something asks first, as it does in Drive. Labels stay the way to sort notes in Notes, since a note can have several labels but sits in only one folder.
 - **Notes no longer makes or takes over a folder in My Drive.** Its table of folders goes away, since storage finds the place.
 
