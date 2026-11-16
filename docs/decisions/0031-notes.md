@@ -124,7 +124,7 @@ Cons:
 
 ## Recommendation
 
-**Each person's notes are Markdown files in a Notes folder in their My Drive (option A). The owner's colors, pins, labels, archive, and reminders are in each file's front matter, and Notes keeps an index of them, plus what other people choose for notes shared with them (option 3). Shared notes are edited together through decision 30's co-editing service, which Notes builds first.**
+**Each person's notes are Markdown files in a Notes folder in their My Drive (option A). The owner's colors, pins, labels, and archive are in each file's front matter, and Notes keeps an index of them, plus what other people choose for notes shared with them (option 3). Reminders are each person's own, in Notes' tables only. Shared notes are edited together through decision 30's co-editing service, which Notes builds first.**
 
 ### The folder
 
@@ -140,7 +140,6 @@ Cons:
 color: yellow
 pinned: true
 tags: [Home, Groceries]
-reminder: 2026-11-20T09:00:00Z
 ---
 - [ ] Milk
 - [x] Bread
@@ -157,7 +156,7 @@ reminder: 2026-11-20T09:00:00Z
 
 ### The index
 
-- **Notes' table has one row for each note:** its file, its contents' hash, title, color, pin, labels, archive, reminder, a short excerpt, and when it changed.
+- **Notes' table has one row for each note:** its file, its contents' hash, title, color, pin, labels, archive, a short excerpt, and when it changed.
 - **It follows the files.** Core's storage tells Notes when a file in a Notes folder changes, from any app, and Notes reads that file again. A check when the server starts catches anything missed.
 - **Other people's choices** for a shared note (pin, archive, and labels) are rows of their own, never written to the owner's file. Color belongs to the note, as in Keep.
 
@@ -184,9 +183,12 @@ reminder: 2026-11-20T09:00:00Z
 
 ### Reminders
 
-- **A reminder notifies through the bell** and the event log ([decision 18](0018-the-event-log.md)) at its time, and as a browser notification if the web app is open and allowed to.
-- **Notes checks the index every minute** for reminders that are due, so a reminder can't be missed by a restart.
-- **Repeating reminders** (daily, weekly, monthly, or yearly) are in the front matter too, such as `repeat: weekly`.
+- **Each reminder is one person's own,** the owner's too, as in Keep. Someone a note is shared with sets their own, a viewer included, and nobody sees anyone else's. Reminders live in Notes' tables, not in the file: a reminder is someone's alarm rather than part of the note, and Obsidian couldn't ring it. This changed on November 16, 2026, from the owner's reminder in the front matter, which would have shown the owner's plans to everyone who can open the file.
+- **A reminder keeps its clock time and its time zone,** such as 09:00 in `Europe/Amsterdam`, from the browser that set it. A repeating one follows that clock through daylight saving time, so "every Monday at 9:00" stays at 9:00. A time the clocks skip rings once they've moved on, and a time they pass twice rings the first time. A monthly reminder on the 31st comes back on the 31st, or the month's last day.
+- **A reminder notifies through the bell** and the event log ([decision 18](0018-the-event-log.md)) at its time, and as a browser notification if the web app is open and allowed to. Only its own person hears about it, and it's never in anyone's Activity.
+- **Notes checks for due reminders at the start of every minute,** and right after starting, so a reminder can't be missed by a restart. A repeating one that missed several times while the server was off rings once, then waits for its next time.
+- **Repeating reminders** come back daily, weekly, monthly, or yearly.
+- **Snooze and done,** as in Keep, on the card, in the editor, and in the bell. Snooze rings again later: in an hour, later today, tomorrow morning, or next week. Done takes away a reminder that doesn't repeat, and lets one that does wait for its next time.
 - **Phones get reminders** once the phone app exists, under its own decision on push.
 
 ### The Modules page
