@@ -220,7 +220,7 @@ Notes is the first module an admin could turn off, so the **Modules** page that 
 
 ### Later steps
 
-- **Voice memos** record in the browser, save as an audio file beside the note, as images do, and get a transcript in the note if the server runs the optional local speech model.
+- **Voice memos** record in the browser, save as an audio file beside the note, as images do, and get a transcript at the end of the note if an admin turns on transcripts, as [decision 33](0033-transcribing-voice-memos.md) describes.
 - **Keep's Takeout import,** which reads Keep's JSON for each note: title, text or checklist, color, pinned, archived, labels, images, and dates.
 - **Offline editing** in the web app waits for its service worker, as Docs' does. Phones come with the phone app.
 

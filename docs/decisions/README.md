@@ -36,5 +36,6 @@ Each file in this folder records one significant decision about how Accordion is
 | [30](0030-documents-and-co-editing.md) | Documents and co-editing | Accepted |
 | [31](0031-notes.md) | Notes | Accepted |
 | [32](0032-a-place-for-each-apps-files.md) | A place for each app's files | Accepted |
+| [33](0033-transcribing-voice-memos.md) | Transcribing voice memos | Accepted |
 
 To add a decision, copy the structure of an existing record, give it the next number, and add it to this table.
