@@ -187,7 +187,7 @@ This section changed on November 16, 2026, from an `Attachments` folder. A folde
 
 - **An image goes beside its note,** in the same folder, named after the note and numbered, such as `Groceries 1.jpg` beside `Groceries.md`. Notes never makes a folder of its own. In Drive's Notes tab, images sort next to the notes they belong to. Notes' own list shows only notes.
 - **The link holds the image's path from the top of the Notes place,** such as `![](Garden/Groceries%201.jpg)`, so moving the note anywhere leaves it working. It's Obsidian's "Absolute path in vault" setting, and the synced Notes folder is the vault. Plain Markdown viewers, such as VS Code's preview, read a link from the note's own folder, so they find only the images of notes at the top. Notes also reads links written from the note's own folder, and Obsidian's `![[Groceries 1.jpg]]`.
-- **Notes repairs links when an image moves.** Its tables keep each file's ID and path in the Notes place, and the links in each note. When an image moves or is renamed anywhere, in Drive, over WebDAV, on a synced computer, or in Obsidian, Notes rewrites the links to it in the owner's notes as a new version of each note. A computer that's offline catches up once it syncs.
+- **Notes repairs links when an image moves.** Its tables keep each file's ID and path in the Notes place, and the links in each note. When an image moves or is renamed anywhere, in Drive, over WebDAV, on a synced computer, or in Obsidian, Notes rewrites the links to it in the owner's notes as a new version of each note. A computer that's offline catches up once it syncs. A link keeps its style where that still reaches the image: Obsidian's bare `![[name]]` stays a bare name, and a link from the note's folder stays one. Otherwise it becomes the path from the top of the place.
 - **Moving a note in Notes brings the images beside it,** so they stay side by side, in the same move and the same question about sharing. Other apps move only the note, and its images stay where they are, with the link still working.
 - **Images go at the top of the note,** one to a line, as Keep shows them, so Obsidian shows them there too. The editor shows them above the text, each with a button to remove it, and a card shows the first one across its top, from the thumbnail Drive already makes. An image elsewhere in the text, such as one placed in Obsidian, shows where it is.
 - **Adding an image:** choose a file, drag it in, or paste it. Notes takes JPEG, PNG, GIF, WebP, AVIF, and HEIC photos, up to 50 MB each. The browser shows a HEIC photo through the large picture Drive makes of it.
@@ -221,7 +221,7 @@ Notes is the first module an admin could turn off, so the **Modules** page that 
 ### Later steps
 
 - **Voice memos** record in the browser, save as an audio file beside the note, as images do, and get a transcript at the end of the note if an admin turns on transcripts, as [decision 33](0033-transcribing-voice-memos.md) describes.
-- **Keep's Takeout import,** which reads Keep's JSON for each note: title, text or checklist, color, pinned, archived, labels, images, and dates.
+- **Keep's Takeout import,** which reads Keep's JSON for each note: title, text or checklist, color, pinned, archived, labels, images, and dates. [Decision 34](0034-importing-from-google-takeout.md) covers it, with the importer every product shares.
 - **Offline editing** in the web app waits for its service worker, as Docs' does. Phones come with the phone app.
 
 ### Build order
