@@ -208,7 +208,7 @@ async fn turns_notes_off_and_on_without_a_restart() {
     let cookie = server.sign_in().await;
     assert_eq!(
         server.session_modules(&cookie).await,
-        json!(["drive", "notes"])
+        json!(["drive", "notes", "docs"])
     );
     assert_eq!(
         server.get(&cookie, "/api/notes/notes").await.status(),
@@ -224,14 +224,16 @@ async fn turns_notes_off_and_on_without_a_restart() {
     assert_eq!(page["modules"][1]["requires"], json!(["drive"]));
     assert!(page["memory"].as_u64().is_some());
 
-    // Drive can't go while Notes keeps its notes there.
+    assert_eq!(page["modules"][2]["id"], "docs");
+
+    // Drive can't go while Notes and Docs keep their files there.
     let response = server
         .switch(&cookie, "drive", json!({ "on": false }))
         .await;
     assert_eq!(response.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(response).await["error"],
-        "Notes needs it. Turn that off first."
+        "Notes and Docs need it. Turn those off first."
     );
 
     let response = server
@@ -243,6 +245,12 @@ async fn turns_notes_off_and_on_without_a_restart() {
         server.get(&cookie, "/api/notes/notes").await.status(),
         StatusCode::NOT_FOUND
     );
+    assert_eq!(
+        server.session_modules(&cookie).await,
+        json!(["drive", "docs"])
+    );
+    let response = server.switch(&cookie, "docs", json!({ "on": false })).await;
+    assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(server.session_modules(&cookie).await, json!(["drive"]));
     // Drive keeps working.
     assert_eq!(
@@ -290,7 +298,7 @@ async fn turns_notes_off_and_on_without_a_restart() {
         .iter()
         .filter(|event| event["action"] == "module_changed")
         .count();
-    assert_eq!(changes, 4);
+    assert_eq!(changes, 5);
 }
 
 #[tokio::test]

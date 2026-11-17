@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 accordion-core = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }
 accordion-drive = { git = "https://github.com/accordion-suite/accordion-drive", version = "0.1.0" }
+accordion-docs = { git = "https://github.com/accordion-suite/accordion-docs", version = "0.1.0" }
 accordion-notes = { git = "https://github.com/accordion-suite/accordion-notes", version = "0.1.0" }
 accordion-gateway = { git = "https://github.com/accordion-suite/accordion-gateway", version = "0.1.0" }
 accordion-module = { git = "https://github.com/accordion-suite/accordion-core", version = "0.1.0" }

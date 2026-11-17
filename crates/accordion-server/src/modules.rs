@@ -36,6 +36,7 @@ pub fn all() -> Vec<Box<dyn Module>> {
     vec![
         Box::new(accordion_drive::Drive),
         Box::new(accordion_notes::Notes),
+        Box::new(accordion_docs::Docs),
     ]
 }
 
@@ -517,13 +518,24 @@ async fn switch(
         Err(SwitchError::NeededBy(ids)) => {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
-                format!("{} needs it. Turn that off first.", names(&ids)),
+                if ids.len() == 1 {
+                    format!("{} needs it. Turn that off first.", names(&ids))
+                } else {
+                    format!("{} need it. Turn those off first.", names(&ids))
+                },
             ));
         }
         Err(SwitchError::Needs(ids)) => {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
-                format!("It needs {}, which is off. Turn that on too.", names(&ids)),
+                if ids.len() == 1 {
+                    format!("It needs {}, which is off. Turn that on too.", names(&ids))
+                } else {
+                    format!(
+                        "It needs {}, which are off. Turn those on too.",
+                        names(&ids)
+                    )
+                },
             ));
         }
         Err(SwitchError::Start(err)) => {
