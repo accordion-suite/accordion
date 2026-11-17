@@ -221,6 +221,7 @@ The state is about 1.6 times the text, and loading is cheap enough to do each ti
 
 ### The file
 
+- **Named like any file,** with `.html` on its name in Drive and Docs too, as the developer chose on November 17, 2026. It's the name a computer that syncs it shows.
 - **An ordinary HTML page.** It has a small stylesheet for screen and print, and no scripts.
 - **A data block holds the rest,** as `<script type="application/x-accordion-docs">`, which browsers neither run nor show. It holds the CRDT state, the comment threads, and a format version.
 - **Each image is stored once,** in the body as a `data:` address. The state refers to it by its hash.
@@ -304,6 +305,19 @@ This waits until Docs' own documents work. It also needs a test set of real Word
 - **Access:** every address and the WebSocket, for the owner, an editor, a commenter, a viewer, and someone with no access, as Drive's access test does. Losing access closes the connection.
 - **Safety:** hostile HTML and Word files import without scripts, and the update reader's fuzz test.
 
+### Build order
+
+Agreed November 17, 2026.
+
+1. **The module and the editor.** The `accordion-docs` repo, Docs' own place beside My Drive ([decision 32](0032-a-place-for-each-apps-files.md)), Docs' home page, the HTML file with its data block, and a co-edited editor with headings, text styles, links, lists, checklists, tables, and code blocks. Drive recognizes documents and opens them in Docs.
+2. **Images, page setup, print to PDF, and Download as.**
+3. **Open with Docs** for HTML, Markdown, Word, and OpenDocument files.
+4. **Comments,** the Commenter level in sharing, and @mentions.
+5. **Named versions** and version history in Docs.
+6. **Templates.**
+
+Suggesting mode (Yjs 14), editing Word files in place, and offline editing come later.
+
 ### Revisit this decision if
 
 - Yjs 14 or yrs stall, or yrs can't read Yjs 14's attributions. y-octo, AFFiNE's Rust port, is the first place to look.
@@ -323,7 +337,6 @@ This waits until Docs' own documents work. It also needs a test set of real Word
 
 ## Open questions
 
-- **Whether Drive shows `.html` on a document's name.** Family members don't expect it, but the file synced to a computer needs it.
 - **Templates and page setup:** where templates live, and which page sizes and margins to offer.
 - **Version history inside Docs,** showing what changed between versions, which Yjs 14's change sets would make easier.
 - **When to move to Yjs 14,** and whether yrs reads what it writes.
