@@ -37,7 +37,7 @@ Transcribing is different:
 |---|---|---|
 | base | 142 MB | About 390 MB |
 | small | 466 MB | About 850 MB |
-| large-v3-turbo, 5-bit | About 550 MB | To be measured |
+| large-v3-turbo, 5-bit | About 550 MB | About 920 MB, measured in step 1 |
 
 Pros:
 
@@ -159,7 +159,7 @@ Cons:
 ### Turning it on
 
 - **Off by default.** In **Settings** > **Notes**, an admin finds **Transcribe voice memos**, with what it does, the model's size, and the space it needs. Turning it on downloads the model, with progress, and the setting says when it's ready.
-- **A choice of model,** worded for families: **Faster** (base), **Balanced** (small), and **More accurate** (large-v3-turbo). The recommended one follows the server's hardware, as decision 26's video setting does. Step 1's measurements set the rule. Changing the model downloads the new one before it removes the old.
+- **A choice of model,** worded for families: **Faster** (base) and **More accurate** (small). large-v3-turbo was dropped on November 17, 2026, because step 1 found it leaves out whole sentences. The recommended one follows the server's hardware, as decision 26's video setting does. Step 1's measurements set the rule. Changing the model downloads the new one before it removes the old.
 - **The Network page lists the download** ([decision 11](0011-the-network-page.md)) as a connection to GitHub, made only when the setting is turned on or the model changes.
 - **Turning it off** removes the model. Transcripts already in notes stay, since they're the notes' own text.
 
@@ -203,10 +203,35 @@ Cons:
 
 ## Steps
 
-1. **Measure.** Build whisper.cpp for amd64 and arm64, and time base, small, and large-v3-turbo on a Raspberry Pi 5 (on the test SD card) and on an x86 server, with memos of 15 seconds, 1 minute, and 5 minutes. Record memory use. Set the recommended model for each tier, and turn the feature down on the Minimum tier if even base is too slow.
+1. **Measure.** Build whisper.cpp for amd64 and arm64, and time base and small on a Raspberry Pi 5 (on the test SD card) and on an x86 server, with large-v3-turbo on x86 too, with memos of 15 seconds, 1 minute, and 5 minutes. Record memory use. Set the recommended model for each tier, and turn the feature down on the Minimum tier if even base is too slow.
 2. **Recording and playback,** which decision 31 already covers.
 3. **The server:** the setting, the download and its check, the job, the sandboxed worker, and writing the transcript.
 4. **The web app:** the setting with its progress, and **Transcribing…** on the memo.
+
+## Measurements
+
+### x86, November 17, 2026
+
+An AMD Ryzen 5 3600 (six cores from 2019) under WSL 2, with whisper.cpp 1.9.5 built for the processor (AVX2, OpenMP, no BLAS). The memos are a LibriVox reading cut to length and saved as the web app saves them, WebM with Opus at 64 kbit/s. Times are from the start of the program to the end, model loading included, with four threads, as Accordion runs it. The memory is the most the program used.
+
+| Model | 15 s memo | 1 min memo | 5 min memo | Memory |
+|---|---|---|---|---|
+| base | 3.7 s | 7.7 s | 36 s | 285–400 MB |
+| small | 12 s | 23 s | 109 s | 750–870 MB |
+| large-v3-turbo, 5-bit | 20 s | 63 s | 270 s | 790–920 MB |
+| large-v3-turbo, full size | 33 s | 88 s | 374 s | 1.8–1.9 GB |
+
+- **The 5-bit large-v3-turbo is faster than the full one,** and uses half the memory.
+- **Six threads take about a quarter off** each time. The 5-bit large-v3-turbo then transcribes a 5-minute memo in 207 seconds.
+- **Short memos cost more for their length,** since loading the model and the 30-second window Whisper works in take the same time for any memo.
+- **Converting a memo** to the 16 kHz sound whisper.cpp reads takes under a second, even for 5 minutes.
+- **large-v3-turbo leaves out whole sentences,** both sizes, with or without voice activity detection. Of the 15-second memo, it kept only the title, and the 5-bit model only its first five words. Of the 1-minute memo, the 5-bit model left out the first 20 seconds. small and base kept every sentence of every memo.
+- **Word by word,** base got a few words wrong ("ability" for "nobility"), small fewer, and large-v3-turbo fewest.
+- **base made up a line** where the 15-second memo stops in the middle of a sentence: "don't forget to subscribe to my channel". small and large-v3-turbo didn't.
+
+### Raspberry Pi 5
+
+To be measured on the test SD card.
 
 ## Later
 
@@ -220,6 +245,7 @@ Cons:
 - **Step 1 finds base too slow on a Pi 5,** such as more than twice a memo's length. Then English-only households might get Moonshine, if its license allows.
 - **Every supported system packages whisper.cpp,** so Accordion stops building it.
 - **A better open model** with a permissive license appears.
+- **large-v3-turbo, or a model after it, stops leaving out sentences,** which would bring back a more accurate choice.
 
 ## Consequences
 
