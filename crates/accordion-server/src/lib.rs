@@ -22,6 +22,7 @@ mod requests;
 mod retention;
 mod session;
 pub mod setup;
+pub mod transcripts;
 pub mod updates;
 pub mod web;
 mod welcome;

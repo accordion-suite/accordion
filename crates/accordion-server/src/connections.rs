@@ -127,6 +127,21 @@ struct NetworkView {
     remote: Option<crate::remote::RemoteNetwork>,
     /// Link sharing's connections, while it's on.
     links: Option<crate::link_sharing::LinkNetwork>,
+    /// The speech model's download, while transcribing is on.
+    models: Option<ModelsView>,
+}
+
+/// Downloading the speech model that transcribes voice memos (decision
+/// 33), made only when an admin turns transcribing on or changes the model.
+#[derive(Serialize)]
+struct ModelsView {
+    host: String,
+    /// `base` or `small`.
+    model: &'static str,
+    /// Whether the model is downloaded and checked.
+    ready: bool,
+    /// Why the last download failed.
+    problem: Option<String>,
 }
 
 /// The last time a connection was made, and whether it worked.
@@ -308,6 +323,20 @@ async fn status(
             .link_sharing
             .as_ref()
             .and_then(crate::link_sharing::LinkSharing::network),
+        models: state.health.transcripts.as_ref().and_then(|transcripts| {
+            use accordion_core::transcripts::State;
+            let status = transcripts.status.borrow();
+            let model = status.model?;
+            Some(ModelsView {
+                host: transcripts.host.clone(),
+                model: model.id(),
+                ready: status.state == State::Ready,
+                problem: match &status.state {
+                    State::Failed(problem) => Some(problem.clone()),
+                    _ => None,
+                },
+            })
+        }),
     }))
 }
 

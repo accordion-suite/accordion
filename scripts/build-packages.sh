@@ -161,8 +161,15 @@ for target in "${rust_targets[@]}"; do
 done
 cargo zigbuild --locked --release -p accordion-server -p accordion-update "${targets[@]}"
 
-python3 -I packaging/third-party-licenses.py --web "$web_src" "${rust_targets[@]}" \
-    > target/third-party-licenses.txt
+# whisper.cpp, for transcribing voice memos (decision 33).
+for arch in "${arches[@]}"; do
+    scripts/build-whisper.sh "$arch" "target/whisper-$arch"
+done
+whisper_version="$(sed -n 's/^WHISPER_VERSION=//p' scripts/build-whisper.sh)"
+
+python3 -I packaging/third-party-licenses.py --web "$web_src" \
+    --whisper "$whisper_version" "target/whisper-${arches[0]}/whisper-LICENSE" \
+    "${rust_targets[@]}" > target/third-party-licenses.txt
 
 debs=()
 for arch in "${arches[@]}"; do
@@ -186,6 +193,9 @@ for arch in "${arches[@]}"; do
     chmod -R u=rwX,go=rX "$root/usr/lib/accordion/web"
     install -m 0755 "target/${RUST_TARGET[$arch]}/release/accordion-update" \
         "$root/usr/lib/accordion/accordion-update"
+    for program in whisper whisper-baseline; do
+        install -m 0755 "target/whisper-$arch/$program" "$root/usr/lib/accordion/$program"
+    done
     for unit in accordion.service accordion-update.path accordion-update.service \
         accordion-workers.socket accordion-workers.service; do
         install -D -m 0644 "packaging/systemd/$unit" "$root/usr/lib/systemd/system/$unit"

@@ -31,6 +31,7 @@ use crate::updates::{CheckResult, UpdateStatus};
 use crate::web::WebApp;
 use accordion_core::texts::TextStatus;
 use accordion_core::thumbnails::ThumbnailStatus;
+use accordion_core::transcripts::{Model, State as TranscriptState, Status as TranscriptStatus};
 use accordion_module::ApiError;
 use accordion_module::Authenticated;
 use accordion_update::protocol::Outcome;
@@ -65,6 +66,16 @@ pub struct Health {
     pub remote: Option<RemoteAccess>,
     /// Link sharing, which reports once the server serves its routes.
     pub link_sharing: Option<LinkSharing>,
+    /// Transcribing voice memos, once the server is running.
+    pub transcripts: Option<TranscriptHealth>,
+}
+
+/// Transcribing voice memos (decision 33), and where its models come from.
+#[derive(Clone)]
+pub struct TranscriptHealth {
+    pub status: watch::Receiver<TranscriptStatus>,
+    /// Such as `github.com`, for the Network page.
+    pub host: String,
 }
 
 /// The server's name and the background work that keeps it usable.
@@ -155,6 +166,13 @@ impl Health {
         }
         if let Some(links) = self.link_sharing.as_ref().and_then(LinkSharing::health) {
             checks.push(link_check(&links, now));
+        }
+        if let Some(check) = self
+            .transcripts
+            .as_ref()
+            .and_then(|transcripts| transcripts_check(&transcripts.status.borrow()))
+        {
+            checks.push(check);
         }
         checks
     }
@@ -594,6 +612,55 @@ fn search_check(status: &TextStatus) -> Check {
         state,
         summary,
     }
+}
+
+/// How transcribing voice memos is doing, once an admin turned it on.
+fn transcripts_check(status: &TranscriptStatus) -> Option<Check> {
+    let model = status.model?;
+    let (state, summary) = if let Some(reason) = &status.unavailable {
+        // Not a warning: ffmpeg is optional, and an admin may leave it out.
+        (
+            Level::Ok,
+            format!("Voice memos don't get transcripts, because {reason}"),
+        )
+    } else {
+        match &status.state {
+            TranscriptState::Failed(problem) => (
+                Level::Warning,
+                format!(
+                    "Accordion couldn't download the speech model for transcripts ({problem}). \
+                     An admin can try again in Settings, under Notes."
+                ),
+            ),
+            TranscriptState::Downloading { done, total } if *total > 0 => (
+                Level::Ok,
+                format!(
+                    "Accordion is downloading the speech model for transcripts ({}% done).",
+                    done * 100 / total
+                ),
+            ),
+            TranscriptState::Downloading { .. } => (
+                Level::Ok,
+                "Accordion is checking the speech model for transcripts.".to_owned(),
+            ),
+            TranscriptState::Ready | TranscriptState::Off => (
+                Level::Ok,
+                format!(
+                    "Voice memos recorded in Notes get transcripts, with the {} model.",
+                    match model {
+                        Model::Base => "faster",
+                        Model::Small => "more accurate",
+                    }
+                ),
+            ),
+        }
+    };
+    Some(Check {
+        id: "transcripts",
+        title: "Transcripts",
+        state,
+        summary,
+    })
 }
 
 fn thumbnails_check(status: &ThumbnailStatus) -> Check {
@@ -1036,6 +1103,7 @@ mod tests {
             search: None,
             remote: None,
             link_sharing: None,
+            transcripts: None,
         }
     }
 
@@ -1305,6 +1373,45 @@ mod tests {
 
         assert_eq!(hour_label(0), "midnight");
         assert_eq!(hour_label(15), "3 p.m.");
+    }
+
+    #[test]
+    fn says_how_transcripts_are_doing() {
+        let status = |model, state, unavailable: Option<&str>| TranscriptStatus {
+            model,
+            state,
+            unavailable: unavailable.map(str::to_owned),
+        };
+        assert!(transcripts_check(&status(None, TranscriptState::Off, None)).is_none());
+        let check = transcripts_check(&status(
+            Some(Model::Small),
+            TranscriptState::Downloading {
+                done: 50,
+                total: 200,
+            },
+            None,
+        ))
+        .unwrap();
+        assert_eq!(check.state, Level::Ok);
+        assert!(check.summary.contains("25% done"), "{}", check.summary);
+        let check = transcripts_check(&status(
+            Some(Model::Base),
+            TranscriptState::Failed("github.com answered with an error (404 Not Found)".into()),
+            None,
+        ))
+        .unwrap();
+        assert_eq!(check.state, Level::Warning);
+        let check = transcripts_check(&status(
+            Some(Model::Small),
+            TranscriptState::Ready,
+            Some("ffmpeg isn't installed. Install it with apt."),
+        ))
+        .unwrap();
+        assert_eq!(check.state, Level::Ok);
+        assert_eq!(
+            check.summary,
+            "Voice memos don't get transcripts, because ffmpeg isn't installed. Install it with apt."
+        );
     }
 
     #[test]

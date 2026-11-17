@@ -5,7 +5,7 @@
 //! Like the other admin APIs, it answers only on the home network, and only
 //! for admins.
 
-mod fetch;
+pub(crate) mod fetch;
 mod install;
 mod service;
 

@@ -100,19 +100,33 @@ impl Fetcher {
         to: &Path,
         limit: u64,
     ) -> Result<[u8; 32], String> {
+        self.download_reporting(url, to, limit, &|_| {}).await
+    }
+
+    /// Like `download`, calling `progress` with how many bytes have come,
+    /// every megabyte or so and at the end.
+    pub(crate) async fn download_reporting(
+        &self,
+        url: &str,
+        to: &Path,
+        limit: u64,
+        progress: &(dyn Fn(u64) + Send + Sync),
+    ) -> Result<[u8; 32], String> {
         let uri = parse(url)?;
         let host = host(&uri);
+        let name = uri.path().rsplit('/').next().unwrap_or_default().to_owned();
         let download = async {
             let (response, _) = self
                 .follow(uri)
                 .await?
-                .ok_or_else(|| format!("{host} doesn't have the package for this release"))?;
+                .ok_or_else(|| format!("{host} doesn't have {name}"))?;
             let mut file = tokio::fs::File::create(to)
                 .await
                 .map_err(|err| format!("Accordion couldn't save the download ({err})"))?;
             let mut body = response.into_body();
             let mut sum = Sha256::default();
             let mut length = 0;
+            let mut reported = 0;
             while let Some(frame) = body.frame().await {
                 let frame = frame
                     .map_err(|err| format!("the download from {host} stopped partway ({err})"))?;
@@ -121,7 +135,11 @@ impl Fetcher {
                 };
                 length += data.len() as u64;
                 if length > limit {
-                    return Err(format!("{host} sent a bigger package than expected"));
+                    return Err(format!("{host} sent a bigger {name} than expected"));
+                }
+                if length - reported >= 1024 * 1024 {
+                    progress(length);
+                    reported = length;
                 }
                 sum.update(&data);
                 file.write_all(&data)
@@ -131,6 +149,7 @@ impl Fetcher {
             file.sync_all()
                 .await
                 .map_err(|err| format!("Accordion couldn't save the download ({err})"))?;
+            progress(length);
             Ok(sum.finish())
         };
         tokio::time::timeout(DOWNLOAD_TIMEOUT, download)

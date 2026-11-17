@@ -87,6 +87,16 @@ async fn start_with(web: bool, change: impl FnOnce(&Path)) -> Server {
             .unwrap(),
             identity: identity.clone(),
             storage: storage.clone(),
+            transcripts: accordion_core::transcripts::Transcripts::open(
+                db.clone(),
+                storage.clone(),
+                dir.path(),
+                accordion_core::transcripts::Tools::installed("/nonexistent"),
+                None,
+                accordion_core::transcripts::MODELS_URL,
+            )
+            .await
+            .unwrap(),
             events: events.clone(),
             live: Live::new(db.clone(), &identity),
             link_origin: tokio::sync::watch::channel(None).1,

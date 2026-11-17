@@ -15,6 +15,7 @@ use accordion_core::live::Live;
 use accordion_core::storage::Storage;
 use accordion_core::texts::{self, Texts};
 use accordion_core::thumbnails::{self, Thumbnails, Tools};
+use accordion_core::transcripts::{self, Transcripts};
 use accordion_gateway::address::{AddressPublisher, AddressSource};
 use accordion_gateway::certificates::{Authority, Renewer, Settings};
 use accordion_gateway::dns::{Provider, ProviderKind};
@@ -24,11 +25,12 @@ use accordion_gateway::tls::{self, CertStore};
 use accordion_gateway::{Peer, ServerName};
 use accordion_module::{Services, Stopping};
 use accordion_server::connections::Switches;
-use accordion_server::health::{Health, NameHealth};
+use accordion_server::health::{Health, NameHealth, TranscriptHealth};
 use accordion_server::link_sharing::{self, LinkSharing, Site as LinkSite};
 use accordion_server::network::AdminAccess;
 use accordion_server::remote::{RemoteAccess, Site as RemoteSite};
 use accordion_server::setup::{self, SETUP_CODE_FILE, Setup, SetupOptions};
+use accordion_server::transcripts as transcripts_setup;
 use accordion_server::updates::{UpdateSource, Updates};
 use accordion_server::web::WebApp;
 use accordion_server::{AppState, Site, modules, router};
@@ -227,9 +229,28 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         thumbnails.clone(),
         &data_dir,
         texts::Tools {
-            workers,
+            workers: workers.clone(),
             ..texts::Tools::installed(std::env::current_exe()?)
         },
+    )
+    .await?;
+    // Transcribing voice memos (decision 33), off until an admin turns it
+    // on, which downloads the speech model.
+    let (models_url, models_over_http) = transcripts_setup::models_url()?;
+    let installed = transcripts::Tools::installed(std::env::current_exe()?);
+    let transcripts = Transcripts::open(
+        db.clone(),
+        storage.clone(),
+        &data_dir,
+        transcripts::Tools {
+            workers,
+            whisper: transcripts_setup::whisper_program().unwrap_or(installed.whisper.clone()),
+            ..installed
+        },
+        Some(Arc::new(transcripts_setup::ModelDownload::new(
+            models_over_http,
+        )?)),
+        &models_url,
     )
     .await?;
     let web = WebApp::from_env()?;
@@ -266,6 +287,10 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         search: Some(texts.status()),
         remote: Some(remote.clone()),
         link_sharing: Some(link_sharing.clone()),
+        transcripts: Some(TranscriptHealth {
+            status: transcripts.status(),
+            host: transcripts_setup::models_host(&models_url),
+        }),
         ..Health::default()
     };
     let mut background = JoinSet::new();
@@ -274,6 +299,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
     background.spawn(updates.clone().run(Some(backup.status()), until_stopped()));
     background.spawn(thumbnails.clone().run(until_stopped()));
     background.spawn(texts.clone().run(until_stopped()));
+    background.spawn(transcripts.clone().run(until_stopped()));
     background.spawn(events.clone().maintain(until_stopped()));
     // Ends every stream when the server stops, so clients reconnect to the
     // next one as soon as it's up, and serving can stop without waiting.
@@ -301,6 +327,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             storage: storage.clone(),
             thumbnails: thumbnails.clone(),
             texts,
+            transcripts,
             events: events.clone(),
             live: live.clone(),
             link_origin: link_sharing.origin(),

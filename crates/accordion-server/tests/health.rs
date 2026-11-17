@@ -70,6 +70,7 @@ async fn start_with(
         search: None,
         remote: None,
         link_sharing: None,
+        transcripts: None,
     };
     let app = router(
         AppState {

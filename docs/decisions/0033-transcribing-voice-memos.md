@@ -166,12 +166,14 @@ Cons:
 ### Where the program and model live
 
 - **Accordion builds whisper.cpp's command-line program** from a pinned release in its release workflow, for amd64 and arm64, and ships it in the package at `/usr/lib/accordion/whisper`. When every supported system packages whisper.cpp, the package depends on that instead.
+- **Two builds for each architecture,** each one static program built with zig, like the server: `whisper` for processors with AVX2, FMA, F16C, and BMI2, or ARM's dot product and half-precision instructions, such as a Raspberry Pi 5, and `whisper-baseline` for older ones, such as a Celeron in a NAS or a Raspberry Pi 4. The server asks the processor which one it runs, so an instruction the processor doesn't have can't stop it. On this PC, the release build is as fast as one made for the processor itself.
 - **The models live in the data folder's cache,** under `cache/models/`, which backups leave out. A restored server downloads its model again.
+- **Accordion's release `whisper-models-1`** holds `ggml-base.bin`, `ggml-small.bin`, and `ggml-silero-v5.1.2.bin`, as whisper.cpp's project publishes them, with their MIT license. The server knows each file's size and SHA-256.
 - **A new release can move to a newer model** by changing the hash it knows. The server then downloads the new model and keeps the old one until the new one passes the check.
 
 ### Transcribing
 
-- **Notes asks for a transcript when a memo recorded in Notes is saved.** An audio file added another way, such as from Obsidian, gets none.
+- **Notes asks for a transcript when a memo recorded in Notes for one is saved.** While transcripts are on, the record button opens a menu: **Voice memo** for a plain memo, or **Transcribe** for one with a transcript, so turning them on doesn't put words under every memo. While they're off, the button records a plain memo straight away. Anyone signed in can ask `GET /api/notes/transcripts/on` whether they're on. An audio file added another way, such as from Obsidian, gets none.
 - **It runs as a background job,** one at a time, at low priority, with at most four threads, so people's requests come first. Memos wait in order.
 - **Two steps, both in the sandbox:** ffmpeg turns the memo into 16 kHz mono WAV, reading only WebM or MP4 with its Opus or AAC decoder. Then whisper.cpp reads the WAV and the model and writes plain text. The worker sees only its job folder, which holds the WAV and a hard link to the model, as decision 29 gives a worker its file. It has no network.
 - **Limits:** 1.5 GB of memory, as decision 26 gives conversions, and processor time of 10 times the memo's length, plus a minute. Memos over 30 minutes get no transcript.
@@ -205,8 +207,8 @@ Cons:
 
 1. **Measure.** Build whisper.cpp for amd64 and arm64, and time base and small on a Raspberry Pi 5 (on the test SD card) and on an x86 server, with large-v3-turbo on x86 too, with memos of 15 seconds, 1 minute, and 5 minutes. Record memory use. Set the recommended model for each tier, and turn the feature down on the Minimum tier if even base is too slow.
 2. **Recording and playback,** which decision 31 already covers.
-3. **The server:** the setting, the download and its check, the job, the sandboxed worker, and writing the transcript.
-4. **The web app:** the setting with its progress, and **Transcribing…** on the memo.
+3. **The server:** the setting, the download and its check, the job, the sandboxed worker, and writing the transcript. Built and tested November 17, 2026, with small as the recommended model until the Pi's numbers are in: core's `transcripts` service, Notes' queue and setting, the suite's download, Network page, and health check, and `scripts/build-whisper.sh` in the package build. Left: publishing the `whisper-models-1` release, and CI's model cache, sandbox test, and connection check.
+4. **The web app:** the setting with its progress, and **Transcribing…** on the memo. Built and tested November 17, 2026. While a memo waits, the editor keeps what's typed and adds the transcript after it.
 
 ## Measurements
 

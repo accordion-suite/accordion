@@ -1,16 +1,18 @@
-"""Writes the licenses of every Rust library built into the server, and of
-every library in the web app.
+"""Writes the licenses of every Rust library built into the server, of
+every library in the web app, and of whisper.cpp, which the package ships
+for transcripts.
 
 Most of them are under licenses, such as MIT and Apache-2.0, that ask for
 their notices to come with a program built from them, so the release
 packages include this file.
 
-Usage: python3 packaging/third-party-licenses.py [--web FOLDER] TARGET... > licenses.txt
+Usage: python3 packaging/third-party-licenses.py [--web FOLDER] [--whisper VERSION LICENSE] TARGET... > licenses.txt
 
 Run it from the repo, after `cargo fetch --locked`. TARGET is a Rust target,
 such as aarch64-unknown-linux-musl. FOLDER is a checkout of accordion-web
 after `npm ci`. Only its packages that aren't build tools go into the web
-app, so only theirs are listed. The output is the same on every machine for
+app, so only theirs are listed. LICENSE is whisper.cpp's license file, from
+scripts/build-whisper.sh. The output is the same on every machine for
 the same Cargo.lock and package-lock.json, so it doesn't break reproducible
 packages.
 """
@@ -108,10 +110,16 @@ def write(out, seen, name, version, license, source, files):
 def main():
     args = sys.argv[1:]
     web = None
-    if args[:1] == ["--web"]:
-        if len(args) < 2:
-            sys.exit(__doc__)
-        web, args = args[1], args[2:]
+    whisper = None
+    while args[:1] in (["--web"], ["--whisper"]):
+        if args[0] == "--web":
+            if len(args) < 2:
+                sys.exit(__doc__)
+            web, args = args[1], args[2:]
+        else:
+            if len(args) < 3:
+                sys.exit(__doc__)
+            whisper, args = (args[1], args[2]), args[3:]
     targets = args
     if not targets:
         sys.exit(__doc__)
@@ -134,6 +142,13 @@ def main():
         out.write("\n\nLibraries in the web app\n")
         for name, version, license, source, folder in web_packages(web):
             write(out, seen, name, version, license, source, list(license_files(folder)))
+    if whisper:
+        version, path = whisper
+        with open(path, encoding="utf-8") as file:
+            text = file.read().strip()
+        out.write("\n\nPrograms in the package\n")
+        write(out, seen, "whisper.cpp", version, "MIT", "https://github.com/ggml-org/whisper.cpp",
+              [("LICENSE", text)])
 
 
 if __name__ == "__main__":
