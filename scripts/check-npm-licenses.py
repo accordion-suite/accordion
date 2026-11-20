@@ -19,7 +19,8 @@ import os
 import re
 import sys
 
-# The same list as deny.toml. Check compatibility before you add one.
+# The same list as deny.toml, plus the font license below. Check
+# compatibility before you add one.
 ALLOWED = {
     "AGPL-3.0-only",
     "AGPL-3.0-or-later",
@@ -29,6 +30,9 @@ ALLOWED = {
     "ISC",
     "MIT",
     "MPL-2.0",
+    # Fonts only, such as the ones Docs bundles: the SIL Open Font License
+    # lets any program ship a font, as long as the font keeps its license.
+    "OFL-1.1",
     "Unicode-3.0",
     "Zlib",
 }

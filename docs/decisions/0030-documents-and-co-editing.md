@@ -307,14 +307,27 @@ This waits until Docs' own documents work. It also needs a test set of real Word
 
 ### Build order
 
-Agreed November 17, 2026.
+Agreed November 17, 2026. On November 20, after a sweep of Google Docs' and Proton Docs' features, the developer added steps 3 and 4.
 
 1. **The module and the editor.** The `accordion-docs` repo, Docs' own place beside My Drive ([decision 32](0032-a-place-for-each-apps-files.md)), Docs' home page, the HTML file with its data block, and a co-edited editor with headings, text styles, links, lists, checklists, tables, and code blocks. Drive recognizes documents and opens them in Docs.
 2. **Images, page setup, print to PDF, and Download as.**
-3. **Open with Docs** for HTML, Markdown, Word, and OpenDocument files.
-4. **Comments,** the Commenter level in sharing, and @mentions.
-5. **Named versions** and version history in Docs.
-6. **Templates.**
+3. **Editing basics,** in three parts. It comes before Open with Docs, so a converted Word file keeps its colors, sizes, fonts, and alignment.
+   1. **Text:** font, font size, text color, highlight color, superscript and subscript, and clear formatting.
+   2. **Paragraphs:** alignment, indent, line and paragraph spacing, the Title and Subtitle styles and headings 4 to 6, list styles and restarting numbering, and page breaks.
+   3. **Tools:** find and replace, word count, an outline of the headings, smart quotes and automatic links, a list of keyboard shortcuts, cell colors and merging cells, and **Move to trash** and **Make a copy** in the File menu.
+4. **Pages:** headers, footers, page numbers, footnotes, and a table of contents. They need the editor to show separate pages.
+5. **Open with Docs** for HTML, Markdown, Word, and OpenDocument files.
+6. **Comments,** the Commenter level in sharing, and @mentions.
+7. **Named versions** and version history in Docs.
+8. **Templates.**
+
+**Fonts.** Docs bundles 32 open fonts from Fontsource, in every language each one has, and the browser downloads only the ones a page shows. Google Fonts isn't used, since loading from it would tell Google who's reading. Six fonts are made to match Word's letter for letter, and documents use the names of the fonts they match: Arial (Arimo), Calibri (Carlito), Cambria (Caladea), Courier New (Cousine), Georgia (Gelasio), and Times New Roman (Tinos). A document set in them breaks into lines the same way in Docs, in print, and in Word. Text with no font of its own is Arial at 11 points, as in Google Docs.
+
+**Paragraphs.** Lines are 1.15 apart, where single spacing is Arial's own line height, as in Word. Paragraphs have 6 points after them, and headings, the title, and the subtitle have Google Docs' space around them, the same in the editor, the file, and the downloads. A paragraph's alignment, indents, line spacing, and space before and after are its own, and Enter carries them to the next line, as in Google Docs and Word. After a heading, a title, or a subtitle, the next line is normal text. A paragraph that goes into a list leaves its indents behind, since the list places its text. Page breaks go only between the document's own blocks, never in a list, a quote, or a table, where printing can't break a page.
+
+**Menus.** On a document, the top bar shows the document's icon and name where other pages show **Accordion Docs**, as Google Docs does, with Share just left of the app picker. The icon leads back to Docs' home. On phones the name and Share wrap to a row of their own. Under the top bar is a menu bar, as in Google Docs: **File** (New document, Share, Download, Rename, Page setup, Print), **Edit** (Undo, Redo, Cut, Copy, Paste, Paste without formatting, Select all, Delete), **View** (Full screen), **Insert** (Picture, Table, Link, Horizontal line, Page break), and **Format** (Text, Paragraph styles, Align and indent, Line and paragraph spacing, Bullets and numbering, Quote, Table and Picture when one is selected, Clear formatting), with submenus. People who can only view get File, Edit, and View. Browsers let a page paste only after asking, or not at all, so **Paste** asks for the clipboard and, if refused, says to press Ctrl+V. Part 3's tools add to these menus: find and replace to Edit, the outline to View, and a **Tools** menu with word count and the list of keyboard shortcuts.
+
+The developer wants as many open fonts as possible. Google Fonts has about 1,900 families under open licenses, about 1 GB in all, so they can't all be bundled. After Editing basics, before Pages, Docs plans an optional font pack: an admin turns it on in Settings, the server downloads it from Accordion's own release (never from Google), and the font menu gains **More fonts** with a search.
 
 Suggesting mode (Yjs 14), editing Word files in place, and offline editing come later.
 
@@ -341,4 +354,5 @@ Suggesting mode (Yjs 14), editing Word files in place, and offline editing come 
 - **Version history inside Docs,** showing what changed between versions, which Yjs 14's change sets would make easier.
 - **When to move to Yjs 14,** and whether yrs reads what it writes.
 - **Where the co-editing state of a Word file edited in place lives,** since a `.docx` has no place for the data block. Docs' tables are the likely answer, which brings back option B's problem for those files only.
+- **The font pack:** how it's packaged, how fonts reach the editor and the print page, and whether a document can name a pack font when the pack is off.
 - **Collabora Online,** LibreOffice in the browser, for people who need every Word feature in the browser. It's heavy (about 1 GB of memory while editing), so it would be an optional add-on with its own decision.

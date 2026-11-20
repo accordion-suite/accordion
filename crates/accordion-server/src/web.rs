@@ -232,7 +232,7 @@ async fn manifest(State(state): State<AppState>, headers: HeaderMap) -> Response
     .await
 }
 
-/// A script, style, or image. Its name includes a hash of its contents, so
+/// A script, style, image, or font. Its name includes a hash of its contents, so
 /// browsers can keep it for a year.
 async fn app_file(
     State(state): State<AppState>,
@@ -265,6 +265,9 @@ fn content_type(file: &str) -> Option<&'static str> {
         "css" => "text/css",
         "svg" => "image/svg+xml",
         "png" => "image/png",
+        // Docs' fonts. They're compressed already, so they have no
+        // compressed copies.
+        "woff2" => "font/woff2",
         _ => return None,
     })
 }
@@ -343,6 +346,10 @@ mod tests {
     fn serves_only_the_apps_kinds_of_file() {
         assert_eq!(content_type("main-JHQCIFJL.js"), Some("text/javascript"));
         assert_eq!(content_type("main-TSNOJFU5.css"), Some("text/css"));
+        assert_eq!(
+            content_type("arimo-latin-400-normal-TSNOJFU5.woff2"),
+            Some("font/woff2")
+        );
         assert_eq!(content_type("main-JHQCIFJL.js.gz"), None);
         assert_eq!(content_type("notes.txt"), None);
         assert_eq!(content_type("README"), None);
