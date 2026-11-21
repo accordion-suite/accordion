@@ -10,10 +10,12 @@ Files for installing Accordion on a Linux machine as a system service, and the D
 | `debian/postinst`, `prerm`, `postrm` | Package scripts | Create the user, start the service when installed, stop it when removed, and turn it off when purged |
 | `debian/copyright` | `/usr/share/doc/accordion/copyright` | Accordion's and restic's licenses |
 | `install.sh` | Not installed | The install command's script, which downloads, checks, and installs the package for the machine |
-| `third-party-licenses.py` | `/usr/share/doc/accordion/third-party-licenses.txt` | Collects the licenses of the Rust libraries built into Accordion, and of the web app's libraries |
+| `third-party-licenses.py` | `/usr/share/doc/accordion/third-party-licenses.txt` | Collects the licenses of the Rust libraries built into Accordion, the web app's libraries and fonts, and whisper.cpp |
 | `web-commit` | Not installed | The commit of [`accordion-web`](https://github.com/accordion-suite/accordion-web) that the package's web app is built from. `scripts/pin-versions.sh` writes it. |
 
 The package also includes [restic](https://restic.net) 0.19.1, the program that makes backups ([decision 8](../docs/decisions/0008-backups.md)), as `/usr/lib/accordion/restic`. It's kept apart from any restic your distribution installs, so Accordion always runs the version it was tested with. Backups to another computer over SFTP also need OpenSSH's client, which the package recommends.
+
+It also includes whisper.cpp 1.9.5, which transcribes voice memos when an admin turns transcripts on ([decision 33](../docs/decisions/0033-transcribing-voice-memos.md)), as two programs: `/usr/lib/accordion/whisper` for processors with AVX2 or ARM's dot product instructions, such as a Raspberry Pi 5, and `/usr/lib/accordion/whisper-baseline` for older ones. The server picks one as it starts. Each is one static program, so it needs no libraries. The speech models aren't in the package: the server downloads the one the admin chooses from Accordion's `whisper-models-1` release, and checks it against the hash built into the server.
 
 The web app ([decision 13](../docs/decisions/0013-the-web-app.md)) is in `/usr/lib/accordion/web`, where the server finds it. It's the same for both architectures. The server checks its files against `files.json` as it starts. Running the install command again puts back any that are missing or changed.
 
@@ -22,8 +24,8 @@ The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi 
 ## What the service does
 
 - **Accordion runs as its own user,** `accordion`, never as root. Its data lives in `/var/lib/accordion`, which only that user can open, because it holds the database, the DNS token, and private keys.
-- **It can use ports 80 and 443.** Ports below 1024 normally need root. The service grants only the one capability that allows them, `CAP_NET_BIND_SERVICE`, and Accordion can't gain any other.
-- **It can't touch the rest of the machine.** The service sees the system as read-only, can't see home folders, and can't load kernel modules, change the clock, or use most system calls. If Accordion were ever compromised, this limits what an attacker could reach.
+- **It can use ports 80 and 443 -** Ports below 1024 normally need root. The service grants only the one capability that allows them, `CAP_NET_BIND_SERVICE`, and Accordion can't gain any other.
+- **It can't touch the rest of the machine -** The service sees the system as read-only, can't see home folders, and can't load kernel modules, change the clock, or use most system calls. If Accordion were ever compromised, this limits what an attacker could reach.
 - **Programs that read people's files run in a separate service,** `accordion-workers`. Each job runs as a user ID of its own, which owns nothing, sees only its own folder of the data folder, and has no network ([decision 29](../docs/decisions/0029-sandboxing-workers-without-landlock.md)).
 - **It can write backups to disks mounted under `/media` or `/mnt`,** such as a USB disk, and nowhere else outside its data folder. Mount backup disks there, and make the backup folder writable by the `accordion` user.
 
@@ -31,9 +33,9 @@ The package runs on Debian 12 or later, Ubuntu 24.04 or later, and Raspberry Pi 
 
 `scripts/build-packages.sh` builds `accordion_<version>_amd64.deb` and `accordion_<version>_arm64.deb` in `target/packages`, with `install.sh` and the `SHA256SUMS` of all three. The same commit gives the same files on any machine, which lets the developer check CI's release packages before signing them. For that, it needs:
 
-- **The Rust version in `rust-toolchain.toml`.** rustup installs it.
+- **The Rust version in `rust-toolchain.toml` -** rustup installs it.
 - **zig 0.14.1 and cargo-zigbuild 0.23.4,** which build both architectures from one machine. Install cargo-zigbuild with `cargo install --locked cargo-zigbuild --version 0.23.4`.
-- **An internet connection.** The script downloads Node.js 24.22.2 from nodejs.org, and checks it against the checksum Node.js published. It then fetches the web app's pinned commit from GitHub, installs its packages from npm, and builds it. Every computer uses this Node.js, rather than one already installed, because each Node.js build compresses the app's files a little differently.
+- **An internet connection -** The script downloads Node.js 24.22.2 from nodejs.org, and checks it against the checksum Node.js published. It then fetches the web app's pinned commit from GitHub, installs its packages from npm, and builds it. `scripts/build-whisper.sh` downloads whisper.cpp's tagged commit and a pinned CMake release, checked against Kitware's hashes, and builds whisper.cpp with the same zig. Every computer uses this Node.js, rather than one already installed, because each Node.js build compresses the app's files a little differently.
 - **The release key's public half** in `packaging/release-key.pem`, which goes into `install.sh`. To test with another key, set `ACCORDION_RELEASE_KEY` to its public PEM file.
 - **A clone outside the workspace,** with no changes that aren't committed. In the workspace, Cargo builds your checkouts of the other repos instead of the versions in `Cargo.lock`.
 

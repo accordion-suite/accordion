@@ -34,7 +34,7 @@ Each file in this folder records one significant decision about how Accordion is
 | [28](0028-carrier-grade-nat.md) | Reaching a home behind carrier-grade NAT | Accepted |
 | [29](0029-sandboxing-workers-without-landlock.md) | Sandboxing workers without Landlock | Accepted |
 | [30](0030-documents-and-co-editing.md) | Documents and co-editing | Accepted |
-| [31](0031-notes.md) | Notes | Accepted |
+| [31](0031-notes.md) | Notes | Accepted. Where notes live is replaced by [32](0032-a-place-for-each-apps-files.md) |
 | [32](0032-a-place-for-each-apps-files.md) | A place for each app's files | Accepted |
 | [33](0033-transcribing-voice-memos.md) | Transcribing voice memos | Accepted |
 | [34](0034-importing-from-google-takeout.md) | Importing from Google Takeout | Accepted |
