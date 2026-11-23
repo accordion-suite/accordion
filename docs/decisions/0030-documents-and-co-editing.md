@@ -267,8 +267,10 @@ A document's file can change without Docs: someone restores an older version, a 
 
 ### Import and export
 
-- **Open with Docs** makes a new document from an HTML, Markdown, Word, or OpenDocument file, as Google Docs does. Word and OpenDocument go through LibreOffice in the sandboxed worker, to HTML, then through the schema.
-- **Open with Docs warns before it converts** when the file has things the editor can't keep, such as text boxes, Word's tracked changes, or fields other than page numbers and a table of contents. It also lists the fonts Docs uses in place of ones it doesn't have (see **Fonts** under the build order). Old `.doc` files convert the same way.
+- **Open with Docs** makes a new document from an HTML, Markdown, Word, OpenDocument, or plain text file, as Google Docs does. The file stays as it is, and the document goes beside it, or in the person's own Docs when they can't add to its folder.
+- **Docs reads Word and OpenDocument files itself,** chosen by the developer on November 23, 2026, in place of LibreOffice, which this decision first named. LibreOffice is optional on a server, so with it, Word files couldn't be opened where it isn't installed, and its HTML loses footnotes, headers and footers, weights, and page setup. Docs already wrote both formats itself. Reading them is Docs' own code, run by the server's own program in the sandbox as `docs-import` (decision 1), the way core reads Office files' text for search. It writes Docs' page, which the server reads through the schema again, and the server shrinks its pictures as it does pictures people add. LibreOffice is used only for old `.doc` and `.rtf` files, when it's installed.
+- **Open with Docs warns before it converts** when the file has things the editor can't keep, such as text boxes, Word's tracked changes, comments, shapes, equations, or fields other than page numbers and a table of contents, or paper Docs doesn't have. The warning also lists the fonts Docs uses in place of ones it doesn't have (see **Fonts** under the build order). A file with nothing to lose opens at once, and the editor names the fonts it replaced in its status line, as it does for a paste.
+- **A Word file Docs wrote comes back the same:** Docs' own styles, list numberings, table style, page fields, and table of contents read as Docs' defaults.
 - **Download as** HTML (the file itself), Word, OpenDocument, Markdown, or PDF. PDF comes from the browser's print of the editor's own pages (see **Pages** under the build order).
 - **The original Word file is still edited in Word or LibreOffice** on a computer, through the desktop app or the network drive.
 
@@ -319,7 +321,9 @@ Agreed November 17, 2026. On November 20, after a sweep of Google Docs' and Prot
    1. **Pages, headers, and footers:** the editor shows separate pages, and printing prints those pages, with headers, footers, a different first page, page numbers, and the number of pages.
    2. **Footnotes.**
    3. **A table of contents.**
-5. **Open with Docs** for HTML, Markdown, Word, and OpenDocument files.
+5. **Open with Docs** for HTML, Markdown, Word, and OpenDocument files, in two parts:
+   1. **Word, web pages, Markdown, and plain text,** built November 23, 2026: **Open with Docs** in Drive's menus and viewer, the warning, and the font notices.
+   2. **OpenDocument files,** which Docs reads itself, and old `.doc` and `.rtf` files, through LibreOffice where it's installed.
 6. **Comments,** the Commenter level in sharing, and @mentions.
 7. **Named versions** and version history in Docs.
 8. **Templates.**

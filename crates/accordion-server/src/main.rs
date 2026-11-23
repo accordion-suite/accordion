@@ -122,6 +122,12 @@ fn main() -> ExitCode {
             let code = thumbnails::book::main(args);
             return ExitCode::from(u8::try_from(code).unwrap_or(1));
         }
+        // Reads a file someone opens with Docs, inside the sandbox
+        // (decision 30).
+        Some(command) if command == accordion_docs::import::COMMAND => {
+            let code = accordion_docs::import::main(args);
+            return ExitCode::from(u8::try_from(code).unwrap_or(1));
+        }
         _ => {}
     }
     run()
