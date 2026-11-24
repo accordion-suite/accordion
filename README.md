@@ -87,7 +87,7 @@ Accordion trusts the server owner and no one else: not the network, not your int
 
 ## Moving from Google
 
-Accordion will import a Google Takeout archive and map each product to its module: Gmail to Mail, Drive files to Accordion Drive, Keep to Notes, and Contacts, Calendar, and Photos to their own modules. Anything it can't convert will go into an "Unconverted" folder with a report, so nothing is lost silently. [Decision 34](docs/decisions/0034-importing-from-google-takeout.md) explains the plan. The import isn't built yet.
+Accordion imports a Google Takeout archive under **Settings** > **Import from Google** and maps each product to its module. Keep's notes go to Notes, with their colors, labels, checklists, pictures, and voice recordings, and Drive's files go to Accordion Drive, with their dates, stars, and older versions. Gmail, Contacts, Calendar, and Photos will go to their own modules once those are built. Until then, and for anything else Accordion can't convert, the files go into an **Unconverted** folder, and a report says what happened to each one, so nothing is lost silently. Running the import again skips what it already brought. [Decision 34](docs/decisions/0034-importing-from-google-takeout.md) explains how it works.
 
 ## Roadmap
 
@@ -147,6 +147,8 @@ Each part below is in Settings. Its Server sections open only from your home net
 **Your household -** Under **People**, add, rename, turn off, and delete accounts, and make reset links. Each new person chooses a password at `/welcome`. If the owner forgets theirs, `cargo run -- reset-owner-password` prints a reset link.
 
 **Docs and Notes -** Turn them on or off under **Modules**, and open them from the app picker. To edit together, share a note or document, then open it in a second browser as someone else.
+
+**Importing from Google -** Export Keep and Drive at [Google Takeout](https://takeout.google.com) as `.zip` or `.tgz` files. Under **Import from Google**, upload them, select **Check archives**, then **Import**. The archives are read in the same sandbox as thumbnails, and voice recordings need ffmpeg.
 
 **WebDAV -** Make an app password under **Apps and devices**, then connect to `/dav/drive/` for My Drive, `/dav/shared/` for what's shared with you, or `/dav/places/` for each app's folder. File Explorer needs HTTPS. Over plain HTTP, try `curl -u <username>:<app password> -X PROPFIND http://127.0.0.1:8080/dav/drive/`.
 
