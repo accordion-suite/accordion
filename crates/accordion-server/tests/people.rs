@@ -72,6 +72,7 @@ async fn start() -> Server {
             link_sharing: None,
             thumbnails: Some(thumbnails),
             web: None,
+            takeout: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     );

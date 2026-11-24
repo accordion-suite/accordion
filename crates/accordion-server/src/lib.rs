@@ -22,6 +22,7 @@ mod requests;
 mod retention;
 mod session;
 pub mod setup;
+mod takeout;
 pub mod transcripts;
 pub mod updates;
 pub mod web;
@@ -75,6 +76,9 @@ pub struct AppState {
     /// Thumbnails and previews, for their settings, once the server is
     /// running.
     pub thumbnails: Option<accordion_core::thumbnails::Thumbnails>,
+    /// Imports from Google Takeout (decision 34), once the server is
+    /// running.
+    pub takeout: Option<accordion_core::takeout::Imports>,
 }
 
 /// Lets the sign-in checks from `accordion-module` find identity.
@@ -142,6 +146,7 @@ fn routes(state: AppState, site: &Site, mounted: &modules::Mounted) -> Router {
         .merge(remote::routes())
         .merge(directory::routes())
         .merge(welcome::routes())
+        .merge(takeout::routes())
         .merge(web::routes(web_app_pages.into_iter()))
         .merge(
             setup::owner_routes()

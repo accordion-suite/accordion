@@ -13,6 +13,7 @@ use accordion_core::events::{Action, Actor, Events, NewEvent};
 use accordion_core::identity::{AppPasswords, Identity, NewUser};
 use accordion_core::live::Live;
 use accordion_core::storage::Storage;
+use accordion_core::takeout::{self, Imports, Takeout};
 use accordion_core::texts::{self, Texts};
 use accordion_core::thumbnails::{self, Thumbnails, Tools};
 use accordion_core::transcripts::{self, Transcripts};
@@ -126,6 +127,18 @@ fn main() -> ExitCode {
         // (decision 30).
         Some(command) if command == accordion_docs::import::COMMAND => {
             let code = accordion_docs::import::main(args);
+            return ExitCode::from(u8::try_from(code).unwrap_or(1));
+        }
+        // Reads Google Takeout's archives, inside the sandbox (decision 34),
+        // with every module's products, so a plan doesn't depend on which
+        // are on. The server tells it which to use.
+        Some(command) if command == takeout::COMMAND => {
+            let modules = modules::all();
+            let products: Vec<_> = modules
+                .iter()
+                .flat_map(|module| module.takeout_products().iter().copied())
+                .collect();
+            let code = takeout::reader::main(args, &products);
             return ExitCode::from(u8::try_from(code).unwrap_or(1));
         }
         _ => {}
@@ -249,7 +262,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         storage.clone(),
         &data_dir,
         transcripts::Tools {
-            workers,
+            workers: workers.clone(),
             whisper: transcripts_setup::whisper_program().unwrap_or(installed.whisper.clone()),
             ..installed
         },
@@ -257,6 +270,23 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             models_over_http,
         )?)),
         &models_url,
+    )
+    .await?;
+    // Imports from Google Takeout (decision 34): a sandboxed copy of this
+    // program reads the archives, and each module stores its products.
+    let takeout_scratch = data_dir.join("takeout");
+    std::fs::create_dir_all(&takeout_scratch)?;
+    let imports = Imports::open(
+        db.clone(),
+        storage.clone(),
+        events.clone(),
+        Takeout::new(
+            takeout::Tools {
+                workers,
+                ..takeout::Tools::installed(std::env::current_exe()?)
+            },
+            takeout_scratch,
+        ),
     )
     .await?;
     let web = WebApp::from_env()?;
@@ -337,11 +367,15 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
             events: events.clone(),
             live: live.clone(),
             link_origin: link_sharing.origin(),
+            takeout: imports.clone(),
         },
         &Stopping::new(stopped.clone()),
         &mut background,
     )
     .await?;
+    // After the modules, so an import a restart stopped finds the modules
+    // that store its products.
+    background.spawn(imports.clone().run(until_stopped()));
 
     if settings.is_none() && has_owner {
         serve_http(
@@ -361,6 +395,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
                 remote: Some(remote),
                 link_sharing: Some(link_sharing),
                 thumbnails: Some(thumbnails.clone()),
+                takeout: Some(imports),
             },
             until_stopped,
         )
@@ -406,6 +441,7 @@ async fn serve() -> Result<Served, Box<dyn Error>> {
         remote: Some(remote),
         link_sharing: Some(link_sharing),
         thumbnails: Some(thumbnails),
+        takeout: Some(imports),
     };
 
     let local_name = if local_name_on {

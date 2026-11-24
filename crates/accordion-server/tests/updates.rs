@@ -225,6 +225,7 @@ async fn start(base: &str, key: &Ed25519KeyPair, installed: &str) -> Server {
             link_sharing: None,
             thumbnails: None,
             web: None,
+            takeout: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
     )

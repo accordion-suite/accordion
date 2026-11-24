@@ -68,6 +68,7 @@ async fn start() -> Server {
             remote: None,
             link_sharing: None,
             thumbnails: None,
+            takeout: None,
             web: None,
         },
         &Site::Unnamed,

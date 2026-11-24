@@ -98,6 +98,7 @@ async fn start() -> Server {
             remote: None,
             link_sharing: Some(sharing.clone()),
             thumbnails: None,
+            takeout: None,
             web: None,
         },
         &Site::Unnamed,

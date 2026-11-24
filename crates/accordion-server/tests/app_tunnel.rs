@@ -151,6 +151,7 @@ async fn start(name: &'static str, username: &str, serve: Serve) -> Server {
             link_sharing: None,
             thumbnails: None,
             web: None,
+            takeout: None,
         },
         &Site::Unnamed,
     );

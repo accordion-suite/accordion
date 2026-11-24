@@ -68,6 +68,20 @@ async fn start() -> Server {
     let modules = modules::start(
         modules::all(),
         &Services {
+            // Nothing is imported here, so the reader points nowhere.
+            takeout: accordion_core::takeout::Imports::open(
+                db.clone(),
+                storage.clone(),
+                accordion_core::events::Events::open(db.clone())
+                    .await
+                    .unwrap(),
+                accordion_core::takeout::Takeout::new(
+                    accordion_core::takeout::Tools::installed("/nonexistent"),
+                    dir.path(),
+                ),
+            )
+            .await
+            .unwrap(),
             db: db.clone(),
             coediting: CoEditing::open(
                 db.clone(),
@@ -124,6 +138,7 @@ async fn start() -> Server {
             remote: None,
             link_sharing: None,
             thumbnails: None,
+            takeout: None,
             web: None,
         },
         &Site::named(HOST.parse().unwrap(), 443),
