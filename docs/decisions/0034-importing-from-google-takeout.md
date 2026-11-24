@@ -236,7 +236,7 @@ Files that weren't converted go to **Google Takeout/Unconverted**, in their fold
 
 ### Running again
 
-Core keeps a table of what each import brought, by product and by a key from the archive: a Keep note's creation time and title, or a Drive file's `drive_id` from its info. Not a note's file name, since Takeout numbered two same-titled notes differently in two exports. A Drive file with no info uses its path, size, and date. A later import skips what's already there and says so, even from a newer export. An import that stops, because the server restarted or the person canceled, picks up from the last item it stored.
+Core keeps a table of what each import brought, by product and by a key from the archive: a Keep note's creation time and title, or a Drive file's `drive_id` from its info. Not a note's file name, since Takeout numbered two same-titled notes differently in two exports. A Drive file with no info uses its path, size, and date. A later import skips what's already there and says so, even from a newer export. A file no product claims uses its folder, path, and size, so a newer export's bigger mailbox comes over again. An import that stops because the server restarted picks up from the last item it stored. Each item is stored, then recorded, so a restart between the two brings that one item twice. A canceled import stops after the item it's on and still writes its report, and importing the same archives again brings the rest. Imports run one at a time on the server, and each person can run one at a time.
 
 ### Who does what
 
@@ -256,7 +256,7 @@ Core keeps a table of what each import brought, by product and by a key from the
 ## Steps
 
 1. **A real export.** The developer makes a Takeout of Keep and Drive from a Google account with a few test notes: colors, a checklist, labels, a picture, a drawing, a voice recording, a reminder, a shared note, and two notes with one title. Accordion settles the open details above against it and shapes the test archives after it. The export itself stays out of the repos. Done November 24, with three exports (see "What a real export showed").
-2. **Core:** dated saves in storage, the import job and its table, the sandboxed reader, the module interface's import part, and the report.
+2. **Core:** dated saves in storage, the import job and its table, the sandboxed reader, the module interface's import part, and the report. Done November 24: modules give the reader a `Product` (`Module::takeout_products`) and the server an `Importer` (added through `Services::takeout` when the module starts), the report is `Takeout import <date>.md` in **Google Takeout**, and the bell says when an import ends.
 3. **Notes:** Keep.
 4. **Drive:** its files.
 5. **The web app:** the import page.
