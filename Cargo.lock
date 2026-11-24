@@ -5,12 +5,13 @@ version = 4
 [[package]]
 name = "accordion-core"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#7ec0da1f19a3cd1390f2112670116bb1d9279f37"
+source = "git+https://github.com/accordion-suite/accordion-core#14156d56a2ffd158774d2ad4da145f04bfc43be3"
 dependencies = [
  "accordion-sandbox",
  "accordion-types",
  "argon2",
  "base64ct",
+ "flate2",
  "getrandom 0.4.3",
  "html5ever",
  "jiff",
@@ -21,6 +22,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "similar",
+ "tar",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -35,7 +37,7 @@ dependencies = [
 [[package]]
 name = "accordion-docs"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-docs#a201b170b8ced4ac01da2dfe4e93d7d9bd13bfad"
+source = "git+https://github.com/accordion-suite/accordion-docs#95506c1418d33028eac75ccd94fd1fc2d20c15a7"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -59,7 +61,7 @@ dependencies = [
 [[package]]
 name = "accordion-drive"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-drive#7422d603ef5c490751f6c3717c5f33ab065f1d26"
+source = "git+https://github.com/accordion-suite/accordion-drive#d9223cf315db72840679cc0425a0ec53a65ded8d"
 dependencies = [
  "accordion-core",
  "accordion-module",
@@ -83,7 +85,7 @@ dependencies = [
 [[package]]
 name = "accordion-gateway"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-gateway#d7e6768d6c6e4308974193c715bce83b3d7b29f7"
+source = "git+https://github.com/accordion-suite/accordion-gateway#0aeb91eb083579bb3cf659bc3d2142bfad94cd77"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -114,7 +116,7 @@ dependencies = [
 [[package]]
 name = "accordion-module"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#7ec0da1f19a3cd1390f2112670116bb1d9279f37"
+source = "git+https://github.com/accordion-suite/accordion-core#14156d56a2ffd158774d2ad4da145f04bfc43be3"
 dependencies = [
  "accordion-core",
  "accordion-types",
@@ -128,10 +130,11 @@ dependencies = [
 [[package]]
 name = "accordion-notes"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-notes#7b1cb82ffdf8427e4994ddf25ac5b4a6bc9f0162"
+source = "git+https://github.com/accordion-suite/accordion-notes#f232b1887bc604f9da2dc93dc07e233cb3bdb96e"
 dependencies = [
  "accordion-core",
  "accordion-module",
+ "accordion-sandbox",
  "accordion-types",
  "axum",
  "jiff",
@@ -145,7 +148,7 @@ dependencies = [
 [[package]]
 name = "accordion-sandbox"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#7ec0da1f19a3cd1390f2112670116bb1d9279f37"
+source = "git+https://github.com/accordion-suite/accordion-core#14156d56a2ffd158774d2ad4da145f04bfc43be3"
 dependencies = [
  "landlock",
  "libc",
@@ -189,12 +192,14 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+ "zip",
 ]
 
 [[package]]
 name = "accordion-sync"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#7ec0da1f19a3cd1390f2112670116bb1d9279f37"
+source = "git+https://github.com/accordion-suite/accordion-core#14156d56a2ffd158774d2ad4da145f04bfc43be3"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -222,7 +227,7 @@ dependencies = [
 [[package]]
 name = "accordion-types"
 version = "0.1.0"
-source = "git+https://github.com/accordion-suite/accordion-core#7ec0da1f19a3cd1390f2112670116bb1d9279f37"
+source = "git+https://github.com/accordion-suite/accordion-core#14156d56a2ffd158774d2ad4da145f04bfc43be3"
 dependencies = [
  "serde",
  "uuid",
@@ -1105,6 +1110,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
+name = "filetime"
+version = "0.2.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1255e7a9f1902190d4c10a75f2f7f495d3d3ce13e9ba26e6c48683a0f4dbed7"
+dependencies = [
+ "cfg-if",
+ "libc",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1144,9 +1159,9 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
 ]
@@ -1868,9 +1883,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
-version = "0.2.42"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fefca06093eeaed707a905795e68206da0edca4edef23d2a3997a3ddbee462aa"
+checksum = "c5e77cbfb9fff4798e283c2d69dff39fc2c45e7da017e5ce95b654e46ea41236"
 dependencies = [
  "jiff-core",
  "jiff-static",
@@ -1884,30 +1899,30 @@ dependencies = [
 
 [[package]]
 name = "jiff-core"
-version = "0.1.8"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e599b80292e597019b8b3e392de3f4bea2959ddfb8c7dff60e035e9e311a2c1b"
+checksum = "d44c923edf2bf456a982253f1a9ee1f6e89e421dffd0065d9b9a581da0def58f"
 dependencies = [
  "log",
 ]
 
 [[package]]
 name = "jiff-static"
-version = "0.2.42"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41d3213549742662eea1a18e6c5af9be5dfbabeb7611ab71356a54928ec398f0"
+checksum = "e9067a0b23e5be3147d56b2dcf652b18e6b1364caca93fb157653b6fbcab23a9"
 dependencies = [
  "jiff-core",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.9",
 ]
 
 [[package]]
 name = "jiff-tzdb"
-version = "0.1.10"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0980fca2cc272465bd60e82397607ba9f33add9e48defd77923301bbd03808f2"
+checksum = "12e71a1b68a875a44a33bb7a1dd84392cb77145a3367a552a3cfe6a4f5cf3afc"
 
 [[package]]
 name = "jni"
@@ -2064,9 +2079,9 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mdns-sd"
-version = "0.21.7"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6743ed743ff2bada2b8651ef298d3f98addb0b74844f19cdd57137d8bd0219e"
+checksum = "9aaf7ecb589a3bb5e9642c3e5f79e1e54a8ea8c1c48bc9975c39d77fa640764c"
 dependencies = [
  "fastrand",
  "flume",
@@ -2639,9 +2654,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.42.0"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b"
+checksum = "f172c4812a19b26d1c23cdb0070e69db335503dfa378b910eb857386e5b8beba"
 dependencies = [
  "bitflags 2.13.2",
  "fallible-iterator",
@@ -3209,6 +3224,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
+name = "tar"
+version = "0.4.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
+dependencies = [
+ "filetime",
+ "libc",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3571,9 +3596,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
-version = "2.5.8"
+version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
 dependencies = [
  "form_urlencoded",
  "idna",
@@ -3589,9 +3614,9 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "uuid"
-version = "1.28.0"
+version = "1.29.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
+checksum = "3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
@@ -4097,9 +4122,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.5.0"
+version = "9.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0700e6c427aff64acdbf02e85fbfd946c2ee12319d1af013092f3a2178914ff8"
+checksum = "a9534624d547e3f516ecde0ed9a70d37788f01d340efcfdd03bf3ea8e163c1d0"
 dependencies = [
  "constant_time_eq 0.6.1",
  "crc32fast",
