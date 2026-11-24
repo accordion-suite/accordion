@@ -257,7 +257,7 @@ Core keeps a table of what each import brought, by product and by a key from the
 
 1. **A real export.** The developer makes a Takeout of Keep and Drive from a Google account with a few test notes: colors, a checklist, labels, a picture, a drawing, a voice recording, a reminder, a shared note, and two notes with one title. Accordion settles the open details above against it and shapes the test archives after it. The export itself stays out of the repos. Done November 24, with three exports (see "What a real export showed").
 2. **Core:** dated saves in storage, the import job and its table, the sandboxed reader, the module interface's import part, and the report. Done November 24: modules give the reader a `Product` (`Module::takeout_products`) and the server an `Importer` (added through `Services::takeout` when the module starts), the report is `Takeout import <date>.md` in **Google Takeout**, and the bell says when an import ends.
-3. **Notes:** Keep.
+3. **Notes:** Keep. Built November 24: Notes gives the reader `keep`, which claims a folder when most of its `.json` files are notes, and turns each note's HTML into Markdown in the sandbox, falling back to the plain text when the two differ. Each note keeps its title, dates, color, pin, archive, labels, and trash; its pictures and recordings go beside it, numbered after its title. Recordings become Ogg Opus through core's `Thumbnails::voice_to_opus`. Link previews are added as links at the end. A file in Keep's folder that isn't a note goes to **Unconverted**. The report lists reminders to set again, shared notes, attachments missing from the archives, converted recordings, and shortened titles.
 4. **Drive:** its files.
 5. **The web app:** the import page.
 
