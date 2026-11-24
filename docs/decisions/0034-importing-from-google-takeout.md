@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** November 17, 2026
+- **Updated:** November 24, 2026, with what a real export showed (step 1)
 
 ## Context
 
@@ -16,12 +17,43 @@ What Takeout gives people:
 - **Keep gives a `.json` and an `.html` file for each note,** with its pictures and recordings beside them, and a text file that lists the labels. Each JSON file has the title, the text or checklist items, the color, whether the note is pinned, archived, or in the trash, its labels, the times it was made and last edited (in microseconds), its attachments (file name and media type), its link previews, and its collaborators' email addresses. Newer exports add the text as HTML too, with Keep's bold, italics, and headings.
 - **Drive gives the original files in their folder tree,** with Google Docs, Sheets, and Slides converted to Office files.
 
-Some details aren't documented anywhere, and the community tools disagree about them. Step 1 settles them against a real export:
+Some details aren't documented anywhere, and the community tools disagree about them. Step 1 settled them against real exports, as the next section says:
 
 - Which audio format Keep's voice recordings come in. Sources say 3GP with AMR or AAC audio, and Chrome and Firefox can't play AMR.
 - How Takeout names a note's files when two notes share a title, and whether attachments' extensions on disk match their JSON.
 - Whether Keep's indented checklist items, reminders, and drawings appear in the JSON.
 - Whether Drive's files keep their modified dates in the archive.
+
+### What a real export showed
+
+On November 24, 2026, the developer exported Keep and Drive from a test account twice, as two `.zip` parts and as three `.tgz` parts. The two exports held the same 21 notes and about 170 files. Part 1 of each was Keep, and Drive filled the rest, with one Drive folder split across two `.tgz` parts. The export itself stays out of the repos, since it has real email addresses in it.
+
+The test account had no voice recording, drawing, link preview, repeating reminder, Google Doc, Sheet, or Slides file, two Drive files with one name, file shared with it, or shortcut, and only one color. The developer added them, and a second export the same day, as two `.zip` parts, covered them. A third, of Drive alone, covered a comment on a Doc.
+
+**Keep:**
+
+- **Voice recordings are AMR.** Each is raw AMR-NB (8 kHz, mono, about 12 kbit/s), starting with `#!AMR`, though it's named `.3gp` and its JSON says `audio/3gp`. Chrome and Firefox can't play it. The note's text held what looks like Keep's own transcript.
+- **Drawings are flat PNG pictures,** listed as attachments like any picture, with no strokes to edit.
+- **Link previews** are `annotations` with `"source": "WEBLINK"`, the `url`, its page's `title`, and a `description`, but no picture.
+- **Reminders aren't exported,** repeating or not. A note with one gets only `"tasks": [{"id": "…"}]`, a link to Google Tasks with no time in it.
+- **Colors** use Keep's own names: Coral is `RED`, Sand is `YELLOW`, Storm is `CERULEAN`, and Chalk is `GRAY`.
+- **Indented checklist items come out flat,** in both the JSON and the HTML. Each item has only `text`, `textHtml`, and `isChecked`, and checked items come last, as Keep shows them.
+- **Formatting is in each line's `style`, not in tags.** `textContentHtml` and each item's `textHtml` mark bold as `font-weight:700`, italics as `font-style:italic`, and underline as `text-decoration:underline`. Headings are `<h1>` and `<h2>`.
+- **Background pictures aren't exported,** and nothing in the JSON says a note had one. Keep's Coral is `RED`.
+- **File names follow the title, but aren't stable.** `:`, `/`, and `?` become `_`, a long title is cut to 50 characters, and an untitled note is named after when it was made, such as `2026-11-24T14_38_14.946+08_00.json`. Notes that share a title get `(1)`, and the two exports gave it to different notes. The JSON always has the full title.
+- **Attachments** are named by a number, such as `1795501617103.1120585488.jpg`, and their extensions match the media type in the JSON.
+- **Sharing:** `sharees` lists each person's email address, with `isOwner` true for the owner, so a note shared with the account names someone else as owner.
+
+**Drive:**
+
+- **Each file and folder has an `-info.json` beside it,** such as `Report.pdf-info.json`. It holds the full `title`, `created` and `content_last_modified` in UTC to the millisecond, `starred`, `description` (Drive filled one from a photo's camera data), `mime_type`, and `permissions` with each person's email address.
+- **Google's own files come out as Office files:** a Doc as `.docx`, a Sheet as `.xlsx`, Slides as `.pptx`, and a Drawing as `.jpg`. Their info gives the Office type, and only `download_url` (such as `docs.google.com/document/…`) says they were Google's. A Doc's comments come out twice: inside the `.docx` as Word comments, anchored to their text, and as `<name>-comments.html` beside it, Google's own page listing each comment's author, date, the text it's on, its status, and its replies, with a script of Google's in it.
+- **Two files with one name** come out as `Monthly budget.xlsx` and `Monthly budget(1).xlsx`, with infos named `Monthly budget-info.json` and `Monthly budget-info(1).json`, so the number comes after `-info`.
+- **A shortcut comes out as a small `.html` bookmark file,** such as `BSOD3.jpg.html`, holding a link to the file on Google Drive. Its info says `application/vnd.google-apps.shortcut`. The file shared with the account isn't in the export at all.
+- **The archive's own dates can't be trusted.** The `.zip` stores Google's local time (Pacific) with no time zone, while the `.tgz` stores UTC.
+- **Kept versions come out as copies,** named `<name>-at-<time>-pinned.<ext>`, with no info file. All 73 matched their current file byte for byte. Takeout put some beside their file and others in a top-level `Unorganized` folder, and each export left out a different few.
+- **Trash comes out as a top-level `Trash` folder.** `Trash` and `Unorganized` are the only folders with no info file of their own, which tells them apart from the person's folders in any language.
+- **The `.tgz` cuts each name to about 100 bytes,** while the `.zip` kept names up to 404 bytes. Shortened, two different kept versions got the same path in one archive, and a shortened `-info.json` lost its `-info` and ends in plain `.json`. Its `title` still has the full name, and it starts the same as its file's shortened name.
 
 ## Decision drivers
 
@@ -152,11 +184,12 @@ Each person imports their own export, from **Settings** > **Move from Google**. 
 
 ### Finding products
 
-The importer recognizes each product by what's in its files, not by folder names, so any account language works. A Keep note is a `.json` file with Keep's fields, such as `createdTimestampUsec` and either `textContent` or `listContent`. Drive's folder is the product folder that holds ordinary files, and whose files no other product recognizes. Archives from one export are read together, so a note's pictures in another part still reach it. A part that's missing shows in the report.
+The importer recognizes each product by what's in its files, not by folder names, so any account language works. A Keep note is a `.json` file with Keep's fields, such as `createdTimestampUsec` and either `textContent` or `listContent`. Drive's folder is the product folder whose files have `-info.json` files beside them with Drive's fields, such as `drive_id` and `content_last_modified`. Inside it, a top-level folder with no info file of its own is Takeout's: the one holding only `-pinned` copies is `Unorganized`, and the other is the trash. Archives from one export are read together, so a note's pictures in another part still reach it. A part that's missing shows in the report.
 
 ### Reading safely
 
 - **Names are checked before anything is written.** An entry whose path leaves its folder, or names a link or a device, is skipped and reported.
+- **Entries are read one by one, never unpacked by name,** since a `.tgz` can hold two entries with one shortened path. Each entry gets a name of its own in the job folder, and the list carries its path from the archive.
 - **Limits:** each item's text, each list's length, the number of entries, and the total unpacked size, which can't exceed what the archive's listing claimed or the room in the person's storage.
 - **The server checks everything again.** The list from the copy is untrusted too.
 
@@ -164,25 +197,31 @@ The importer recognizes each product by what's in its files, not by folder names
 
 Each note becomes a Markdown file in the person's Notes place, as decision 31 describes:
 
-- **Title** is the file's name. An untitled note is named after its first words, as Notes does today. A name that's taken gets a number.
-- **Text** is the note's body. Where the export has HTML, bold, italics, and headings become Markdown. Underline has no Markdown, so it's kept as plain text.
-- **A checklist** becomes a task list, with each item checked or not.
-- **Color** keeps Keep's name, in lowercase, and Keep's `CERULEAN` becomes Notes' `dark-blue`.
+- **Title** is the file's name, taken from the JSON's `title`, never from the archive's file name, which is cut short and has `_` in place of some characters. An untitled note is named after its first words, as Notes does today. A name that's taken gets a number.
+- **Text** is the note's body. Where the export has HTML, headings and the bold and italics in each line's style become Markdown. Underline has no Markdown, so it's kept as plain text.
+- **A checklist** becomes a task list, with each item checked or not, in the export's order. Keep doesn't export indents, so every item is at the top level.
+- **Color** keeps Keep's name, in lowercase, and Keep's `CERULEAN` becomes Notes' `dark-blue`. Background pictures aren't exported, so they can't come over.
+- **Reminders** aren't exported either. The report lists each note that had one, so the person can set it again in Notes.
 - **Pinned, archived, and labels** go to the front matter as decision 31 sets them.
 - **The dates the note was made and last edited** stay, so notes keep Keep's order. Core's storage gains a way to save a file with its original dates.
 - **Pictures and drawings** go beside the note, named after it, as pictures added in Notes do.
-- **Voice recordings** play only if browsers can. A recording in a format they can't play, such as AMR, is converted to Opus in the sandbox with the ffmpeg Accordion already uses, and saved beside the note as a memo. The original goes to **Unconverted**. Keep puts its own transcript in the note's text, so that comes over too.
-- **Link previews** are added at the end of the note as links, unless the text already has the address.
+- **Voice recordings** play only if browsers can. Keep's are AMR, which they can't, so each is converted to Opus in the sandbox with the ffmpeg Accordion already uses, and saved beside the note as a memo. The importer goes by the file's first bytes, not its `.3gp` name. The original goes to **Unconverted**. Keep puts its own transcript in the note's text, so that comes over too.
+- **Link previews** are added at the end of the note as links titled with the page's title, unless the text already has the address.
 - **Notes in Keep's trash** go to Notes' trash, where they're kept for Accordion's usual 30 days.
 - **Collaborators** are listed in the report with their email addresses. Accordion doesn't know who they are, so nothing is shared automatically. When two people in the household import the same shared note, each gets their own copy, and the report says which notes were shared.
 
 ### Drive's files into Drive
 
 - **Files keep their folder tree** under a **From Google Drive** folder in My Drive, so they don't mix with what's already there.
-- **Modified dates stay** if the archive has them.
-- **Names longer than 255 bytes are shortened,** as decision 6 says, and listed in the report.
-- **Office files converted from Google Docs** are stored as they are. Converting them to Docs documents waits for Docs.
+- **Each file's info gives its name, dates, and star.** The name is the info's `title`, the modified date its `content_last_modified`, and the made date its `created`. Stars come over. Descriptions and who the file was shared with go in the report, since Drive has no place for them. Info files themselves aren't stored. A file with no info keeps its name from the archive and the date the `.tgz` gives, and the report lists it.
+- **Shortened `.tgz` names are matched back** to their info by the start of the name, then the info's full title is used. An info numbered by Takeout, such as `Monthly budget-info(1).json`, belongs to the file with the same number, `Monthly budget(1).xlsx`. Two entries that still can't be told apart both come over, numbered, and the report says so.
+- **Kept versions** (`-at-<time>-pinned`) that match their current file are dropped, wherever Takeout put them. One that differs is stored as an older version of its file, with the time from its name. One whose file isn't in the export goes to **Unconverted**.
+- **Drive's trash** goes to the person's trash in Accordion, kept for the usual 30 days, as Keep's trashed notes do.
+- **Names longer than 255 bytes are shortened,** as decision 6 says, and listed in the report. The `.zip` export had names up to 404 bytes.
+- **Office files converted from Google Docs, Sheets, and Slides** are stored as they are, under the name in their info. A Doc can then be opened with **Open with Docs** (decision 30). The report lists which files were Google's, by their info's `download_url`.
 - **Files shared with the person** aren't in Takeout, and the report's last section says so, with how to download them from Google.
+- **Comments** stay in the Office file, where Word and LibreOffice show them. The `-comments.html` beside a `.docx` that holds the comments isn't stored, since it repeats them and carries Google's script. One beside any other file goes to **Unconverted**, since only a Doc's comments were seen in the Office file. The report lists each file that had comments. Open with Docs leaves comments out, and says so, until Docs has comments of its own.
+- **Shortcuts** aren't stored as files. The report lists each one with its link on Google Drive, beside the shared files, since a shortcut's file is usually one of them.
 
 ### The report and Unconverted
 
@@ -197,7 +236,7 @@ Files that weren't converted go to **Google Takeout/Unconverted**, in their fold
 
 ### Running again
 
-Core keeps a table of what each import brought, by product and by a key from the archive: a Keep note's creation time and file name, or a Drive file's path, size, and date. A later import skips what's already there and says so, even from a newer export. An import that stops, because the server restarted or the person canceled, picks up from the last item it stored.
+Core keeps a table of what each import brought, by product and by a key from the archive: a Keep note's creation time and title, or a Drive file's `drive_id` from its info. Not a note's file name, since Takeout numbered two same-titled notes differently in two exports. A Drive file with no info uses its path, size, and date. A later import skips what's already there and says so, even from a newer export. An import that stops, because the server restarted or the person canceled, picks up from the last item it stored.
 
 ### Who does what
 
@@ -207,7 +246,7 @@ Core keeps a table of what each import brought, by product and by a key from the
 
 ### Testing
 
-- **Archives made for the tests,** shaped like the real export from step 1, in `.zip` and `.tgz`, split across parts, and in another language.
+- **Archives made for the tests,** shaped like the real export from step 1, in `.zip` and `.tgz`, split across parts, and in another language. They use made-up names and email addresses. They include `.tgz` names cut at 100 bytes with two entries on one path, an `-info.json` cut to `.json`, kept versions beside their files and in `Unorganized`, `.zip` dates in Pacific time, a trash folder, two notes with one title numbered both ways, an AMR recording named `.3gp`, two Drive files with one name and their numbered infos, a shortcut's bookmark file, and a Doc with comments and its `-comments.html`.
 - **Hostile archives:** paths that leave the folder, links, a zip bomb, huge JSON, names over 255 bytes, and lists longer than the limits. Each is refused or skipped and reported, and nothing is written outside the job's folder.
 - **Keep:** every field above, a note in each color, untitled notes, two notes with one title, a note with pictures in another part, and a voice recording that's converted.
 - **Running again** brings nothing twice, and an import stopped halfway finishes after a restart.
@@ -216,7 +255,7 @@ Core keeps a table of what each import brought, by product and by a key from the
 
 ## Steps
 
-1. **A real export.** The developer makes a Takeout of Keep and Drive from a Google account with a few test notes: colors, a checklist, labels, a picture, a drawing, a voice recording, a reminder, a shared note, and two notes with one title. Accordion settles the open details above against it and shapes the test archives after it. The export itself stays out of the repos.
+1. **A real export.** The developer makes a Takeout of Keep and Drive from a Google account with a few test notes: colors, a checklist, labels, a picture, a drawing, a voice recording, a reminder, a shared note, and two notes with one title. Accordion settles the open details above against it and shapes the test archives after it. The export itself stays out of the repos. Done November 24, with three exports (see "What a real export showed").
 2. **Core:** dated saves in storage, the import job and its table, the sandboxed reader, the module interface's import part, and the report.
 3. **Notes:** Keep.
 4. **Drive:** its files.
