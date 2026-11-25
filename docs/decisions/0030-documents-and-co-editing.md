@@ -261,6 +261,10 @@ A document's file can change without Docs: someone restores an older version, a 
 ### Comments, mentions, and suggesting
 
 - **Comment threads live in Docs' tables while a document is open,** and in the file's data block once it's saved, so they travel with it. Each thread is anchored by Yjs relative positions, which stay with the text as others edit around it.
+  - Built November 25, 2026: the table, `docs_comments`, holds each document's threads. It takes them in from the file the first time they're needed, and wins from then on, so restoring an older version of the file neither brings back deleted comments nor takes away new ones, as in Google Docs. Each change writes the threads into the file at once, after saving any typing not saved yet, since a file changed under a document that hasn't been saved yet would otherwise replace the typing. A comment's text in the file has `<` written as `\u003c`, so it can't end the data block.
+  - Anyone who can open a document sees its comments, viewers too, since the file they can download carries them. Its editors comment, reply, resolve, and reopen; a comment's author edits it; and its author or any editor deletes it, as in Google Docs. Deleting a thread's first comment deletes the thread. A reply to a resolved thread opens it again.
+  - **Make a copy** leaves comments out unless asked, as Google Docs does.
+  - The editor highlights each open thread's text, with cards beside the page where the window is wide enough and a panel at the side otherwise. The panel lists every thread, resolved ones and ones whose text was deleted too. Comments go in Ctrl+Alt+M, the toolbar, and **Insert** > **Comment**.
 - **Comments use ordinary requests,** not the document's WebSocket, so a commenter can comment without being able to edit. The Commenter level joins Viewer and Editor in sharing, as decision 16 planned.
 - **@mentions** notify through the event log ([decision 18](0018-the-event-log.md)), and only people who can open the document can be mentioned.
 - **Suggesting mode waits for Yjs 14,** whose attributions record who made each change. If yrs hasn't caught up by then, this decision is revisited.
@@ -325,7 +329,11 @@ Agreed November 17, 2026. On November 20, after a sweep of Google Docs' and Prot
 5. **Open with Docs** for HTML, Markdown, Word, and OpenDocument files, in two parts:
    1. **Word, web pages, Markdown, and plain text,** built November 23, 2026: **Open with Docs** in Drive's menus and viewer, the warning, and the font notices.
    2. **OpenDocument files,** which Docs reads itself, and old `.doc` and `.rtf` files, through LibreOffice where it's installed, built November 25, 2026.
-6. **Comments,** the Commenter level in sharing, and @mentions.
+6. **Comments,** the Commenter level in sharing, and @mentions, in four parts:
+   1. **Comment threads,** built November 25, 2026: comments on text, replies, resolving, editing, and deleting, kept with the document and in its file, and live for everyone who has it open.
+   2. **The Commenter level** in sharing, across core, Drive, and Docs.
+   3. **@mentions** and notifications in the bell.
+   4. **Comments in Word and OpenDocument files,** both ways: written into downloads, and read from files opened with Docs, which Google Docs' Takeout exports carry.
 7. **Named versions** and version history in Docs.
 8. **Templates.**
 
