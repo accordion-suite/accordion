@@ -14,6 +14,8 @@ line, then the notes:
 
     Drive shows photos in a grid, and backups to a USB disk are faster.
 
+    Notes can be split into paragraphs with blank lines.
+
 "Security: yes" means the release fixes a security problem, so servers
 install it without the usual three-day wait. "Installs itself: no" means it
 needs something new from the distribution, such as another package, so it
@@ -60,7 +62,10 @@ def main():
     if not blank:
         fail(f"{path} needs a blank line between its settings and the notes.")
     lines = head.splitlines()
-    notes = " ".join(notes.split())
+    # A blank line starts a new paragraph. Other line breaks are only for
+    # the editor, so each paragraph becomes one line.
+    paragraphs = [" ".join(part.split()) for part in notes.split("\n\n")]
+    notes = "\n\n".join(part for part in paragraphs if part)
     if not notes:
         fail(f"{path} has no notes after its settings.")
     if len(notes) > NOTES_LIMIT:
