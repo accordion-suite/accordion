@@ -128,7 +128,7 @@ Shared drives come later, as their own decision, once identity has groups. The r
   - **Viewer:** can open, download, and copy to their own Drive.
   - **Editor:** can also add, rename, replace, and move items inside the shared folder, restore versions, and move items to the trash.
 
-  A commenter level comes with comments in Docs.
+  A third level, **Commenter**, came with comments in Docs on November 25, 2026 ([decision 30](0030-documents-and-co-editing.md)). It sits between the two: a commenter views and comments where there are comments, and is a viewer everywhere else. Drive offers it for documents, and sync tells devices "viewer".
 - **A share on a folder covers everything inside it,** including what's added later. Someone's access to an item is the highest level any share gives them, on the item or a folder above it.
 - **Only the owner shares and changes access,** at first. Google Drive lets editors share too, but families rarely need it, and one person in charge is easier to explain. The owner stays the owner; giving a file to someone else comes later.
 - **Removing someone works on their next request,** in the web app and over WebDAV.

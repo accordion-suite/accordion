@@ -266,6 +266,9 @@ A document's file can change without Docs: someone restores an older version, a 
   - **Make a copy** leaves comments out unless asked, as Google Docs does.
   - The editor highlights each open thread's text, with cards beside the page where the window is wide enough and a panel at the side otherwise. The panel lists every thread, resolved ones and ones whose text was deleted too. Comments go in Ctrl+Alt+M, the toolbar, and **Insert** > **Comment**.
 - **Comments use ordinary requests,** not the document's WebSocket, so a commenter can comment without being able to edit. The Commenter level joins Viewer and Editor in sharing, as decision 16 planned.
+  - Built November 25, 2026: core's share levels and access gain Commenter between Viewer and Editor, so the highest share still wins and every check for "editor or above" stays as it was. Commenters do what viewers do in Drive, Notes, WebDAV, and sync, which tells devices "viewer" since they don't know the level. In Docs they start threads, reply, resolve, reopen, and edit or delete their own comments; deleting someone else's is for editors. Their editor is read-only and says **Comment only**, with **Insert** > **Comment** and Ctrl+Alt+M. Drive's Share dialog offers **Commenter** for documents, the only files with comments so far.
+  - **Make a copy** gained **Copy comments**, off unless chosen.
+  - On the way, core stopped losing typing to a change from outside before a new document's first save. A room without a saved state to merge from made the document match the file; it now keeps the state it reads the file into as that base, and keeps it across a restart too.
 - **@mentions** notify through the event log ([decision 18](0018-the-event-log.md)), and only people who can open the document can be mentioned.
 - **Suggesting mode waits for Yjs 14,** whose attributions record who made each change. If yrs hasn't caught up by then, this decision is revisited.
 
@@ -331,7 +334,7 @@ Agreed November 17, 2026. On November 20, after a sweep of Google Docs' and Prot
    2. **OpenDocument files,** which Docs reads itself, and old `.doc` and `.rtf` files, through LibreOffice where it's installed, built November 25, 2026.
 6. **Comments,** the Commenter level in sharing, and @mentions, in four parts:
    1. **Comment threads,** built November 25, 2026: comments on text, replies, resolving, editing, and deleting, kept with the document and in its file, and live for everyone who has it open.
-   2. **The Commenter level** in sharing, across core, Drive, and Docs.
+   2. **The Commenter level** in sharing, across core, Drive, and Docs, built November 25, 2026.
    3. **@mentions** and notifications in the bell.
    4. **Comments in Word and OpenDocument files,** both ways: written into downloads, and read from files opened with Docs, which Google Docs' Takeout exports carry.
 7. **Named versions** and version history in Docs.
