@@ -20,7 +20,7 @@ Like the instrument, the suite folds out. Start with Drive and Notes on a Raspbe
 | Module | Replaces | Planned for | Where it stands | Open protocols and formats |
 |---|---|---|---|---|
 | **Accordion Drive** | Google Drive | 1.0 | In testing | WebDAV, plain files on disk |
-| **Accordion Docs** | Google Docs | 1.0 | Being built | HTML files; .docx, .odt, .md, and .pdf downloads, with import planned |
+| **Accordion Docs** | Google Docs | 1.0 | Being built | HTML files; opens .docx, .odt, .rtf, .md, and web pages; .docx, .odt, .md, and .pdf downloads |
 | **Accordion Mail** | Gmail | 1.0 | Planned | IMAP, SMTP, JMAP, Maildir, Sieve |
 | **Accordion Notes** | Google Keep | 1.0 | Being built | Markdown files with YAML front matter |
 | **Accordion Calendar** | Google Calendar | 1.5 | Planned | CalDAV, iCal |
