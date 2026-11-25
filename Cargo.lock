@@ -160,7 +160,7 @@ dependencies = [
 
 [[package]]
 name = "accordion-server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "accordion-core",
  "accordion-docs",
@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "accordion-update"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64ct",
  "ring",
