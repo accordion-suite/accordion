@@ -169,7 +169,7 @@ jobs:
           test=$(cargo test -p accordion-sandbox --test service --locked --offline --no-run --message-format=json \
             | jq -r 'select(.profile.test == true and .target.name == "service") | .executable')
           chmod o+x "$HOME"
-          sudo env ACCORDION_TEST_JOB_USERS=1 "$test" runs_each_connection_as_a_user_of_its_own --exact
+          sudo env ACCORDION_TEST_JOB_USERS=1 "$test" user_of_its_own
 
   # The desktop app's Windows code, such as Cloud Files, only builds on
   # Windows. The connection check needs strace, so it stays with the Linux

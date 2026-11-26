@@ -143,6 +143,12 @@ This needs a file system with POSIX ACLs for the data folder. ext4, XFS, and Btr
 - **Memory for all workers together** is capped by systemd's `MemoryMax=` on the .deb and Docker's `mem_limit` in the Umbrel app. The cap has to fit a 48-megapixel AVIF's 2 GB.
 - **Server health** says which layers are on: own users, no network, and whether the kernel has Landlock. When the worker service isn't running, thumbnails and search wait, and the check says why.
 
+### LibreOffice's files in /tmp
+
+Found November 26, 2026, by the upgrade test: LibreOffice crashed as soon as it started as a job's user, so documents got no thumbnails. Memory can't be both writable and runnable in a worker, so LibreOffice maps the code it makes through a file, twice, once writable and once runnable. It makes that file in its user's home folder, and a job's user has no account on the system, so it has no home folder, and LibreOffice tries `/tmp`. Landlock let it make only sockets there. Ubuntu 24.04's LibreOffice 24.2 does this as it starts.
+
+A job that runs as a user of its own and may make sockets in a folder may now make files of its own there too (the launcher's `--temp-files`, which the worker service adds). Only that user's ownership keeps other jobs' files out of reach, so jobs that share the server's user, as in development and tests, still make only sockets there. Running files from there is still refused. The worker service's `/tmp` is its own (`PrivateTmp=yes`), and the job's files there are removed when its work is done.
+
 ### Also
 
 Ask Raspberry Pi to turn on Landlock in their kernel, through an issue in `raspberrypi/linux`. It helps other software that sandboxes itself, and adds the second layer on a Pi. Accordion doesn't wait for it.
