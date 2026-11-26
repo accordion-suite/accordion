@@ -270,6 +270,9 @@ A document's file can change without Docs: someone restores an older version, a 
   - **Make a copy** gained **Copy comments**, off unless chosen.
   - On the way, core stopped losing typing to a change from outside before a new document's first save. A room without a saved state to merge from made the document match the file; it now keeps the state it reads the file into as that base, and keeps it across a restart too.
 - **@mentions** notify through the event log ([decision 18](0018-the-event-log.md)), and only people who can open the document can be mentioned.
+  - Built November 26, 2026: typing @ in a comment box lists everyone else who can open the document, by name or username, and choosing one writes `@` and their name. The comment carries who each mention is, in Docs' table and the file, and the editor shows them as names. Only names still in the text when it's sent count, and the server refuses anyone who can't open the document.
+  - Core's event log gains two personal events, as reminders are: `mentioned`, for each person a new comment or an edit newly mentions, and `replied`, for everyone else who wrote in a thread someone replies to, as Google Docs tells people about comments that involve them. Only that person's bell rings, they're never in activity, each is its own line in the bell with the start of the comment, and it leads to the thread. Someone who can no longer open the document hears nothing.
+  - Writing the comments into the file no longer records an edit, since the document says the same. Before, a comment rang the owner's bell as "Sam edited Plan.html" beside the mention. Core's `Storage::write_unrecorded_edit` saves the version without an event, and Docs writes comments with it.
 - **Suggesting mode waits for Yjs 14,** whose attributions record who made each change. If yrs hasn't caught up by then, this decision is revisited.
 
 ### Import and export
@@ -335,7 +338,7 @@ Agreed November 17, 2026. On November 20, after a sweep of Google Docs' and Prot
 6. **Comments,** the Commenter level in sharing, and @mentions, in four parts:
    1. **Comment threads,** built November 25, 2026: comments on text, replies, resolving, editing, and deleting, kept with the document and in its file, and live for everyone who has it open.
    2. **The Commenter level** in sharing, across core, Drive, and Docs, built November 25, 2026.
-   3. **@mentions** and notifications in the bell.
+   3. **@mentions** and notifications in the bell, built November 26, 2026.
    4. **Comments in Word and OpenDocument files,** both ways: written into downloads, and read from files opened with Docs, which Google Docs' Takeout exports carry.
 7. **Named versions** and version history in Docs.
 8. **Templates.**
