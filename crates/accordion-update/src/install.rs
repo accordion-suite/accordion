@@ -13,8 +13,10 @@
 //! Everything that touches the system goes through [`System`], so tests can
 //! stand in for dpkg and systemd.
 
+use std::ffi::CString;
 use std::fs::{self, File};
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt, chown, symlink};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -389,8 +391,8 @@ fn left_out(relative: &Path) -> (bool, bool) {
     (left_out, holds_left_out)
 }
 
-/// Copies `from` to `to`, keeping owners and permissions, and skipping what
-/// snapshots leave out. `relative` is where `from` is in the data folder.
+/// Copies `from` to `to`, keeping owners, permissions, and ACLs, and skipping
+/// what snapshots leave out. `relative` is where `from` is in the data folder.
 fn copy_tree(from: &Path, to: &Path, relative: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(from)?;
     if !to.exists() {
@@ -418,11 +420,68 @@ fn copy_tree(from: &Path, to: &Path, relative: &Path) -> io::Result<()> {
             let file = fs::metadata(&source)?;
             chown(&target, Some(file.uid()), Some(file.gid()))?;
             fs::set_permissions(&target, fs::Permissions::from_mode(file.mode()))?;
+            copy_acls(&source, &target)?;
         }
         // Sockets and other special files aren't data.
     }
     chown(to, Some(meta.uid()), Some(meta.gid()))?;
-    fs::set_permissions(to, fs::Permissions::from_mode(meta.mode()))
+    fs::set_permissions(to, fs::Permissions::from_mode(meta.mode()))?;
+    copy_acls(from, to)
+}
+
+/// The POSIX ACLs a file or folder can have, as extended attributes.
+const ACLS: [&str; 2] = ["system.posix_acl_access", "system.posix_acl_default"];
+
+/// Copies `from`'s ACLs to `to`, after its permissions, since setting those
+/// changes an ACL's mask. The server reads what a worker made, such as a
+/// document's preview, through an ACL the worker service gives it (decision
+/// 29), so a copy without them would be unreadable after a rollback.
+fn copy_acls(from: &Path, to: &Path) -> io::Result<()> {
+    let from = CString::new(from.as_os_str().as_bytes())?;
+    let to = CString::new(to.as_os_str().as_bytes())?;
+    let skipped =
+        |err: &io::Error| matches!(err.raw_os_error(), Some(libc::ENODATA | libc::EOPNOTSUPP));
+    for name in ACLS {
+        let name = CString::new(name).expect("an ACL's name has no NUL");
+        let size =
+            unsafe { libc::lgetxattr(from.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
+        if size < 0 {
+            let err = io::Error::last_os_error();
+            if skipped(&err) {
+                continue;
+            }
+            return Err(err);
+        }
+        let mut value = vec![0u8; size as usize];
+        let read = unsafe {
+            libc::lgetxattr(
+                from.as_ptr(),
+                name.as_ptr(),
+                value.as_mut_ptr().cast(),
+                value.len(),
+            )
+        };
+        if read < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        value.truncate(read as usize);
+        let set = unsafe {
+            libc::lsetxattr(
+                to.as_ptr(),
+                name.as_ptr(),
+                value.as_ptr().cast(),
+                value.len(),
+                0,
+            )
+        };
+        if set != 0 {
+            let err = io::Error::last_os_error();
+            if !skipped(&err) {
+                return Err(err);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Removes everything in `dir` that snapshots cover, so a restore leaves
@@ -721,6 +780,81 @@ mod tests {
                 .join("accordion_0.2.0_arm64.deb")
                 .is_file()
         );
+    }
+
+    /// A file's access ACL, or `None` if it has none.
+    fn acl(path: &Path) -> Option<Vec<u8>> {
+        let path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        let name = CString::new(ACLS[0]).unwrap();
+        let mut value = vec![0u8; 256];
+        let read = unsafe {
+            libc::getxattr(
+                path.as_ptr(),
+                name.as_ptr(),
+                value.as_mut_ptr().cast(),
+                value.len(),
+            )
+        };
+        (read >= 0).then(|| {
+            value.truncate(read as usize);
+            value
+        })
+    }
+
+    #[test]
+    fn a_rollback_keeps_the_acls_the_server_reads_through() {
+        let setup = setup();
+        // What a worker made: its own user's file, which the server reads
+        // through an ACL entry, here for user 65534 with read access.
+        let preview = setup.paths.data.join("cache/thumbnails/ab.pdf");
+        fs::create_dir_all(preview.parent().unwrap()).unwrap();
+        fs::write(&preview, "%PDF-").unwrap();
+        fs::set_permissions(&preview, fs::Permissions::from_mode(0o640)).unwrap();
+        let mut given = 2u32.to_le_bytes().to_vec();
+        let undefined = u32::MAX;
+        // Tag, permissions, and ID: the owner, user 65534, the group, the
+        // mask, and everyone else.
+        for (tag, perm, id) in [
+            (0x01u16, 6u16, undefined),
+            (0x02, 4, 65534),
+            (0x04, 4, undefined),
+            (0x10, 4, undefined),
+            (0x20, 0, undefined),
+        ] {
+            given.extend(tag.to_le_bytes());
+            given.extend(perm.to_le_bytes());
+            given.extend(id.to_le_bytes());
+        }
+        let path = CString::new(preview.as_os_str().as_bytes()).unwrap();
+        let name = CString::new(ACLS[0]).unwrap();
+        let set = unsafe {
+            libc::setxattr(
+                path.as_ptr(),
+                name.as_ptr(),
+                given.as_ptr().cast(),
+                given.len(),
+                0,
+            )
+        };
+        if set != 0 {
+            assert_eq!(
+                io::Error::last_os_error().raw_os_error(),
+                Some(libc::EOPNOTSUPP),
+                "couldn't set the ACL"
+            );
+            eprintln!("skipped: this file system has no ACLs");
+            return;
+        }
+        take_snapshot(&setup.paths).unwrap();
+        assert_eq!(
+            acl(&setup.paths.snapshot().join("cache/thumbnails/ab.pdf")).as_ref(),
+            Some(&given)
+        );
+        restore_snapshot(&setup.paths).unwrap();
+        assert_eq!(fs::read_to_string(&preview).unwrap(), "%PDF-");
+        assert_eq!(acl(&preview), Some(given));
+        // A file without one still has none.
+        assert_eq!(acl(&setup.paths.data.join("accordion.db")), None);
     }
 
     #[test]

@@ -149,6 +149,8 @@ Found November 26, 2026, by the upgrade test: LibreOffice crashed as soon as it 
 
 A job that runs as a user of its own and may make sockets in a folder may now make files of its own there too (the launcher's `--temp-files`, which the worker service adds). Only that user's ownership keeps other jobs' files out of reach, so jobs that share the server's user, as in development and tests, still make only sockets there. Running files from there is still refused. The worker service's `/tmp` is its own (`PrivateTmp=yes`), and the job's files there are removed when its work is done.
 
+The same upgrade test then found that a rollback lost previews. The server keeps some of what a worker made by moving it into its cache, such as a document's PDF preview or a converted video, so the file stays the job's user's, and the server reads it through the ACL the worker service gives it. The update helper's copy of the data folder kept owners and permissions but not ACLs, so after a rollback those files were unreadable. It now copies ACLs too.
+
 ### Also
 
 Ask Raspberry Pi to turn on Landlock in their kernel, through an issue in `raspberrypi/linux`. It helps other software that sandboxes itself, and adds the second layer on a Pi. Accordion doesn't wait for it.

@@ -240,6 +240,7 @@ name = "accordion-update"
 version = "0.3.0"
 dependencies = [
  "base64ct",
+ "libc",
  "ring",
  "tempfile",
  "thiserror 2.0.21",
