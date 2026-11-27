@@ -241,7 +241,7 @@ The state is about 1.6 times the text, and loading is cheap enough to do each ti
 - **Every accepted update goes into Docs' log in SQLite** before it's sent on, so a crash loses nothing that anyone else saw.
 - **The file is written 30 seconds after the last edit,** at most every 5 minutes while editing goes on, and when the last person leaves. It's saved with `write_version`, against the contents Docs last saw. Once the file is written, the log for it is emptied.
 - **Saves from one editing session become one version in Drive,** not one version every 30 seconds. Core gains a way to replace the latest version when it came from the same session less than 30 minutes ago.
-- **Named versions** are Drive versions with a name, which core adds to versions. Restoring one works as restoring any version does.
+- **Named versions** are Drive versions with a name, which core adds to versions. Restoring one works as restoring any version does. See [Version history](#version-history).
 
 ### Changes from outside Docs
 
@@ -278,6 +278,28 @@ A document's file can change without Docs: someone restores an older version, a 
   - **Open with Docs** brings comments in from Word files, as Google Docs' and Word's exports write them, and from OpenDocument files, as LibreOffice writes them, with replies, resolved threads, authors' names, and times. Word's own local times give way to the UTC ones it keeps beside them (`commentsExtensible`). A comment marked only where it is, with no text, becomes a thread about no text, which the editor lists in its panel. Their writers have no account here, so they're known by name, as comments from a file made on another server are. Comments are no longer on the warning's list.
   - The new document gets its co-editing state as it's made, so each thread has positions in it from the start. A Google Docs resume from the developer's Takeout export came in with both comments on their words, "Hello" and "Education". A comment added in the browser went out with them in both downloads.
 - **Suggesting mode waits for Yjs 14,** whose attributions record who made each change. If yrs hasn't caught up by then, this decision is revisited.
+
+### Version history
+
+Settled with the developer on November 27, 2026, for step 7. It works as Google Docs' does, with three differences: a named version is kept past the retention period, any file in Drive can have names, and changes are compared from saved versions, since who typed what needs Yjs 14.
+
+- **Editors only,** as in Drive's **Versions** dialog and Google Docs. Viewers and commenters don't see the menu items.
+- **Where:** **File** > **Version history** > **See version history** (Ctrl+Alt+Shift+H, as in Google Docs) and **Name current version**. The history has its own address, `/docs/{id}/history`, with `?version=` for the version shown, so the browser's Back button and links work.
+- **A full-page view.** The page swaps to the chosen version, read-only, laid out as the editor lays it out: the same paper, pages, headers, footers, footnotes, and table of contents. Comment highlights and carets aren't shown. A bar at the top has a back arrow to the document, the version's name or date, **Restore this version**, and **Make a copy**. On phones, the list comes first, and selecting a version shows it.
+- **The list,** at the right, newest first, under day headings (**Today**, **Yesterday**, then dates). The top one reads **Current version**. Each shows its date and time, its name above the date if it has one, and the people whose changes went into it, each with a dot in their caret color. A ⋮ menu on each has **Name this version** (or **Rename** and **Remove name**), **Restore this version**, and **Make a copy**. **Only named versions** at the bottom filters the list. Versions are already one per editing session ([Saving](#saving)), so there's no second level to expand, unlike Google Docs.
+- **Show changes,** a switch at the bottom of the list, off at first. On, the version shown is compared with the one just before it in the full list, even while only named versions are listed. Added words are underlined in color and removed ones struck through. The color is the person's when one person made the version, and the app's accent when several did, since without Yjs 14 Docs can't tell whose a word is. Paragraphs are matched first, then words within them (`Intl.Segmenter`). A picture, table, or line that changed is outlined whole, and formatting-only changes aren't marked. The browser compares the two versions, which the server sends through the schema.
+- **Naming.** A name is up to 100 characters, and two versions can share one. **Name current version** saves typing first (`save_now`), then names the newest version, so the name covers what's on screen. Naming records no event and rings no bell.
+- **Restoring** saves typing first, then makes the version current as a new version (`restore_version`), as Drive does. Docs takes it in as a change from outside ([Changes from outside Docs](#changes-from-outside-docs)), so anyone with the document open sees it change, and comments stay where their text survives. The page goes back to the editor with a notice naming the version and an **Undo**, which restores the version that was current before. Nothing asks first, since every version stays in the list.
+- **Make a copy** makes a new document from the version, beside the original if the person can add there, else in their Docs place, as **File** > **Make a copy** does. It has no comments, since comments belong to the document, not to its versions.
+- **Kept until unnamed.** A named version isn't deleted when the admin's retention period ends, as Google Drive's **Keep forever** works. It still counts toward the owner's storage. Removing the name lets it expire again on the usual schedule, counted from when it was saved. Deleting the file for good deletes its named versions too. Drive's **Versions** dialog says so.
+- **Who made a version.** Core records each person whose changes went into a version: the person saving, for an upload or a WebDAV or sync save, and for co-editing, everyone who edited since the last save, since a room now keeps only the last one. A version that replaces the session's last one ([Saving](#saving)) adds its people to that one's. Restoring records the person who restored. Versions saved before this change, and versions from a Takeout import, list no one.
+- **Drive** shows names and people in its **Versions** dialog for every file, and gains **Name this version** there, so a spreadsheet or photo can be kept too.
+
+The build splits in three parts:
+
+1. **Core and Drive:** version names and people in storage (a migration adds `name` to `storage_versions` and a `storage_version_people` table), retention skipping named versions, co-editing rooms passing everyone who edited, Drive's API (`PUT` and `DELETE` on `/items/{id}/versions/{version}/name`, names and people in the list), and Drive's **Versions** dialog.
+2. **Docs' history page:** Docs' `/documents/{id}/versions` routes (the list with people's names, a version through the schema, restore and name after `save_now`, copy), and the web's history page, list, restore with **Undo**, names, and **Only named versions**.
+3. **Show changes.**
 
 ### Import and export
 
@@ -344,7 +366,7 @@ Agreed November 17, 2026. On November 20, after a sweep of Google Docs' and Prot
    2. **The Commenter level** in sharing, across core, Drive, and Docs, built November 25, 2026.
    3. **@mentions** and notifications in the bell, built November 26, 2026.
    4. **Comments in Word and OpenDocument files,** both ways: written into downloads, and read from files opened with Docs, which Google Docs' Takeout exports carry, built November 26, 2026.
-7. **Named versions** and version history in Docs.
+7. **Named versions** and version history in Docs, in three parts, as [Version history](#version-history) describes: names and people in core and Drive, Docs' history page, and **Show changes**.
 8. **Templates.**
 
 **Fonts.** Docs bundles 40 open fonts from Fontsource, in every weight and language each one has, and the browser downloads only the ones a page shows. Google Fonts isn't used, since loading from it would tell Google who's reading. They include every open font in Google Docs' font menu. Raleway joined on November 22, 2026, and Alegreya, Bree Serif, Comic Relief, Permanent Marker, Pinyon Script, Ultra, and Varela Round joined later that day, with weights. Fontsource's variable font is used where it has one, so a font's nine weights cost about what its regular and bold did.
@@ -403,7 +425,7 @@ Suggesting mode (Yjs 14), editing Word files in place, and offline editing come 
 ## Open questions
 
 - **Templates and page setup:** where templates live, and which page sizes and margins to offer.
-- **Version history inside Docs,** showing what changed between versions, which Yjs 14's change sets would make easier.
+- **Who typed each change** in **Show changes,** which Yjs 14's attributions would make possible.
 - **When to move to Yjs 14,** and whether yrs reads what it writes.
 - **Where the co-editing state of a Word file edited in place lives,** since a `.docx` has no place for the data block. Docs' tables are the likely answer, which brings back option B's problem for those files only.
 - **The font pack:** how it's packaged, how fonts reach the editor and the print page, and whether a document can name a pack font when the pack is off.
